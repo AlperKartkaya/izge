@@ -1,0 +1,166 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
+import { api, ApiError } from '../lib/api'
+import { formatDateTime } from '../lib/format'
+import type { ArtifactRead, GraphSummary } from '../lib/types'
+
+export function DashboardPage() {
+  const { session, refreshUser } = useAuth()
+  const [summary, setSummary] = useState<GraphSummary | null>(null)
+  const [artifacts, setArtifacts] = useState<ArtifactRead[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      if (!session?.token) {
+        return
+      }
+
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const [graphSummary, artifactList] = await Promise.all([
+          api.getGraphSummary(session.token),
+          api.listArtifacts(session.token),
+          refreshUser(),
+        ])
+
+        if (!cancelled) {
+          setSummary(graphSummary)
+          setArtifacts(artifactList)
+        }
+      } catch (caughtError) {
+        if (!cancelled) {
+          setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load dashboard state.')
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [refreshUser, session?.token])
+
+  const totalMemoryObjects = useMemo(
+    () => Object.values(summary?.memory_counts ?? {}).reduce((total, count) => total + count, 0),
+    [summary],
+  )
+
+  return (
+    <div className="stack-xl">
+      <PageIntro
+        eyebrow="Workspace dashboard"
+        title="Evidence-first operating view"
+        description="Track ingestion readiness, graph coverage, and the latest artifacts before running deeper historical analysis."
+        actions={
+          <div className="inline-actions">
+            <Link className="secondary-button" to="/artifacts">
+              Review artifacts
+            </Link>
+            <Link className="primary-button" to="/query">
+              Run a query
+            </Link>
+          </div>
+        }
+      />
+
+      {error ? <Callout tone="warning">{error}</Callout> : null}
+
+      <section className="metric-grid">
+        <MetricCard label="Visible artifacts" value={summary?.artifact_count ?? '—'} detail="Artifacts currently available in your permitted scope." />
+        <MetricCard label="Memory objects" value={totalMemoryObjects || '—'} detail="Structured decisions, assumptions, constraints, outcomes, and commitments." />
+        <MetricCard label="Graph edge types" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} detail="Explicit relationship coverage across the current workspace graph." />
+        <MetricCard label="Signed-in role" value={session?.user.role ?? '—'} detail="Permissions determine which artifacts and evidence are surfaced." />
+      </section>
+
+      <div className="two-column-layout">
+        <Panel title="Analytical posture" description="The MVP is organized around contract-defined query classes instead of chat sessions.">
+          <div className="signal-grid">
+            {[
+              'Decision lineage',
+              'Contradiction analysis',
+              'Assumption drift',
+              'Next-action guidance',
+            ].map((item) => (
+              <article key={item} className="signal-card panel-subtle">
+                <p className="signal-title">{item}</p>
+                <p className="muted-copy">Available through the query workspace with evidence-backed output sections.</p>
+              </article>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Current workspace identity" description="Session and scope details reflected from the backend.">
+          <dl className="meta-list">
+            <div>
+              <dt>Name</dt>
+              <dd>{session?.user.display_name ?? 'Unavailable'}</dd>
+            </div>
+            <div>
+              <dt>Email</dt>
+              <dd>{session?.user.email ?? 'Unavailable'}</dd>
+            </div>
+            <div>
+              <dt>Workspace ID</dt>
+              <dd>{summary?.workspace_id ?? session?.user.workspace_id ?? 'Unavailable'}</dd>
+            </div>
+            <div>
+              <dt>Route surface</dt>
+              <dd>Auth, artifacts, ingestion, query, graph, memory, analysis, audit</dd>
+            </div>
+          </dl>
+        </Panel>
+      </div>
+
+      <Panel title="Recent artifacts" description="Latest permitted artifacts, ready for inspection or ingestion.">
+        {isLoading ? <p className="muted-copy">Loading artifact inventory…</p> : null}
+        {!isLoading && artifacts.length === 0 ? (
+          <EmptyState title="No artifacts yet" description="Upload a file or submit pasted text to start populating institutional memory." />
+        ) : null}
+        {artifacts.length > 0 ? (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Artifact</th>
+                  <th>Visibility</th>
+                  <th>Status</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {artifacts.slice(0, 6).map((artifact) => (
+                  <tr key={artifact.artifact_id}>
+                    <td>
+                      <div>
+                        <p className="table-primary">{artifact.title}</p>
+                        <p className="table-secondary">{artifact.artifact_id}</p>
+                      </div>
+                    </td>
+                    <td>{artifact.visibility_scope}</td>
+                    <td>
+                      <StatusBadge value={artifact.ingestion_status} />
+                    </td>
+                    <td>{formatDateTime(artifact.updated_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </Panel>
+    </div>
+  )
+}

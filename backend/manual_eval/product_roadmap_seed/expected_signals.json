@@ -1,0 +1,30 @@
+{
+  "queries": [
+    {
+      "name": "lineage",
+      "query": "What was decided about self-serve onboarding and why?",
+      "expected_query_class": "Decision lineage",
+      "expected_answer_contains": ["Q3 2026", "late Q2 2026"],
+      "expected_supporting_memory_types": ["decision"]
+    },
+    {
+      "name": "contradiction",
+      "query": "Which roadmap decisions now contradict earlier commitments on self-serve onboarding?",
+      "expected_query_class": "Contradiction analysis",
+      "expected_top_relation_types": [["decision", "decision"], ["decision", "commitment"]],
+      "expected_topic_key": "self serve onboarding"
+    },
+    {
+      "name": "assumption_drift",
+      "query": "Which assumptions about manual onboarding support now look stale?",
+      "expected_query_class": "Assumption drift",
+      "expected_statuses": ["stale", "reversed"]
+    },
+    {
+      "name": "next_action",
+      "query": "What should the team do next about the onboarding launch plan?",
+      "expected_query_class": "Next-action guidance",
+      "expected_actions_contains": ["Resolve the conflict", "Revalidate the assumption", "Review the open commitment"]
+    }
+  ]
+}

@@ -1,0 +1,215 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db import Base
+
+
+def new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex}"
+
+
+class TimestampMixin:
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class Workspace(Base):
+    __tablename__ = "workspace"
+
+    workspace_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("ws"))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("usr"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("ses"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False, index=True)
+    token: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class Artifact(Base, TimestampMixin):
+    __tablename__ = "artifacts"
+
+    artifact_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("art"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    uploaded_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False, index=True)
+    visibility_scope: Mapped[str] = mapped_column(String(32), default="workspace", nullable=False)
+    original_filename: Mapped[str | None] = mapped_column(String(255))
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64))
+    extracted_text: Mapped[str | None] = mapped_column(Text)
+    ingestion_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+
+
+class ArtifactPermission(Base):
+    __tablename__ = "artifact_permissions"
+    __table_args__ = (UniqueConstraint("artifact_id", "user_id", name="uq_artifact_permission"),)
+
+    permission_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("perm"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    artifact_id: Mapped[str] = mapped_column(ForeignKey("artifacts.artifact_id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False, index=True)
+    granted_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ArtifactChunk(Base):
+    __tablename__ = "artifact_chunks"
+
+    chunk_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("chk"))
+    artifact_id: Mapped[str] = mapped_column(ForeignKey("artifacts.artifact_id"), nullable=False, index=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    chunk_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class MemoryMixin:
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    source_artifact_id: Mapped[str] = mapped_column(ForeignKey("artifacts.artifact_id"), nullable=False, index=True)
+    source_chunk_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_chunks.chunk_id"), index=True)
+    evidence_span: Mapped[str | None] = mapped_column(String(255))
+    confidence_score: Mapped[float] = mapped_column(Float, default=0.35, nullable=False)
+    event_timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    normalized_text: Mapped[str] = mapped_column(Text, nullable=False)
+    title_or_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    topic_key: Mapped[str] = mapped_column(String(255), default="general", nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class Decision(Base, MemoryMixin):
+    __tablename__ = "decisions"
+
+    decision_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("dec"))
+    status: Mapped[str] = mapped_column(String(32), default="noted", nullable=False)
+
+
+class Assumption(Base, MemoryMixin):
+    __tablename__ = "assumptions"
+
+    assumption_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("asm"))
+    status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
+    validity_notes: Mapped[str | None] = mapped_column(Text)
+
+
+class Constraint(Base, MemoryMixin):
+    __tablename__ = "constraints"
+
+    constraint_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("con"))
+    category: Mapped[str] = mapped_column(String(64), default="general", nullable=False)
+
+
+class Outcome(Base, MemoryMixin):
+    __tablename__ = "outcomes"
+
+    outcome_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("out"))
+    outcome_type: Mapped[str] = mapped_column(String(64), default="observed", nullable=False)
+
+
+class Commitment(Base, MemoryMixin):
+    __tablename__ = "commitments"
+
+    commitment_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("com"))
+    status: Mapped[str] = mapped_column(String(32), default="open", nullable=False)
+    due_date: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class IngestionJob(Base):
+    __tablename__ = "ingestion_jobs"
+
+    job_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("job"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    artifact_id: Mapped[str] = mapped_column(ForeignKey("artifacts.artifact_id"), nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    stage: Mapped[str] = mapped_column(String(64), default="queued", nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class QueryRun(Base):
+    __tablename__ = "query_runs"
+
+    query_run_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("qry"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False)
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    query_class: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="completed", nullable=False)
+    answer_text: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    permissions_limited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+
+    event_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("evt"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    actor_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class GraphNode(Base):
+    __tablename__ = "graph_nodes"
+
+    node_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("node"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    node_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title_or_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    visibility_scope: Mapped[str] = mapped_column(String(32), default="workspace", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class GraphEdge(Base):
+    __tablename__ = "graph_edges"
+
+    edge_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("edge"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    from_node_id: Mapped[str] = mapped_column(ForeignKey("graph_nodes.node_id"), nullable=False, index=True)
+    to_node_id: Mapped[str] = mapped_column(ForeignKey("graph_nodes.node_id"), nullable=False, index=True)
+    edge_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    evidence_artifact_id: Mapped[str | None] = mapped_column(ForeignKey("artifacts.artifact_id"), index=True)
+    evidence_chunk_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_chunks.chunk_id"), index=True)
+    evidence_span: Mapped[str | None] = mapped_column(String(255))
+    confidence_score: Mapped[float] = mapped_column(Float, default=0.35, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
