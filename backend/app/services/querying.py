@@ -1015,23 +1015,50 @@ def _compose_uncertainty(evidence: list[EvidenceReference], used_fallback: bool,
     return notes
 
 
+DECISION_COMMITMENT_TERMS = {
+    "decide",
+    "decides",
+    "decision",
+    "whether",
+    "keep",
+    "revert",
+    "approve",
+    "approval",
+    "review",
+    "launch",
+    "roadmap",
+}
+
+
+def _commitment_decision_relevance(commitment: MemoryRecord) -> int:
+    text = f"{commitment.title_or_label} {commitment.normalized_text}".lower()
+    return sum(1 for term in DECISION_COMMITMENT_TERMS if term in text)
+
+
 def _rank_open_commitments(commitments: list[MemoryRecord], *, focus_text: str = "") -> list[MemoryRecord]:
     now = datetime.utcnow()
     return sorted(
         [commitment for commitment in commitments if commitment.status != "closed"],
         key=lambda commitment: (
-            -_text_overlap(f"{commitment.title_or_label} {commitment.normalized_text}", focus_text),
-            0 if commitment.due_date and commitment.due_date <= now else 1,
-            0 if commitment.due_date else 1,
-            commitment.due_date or datetime.max,
-            -commitment.confidence_score,
+            _text_overlap(f"{commitment.title_or_label} {commitment.normalized_text}", focus_text),
+            _commitment_decision_relevance(commitment),
+            1 if commitment.due_date and commitment.due_date <= now else 0,
+            commitment.event_timestamp,
+            commitment.confidence_score,
+            commitment.due_date or datetime.min,
         ),
+        reverse=True,
     )
 
 
 def _commitment_action_text(commitment: MemoryRecord) -> str:
     owner_text = f" for {commitment.owner_label}" if commitment.owner_label else ""
     if commitment.due_date:
+        if commitment.due_date < datetime.utcnow():
+            return (
+                f"Review the open commitment{owner_text} overdue since {commitment.due_date.strftime('%Y-%m-%d')}: "
+                f"'{commitment.title_or_label}'."
+            )
         return f"Review the open commitment{owner_text} due on {commitment.due_date.strftime('%Y-%m-%d')}: '{commitment.title_or_label}'."
     return f"Review the open commitment '{commitment.title_or_label}' and confirm whether its due path is still realistic."
 
