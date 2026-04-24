@@ -15,6 +15,11 @@ def list_contradictions(current_user: User = Depends(get_current_user), db: Sess
     return [ContradictionItem(**item) for item in list_ranked_contradictions(db, current_user)]
 
 
+@router.get("/assumptions/stale", response_model=list[AssumptionDriftItem])
+def list_stale_assumptions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[AssumptionDriftItem]:
+    return [AssumptionDriftItem(**item) for item in list_ranked_assumption_drift(db, current_user)]
+
+
 @router.get("/assumptions/drift", response_model=list[AssumptionDriftItem])
 def list_assumption_drift(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[AssumptionDriftItem]:
-    return [AssumptionDriftItem(**item) for item in list_ranked_assumption_drift(db, current_user)]
+    return list_stale_assumptions(current_user, db)

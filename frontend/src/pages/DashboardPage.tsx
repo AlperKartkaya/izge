@@ -62,15 +62,15 @@ export function DashboardPage() {
     <div className="stack-xl">
       <PageIntro
         eyebrow="Workspace dashboard"
-        title="Evidence-first operating view"
-        description="Track ingestion readiness, graph coverage, and the latest artifacts before running deeper historical analysis."
+        title="Institutional memory at a glance"
+        description="Track which sources have been ingested, how much structured memory is available, and where to inspect the current decision history."
         actions={
           <div className="inline-actions">
             <Link className="secondary-button" to="/artifacts">
-              Review artifacts
+              Review sources
             </Link>
             <Link className="primary-button" to="/query">
-              Run a query
+              Ask the history
             </Link>
           </div>
         }
@@ -79,14 +79,14 @@ export function DashboardPage() {
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <section className="metric-grid">
-        <MetricCard label="Visible artifacts" value={summary?.artifact_count ?? '—'} detail="Artifacts currently available in your permitted scope." />
+        <MetricCard label="Visible sources" value={summary?.artifact_count ?? '—'} detail="Artifacts currently available in your permitted scope." />
         <MetricCard label="Memory objects" value={totalMemoryObjects || '—'} detail="Structured decisions, assumptions, constraints, outcomes, and commitments." />
-        <MetricCard label="Graph edge types" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} detail="Explicit relationship coverage across the current workspace graph." />
+        <MetricCard label="Relationship types" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} detail="Explicit graph coverage across the remembered history." />
         <MetricCard label="Signed-in role" value={session?.user.role ?? '—'} detail="Permissions determine which artifacts and evidence are surfaced." />
       </section>
 
       <div className="two-column-layout">
-        <Panel title="Analytical posture" description="The MVP is organized around contract-defined query classes instead of chat sessions.">
+        <Panel title="How Izge reasons" description="The MVP reconstructs history through fixed institutional-memory modes instead of open-ended chat.">
           <div className="signal-grid">
             {[
               'Decision lineage',
@@ -96,13 +96,13 @@ export function DashboardPage() {
             ].map((item) => (
               <article key={item} className="signal-card panel-subtle">
                 <p className="signal-title">{item}</p>
-                <p className="muted-copy">Available through the query workspace with evidence-backed output sections.</p>
+                <p className="muted-copy">Available through the history workspace with evidence-backed sections and inspectable supporting memory.</p>
               </article>
             ))}
           </div>
         </Panel>
 
-        <Panel title="Current workspace identity" description="Session and scope details reflected from the backend.">
+        <Panel title="Current workspace identity" description="Session and scope details for the single remembered workspace.">
           <dl className="meta-list">
             <div>
               <dt>Name</dt>
@@ -117,24 +117,24 @@ export function DashboardPage() {
               <dd>{summary?.workspace_id ?? session?.user.workspace_id ?? 'Unavailable'}</dd>
             </div>
             <div>
-              <dt>Route surface</dt>
-              <dd>Auth, artifacts, ingestion, query, graph, memory, analysis, audit</dd>
+              <dt>Product stance</dt>
+              <dd>Institutional memory first, decision guidance second.</dd>
             </div>
           </dl>
         </Panel>
       </div>
 
-      <Panel title="Recent artifacts" description="Latest permitted artifacts, ready for inspection or ingestion.">
-        {isLoading ? <p className="muted-copy">Loading artifact inventory…</p> : null}
+      <Panel title="Recent memory sources" description="Latest permitted artifacts, ready for inspection or ingestion.">
+        {isLoading ? <p className="muted-copy">Loading source inventory…</p> : null}
         {!isLoading && artifacts.length === 0 ? (
-          <EmptyState title="No artifacts yet" description="Upload a file or submit pasted text to start populating institutional memory." />
+          <EmptyState title="No sources yet" description="Upload a file or submit pasted text to start reconstructing institutional memory." />
         ) : null}
         {artifacts.length > 0 ? (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Artifact</th>
+                  <th>Source</th>
                   <th>Visibility</th>
                   <th>Status</th>
                   <th>Updated</th>

@@ -199,6 +199,32 @@ class GraphTimeline(BaseModel):
     items: list[GraphTimelineItem]
 
 
+class GraphNeighborhoodNeighbor(BaseModel):
+    edge_id: str
+    edge_type: str
+    direction: Literal["incoming", "outgoing"]
+    related_memory_type: str
+    related_memory_id: str
+    related_title_or_label: str
+    related_topic_key: str
+    related_status: str | None = None
+    evidence_artifact_id: str | None = None
+    evidence_artifact_title: str | None = None
+    evidence_chunk_id: str | None = None
+    evidence_span: str | None = None
+    evidence_provenance: str | None = None
+    confidence_score: float
+
+
+class GraphNeighborhood(BaseModel):
+    center_memory_type: str
+    center_memory_id: str
+    center_title_or_label: str
+    center_topic_key: str
+    center_event_timestamp: datetime
+    neighbors: list[GraphNeighborhoodNeighbor]
+
+
 class MemoryDetail(BaseModel):
     memory_type: str
     memory_id: str

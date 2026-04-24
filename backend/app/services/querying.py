@@ -22,7 +22,16 @@ from app.models import (
     QueryTraceStep,
     User,
 )
-from app.schemas.api import EvidenceReference, GraphTimelineItem, MemoryReference, QueryResult, QueryTraceRead, QueryTraceStepRead
+from app.schemas.api import (
+    EvidenceReference,
+    GraphNeighborhood,
+    GraphNeighborhoodNeighbor,
+    GraphTimelineItem,
+    MemoryReference,
+    QueryResult,
+    QueryTraceRead,
+    QueryTraceStepRead,
+)
 from app.services.audit import log_event
 from app.services.permissions import artifact_is_visible_to_user
 
@@ -1431,3 +1440,80 @@ def graph_timeline(db: Session, user: User, *, limit: int = 40) -> list[GraphTim
         reverse=True,
     )
     return items[:limit]
+
+
+def graph_neighborhood(db: Session, user: User, *, memory_type: str, memory_id: str, limit: int = 12) -> GraphNeighborhood | None:
+    memories = _load_memory_records(db, user)
+    center_memory = next((memory for memory in memories if memory.memory_type == memory_type and memory.memory_id == memory_id), None)
+    if center_memory is None:
+        return None
+
+    nodes_by_id = _load_nodes_by_id(db, user)
+    node_id_by_entity_id = {node.entity_id: node_id for node_id, node in nodes_by_id.items()}
+    center_node_id = node_id_by_entity_id.get(center_memory.memory_id)
+    if center_node_id is None:
+        return None
+
+    memories_by_id = {memory.memory_id: memory for memory in memories}
+    edges = _visible_edges(db, user)
+    artifact_titles = _artifact_title_map(db, _visible_artifact_ids(db, user))
+    neighbors: list[GraphNeighborhoodNeighbor] = []
+    for edge in edges:
+        if edge.edge_type == "MENTIONED_IN":
+            continue
+        if edge.from_node_id != center_node_id and edge.to_node_id != center_node_id:
+            continue
+        direction = "outgoing" if edge.from_node_id == center_node_id else "incoming"
+        other_node_id = edge.to_node_id if direction == "outgoing" else edge.from_node_id
+        other_node = nodes_by_id.get(other_node_id)
+        if other_node is None:
+            continue
+        other_memory = memories_by_id.get(other_node.entity_id)
+        if other_memory is None:
+            continue
+        evidence_artifact_title = _artifact_title_for_id(artifact_titles, edge.evidence_artifact_id)
+        evidence_span = _evidence_excerpt(
+            db,
+            chunk_id=edge.evidence_chunk_id,
+            fallback=edge.evidence_span or other_memory.evidence_span or other_memory.normalized_text,
+        )
+        evidence_provenance = (
+            f"{edge.edge_type} edge recorded in {evidence_artifact_title} linking '{center_memory.title_or_label}' and '{other_memory.title_or_label}'."
+            if edge.evidence_artifact_id
+            else f"{edge.edge_type} edge linking '{center_memory.title_or_label}' and '{other_memory.title_or_label}' without a direct artifact reference."
+        )
+        neighbors.append(
+            GraphNeighborhoodNeighbor(
+                edge_id=edge.edge_id,
+                edge_type=edge.edge_type,
+                direction=direction,
+                related_memory_type=other_memory.memory_type,
+                related_memory_id=other_memory.memory_id,
+                related_title_or_label=other_memory.title_or_label,
+                related_topic_key=other_memory.topic_key,
+                related_status=other_memory.status,
+                evidence_artifact_id=edge.evidence_artifact_id,
+                evidence_artifact_title=evidence_artifact_title if edge.evidence_artifact_id else None,
+                evidence_chunk_id=edge.evidence_chunk_id,
+                evidence_span=evidence_span,
+                evidence_provenance=evidence_provenance,
+                confidence_score=edge.confidence_score,
+            )
+        )
+
+    neighbors.sort(
+        key=lambda item: (
+            1 if item.edge_type in {"CONTRADICTS", "SUPERSEDES"} else 0,
+            item.confidence_score,
+            item.related_title_or_label,
+        ),
+        reverse=True,
+    )
+    return GraphNeighborhood(
+        center_memory_type=center_memory.memory_type,
+        center_memory_id=center_memory.memory_id,
+        center_title_or_label=center_memory.title_or_label,
+        center_topic_key=center_memory.topic_key,
+        center_event_timestamp=center_memory.event_timestamp,
+        neighbors=neighbors[:limit],
+    )

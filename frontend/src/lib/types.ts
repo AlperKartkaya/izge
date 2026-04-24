@@ -133,6 +133,32 @@ export interface GraphTimeline {
   items: GraphTimelineItem[]
 }
 
+export interface GraphNeighborhoodNeighbor {
+  edge_id: string
+  edge_type: string
+  direction: 'incoming' | 'outgoing'
+  related_memory_type: string
+  related_memory_id: string
+  related_title_or_label: string
+  related_topic_key: string
+  related_status: string | null
+  evidence_artifact_id: string | null
+  evidence_artifact_title: string | null
+  evidence_chunk_id: string | null
+  evidence_span: string | null
+  evidence_provenance: string | null
+  confidence_score: number
+}
+
+export interface GraphNeighborhood {
+  center_memory_type: string
+  center_memory_id: string
+  center_title_or_label: string
+  center_topic_key: string
+  center_event_timestamp: string
+  neighbors: GraphNeighborhoodNeighbor[]
+}
+
 export interface MemoryDetail {
   memory_type: string
   memory_id: string

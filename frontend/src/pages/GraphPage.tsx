@@ -4,15 +4,17 @@ import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDate, formatDateTime, formatLabel, formatPercent } from '../lib/format'
-import type { AssumptionDriftItem, ContradictionItem, GraphSummary, GraphTimelineItem } from '../lib/types'
+import type { AssumptionDriftItem, ContradictionItem, GraphNeighborhood, GraphSummary, GraphTimelineItem } from '../lib/types'
 
 export function GraphPage() {
   const { session } = useAuth()
   const [summary, setSummary] = useState<GraphSummary | null>(null)
   const [timelineItems, setTimelineItems] = useState<GraphTimelineItem[]>([])
+  const [neighborhood, setNeighborhood] = useState<GraphNeighborhood | null>(null)
   const [contradictions, setContradictions] = useState<ContradictionItem[]>([])
   const [assumptionDrift, setAssumptionDrift] = useState<AssumptionDriftItem[]>([])
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null)
+  const [isNeighborhoodLoading, setIsNeighborhoodLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -57,21 +59,58 @@ export function GraphPage() {
     [selectedMemoryId, timelineItems],
   )
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadNeighborhood() {
+      if (!session?.token || !selectedTimelineItem) {
+        if (!cancelled) {
+          setNeighborhood(null)
+        }
+        return
+      }
+
+      setIsNeighborhoodLoading(true)
+
+      try {
+        const payload = await api.getGraphNeighborhood(session.token, selectedTimelineItem.memory_type, selectedTimelineItem.memory_id)
+        if (!cancelled) {
+          setNeighborhood(payload)
+        }
+      } catch (caughtError) {
+        if (!cancelled) {
+          setNeighborhood(null)
+          setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load graph neighborhood.')
+        }
+      } finally {
+        if (!cancelled) {
+          setIsNeighborhoodLoading(false)
+        }
+      }
+    }
+
+    void loadNeighborhood()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedTimelineItem, session?.token])
+
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Graph & timeline"
-        title="Reconstruct the history"
+        eyebrow="Decision history"
+        title="Reconstruct how the roadmap changed"
         description="This view starts with a timeline of remembered decisions, assumptions, constraints, outcomes, and commitments so the graph reads like institutional history rather than a database summary."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <section className="metric-grid">
-        <MetricCard label="Artifacts in graph scope" value={summary?.artifact_count ?? '—'} />
+        <MetricCard label="Sources in scope" value={summary?.artifact_count ?? '—'} />
         <MetricCard label="Timeline cards" value={timelineItems.length || '—'} />
-        <MetricCard label="Edge families" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} />
-        <MetricCard label="Contradiction edges" value={contradictions.length} />
+        <MetricCard label="Relationship types" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} />
+        <MetricCard label="Contradictions surfaced" value={contradictions.length} />
       </section>
 
       <div className="two-column-layout wide-right-column">
@@ -106,7 +145,7 @@ export function GraphPage() {
         </Panel>
 
         <Panel
-          title={selectedTimelineItem ? 'Selected memory detail' : 'Timeline detail'}
+          title={selectedTimelineItem ? 'Selected historical detail' : 'Timeline detail'}
           description={
             selectedTimelineItem
               ? 'Inspect evidence-bearing memory details and jump directly into the dedicated memory page.'
@@ -157,7 +196,7 @@ export function GraphPage() {
               </dl>
 
               <Link className="secondary-button" to={`/memory/${selectedTimelineItem.memory_type}/${selectedTimelineItem.memory_id}`}>
-                Open full memory detail
+                Open full historical detail
               </Link>
             </div>
           ) : (
@@ -165,6 +204,35 @@ export function GraphPage() {
           )}
         </Panel>
       </div>
+
+      <Panel title="Graph neighborhood" description="Immediate neighbors show what this memory object was based on, constrained by, contradicted by, or linked to — with evidence attached to each edge.">
+        {isNeighborhoodLoading ? <p className="muted-copy">Loading neighborhood…</p> : null}
+        {!isNeighborhoodLoading && (!neighborhood || neighborhood.neighbors.length === 0) ? (
+          <EmptyState title="No neighboring memory objects" description="This timeline item has no visible immediate graph neighbors in the current permission scope." />
+        ) : null}
+        {neighborhood && neighborhood.neighbors.length > 0 ? (
+          <div className="stack-sm">
+            {neighborhood.neighbors.map((neighbor) => (
+              <article key={neighbor.edge_id} className="panel-subtle stack-sm">
+                <div className="timeline-card-head">
+                  <p className="table-primary">{formatLabel(neighbor.edge_type)} · {neighbor.direction === 'outgoing' ? 'from selected item' : 'into selected item'}</p>
+                  <p className="table-secondary">Confidence {formatPercent(neighbor.confidence_score)}</p>
+                </div>
+                <Link className="record-link" to={`/memory/${neighbor.related_memory_type}/${neighbor.related_memory_id}`}>
+                  <div>
+                    <p className="table-primary">{neighbor.related_title_or_label}</p>
+                    <p className="table-secondary">{neighbor.related_memory_type} · topic {neighbor.related_topic_key}</p>
+                    {neighbor.related_status ? <p className="table-secondary">Status {formatLabel(neighbor.related_status)}</p> : null}
+                  </div>
+                </Link>
+                {neighbor.evidence_artifact_title ? <p className="table-secondary">{neighbor.evidence_artifact_title}</p> : null}
+                {neighbor.evidence_span ? <p className="muted-copy">{neighbor.evidence_span}</p> : null}
+                {neighbor.evidence_provenance ? <p className="table-secondary">{neighbor.evidence_provenance}</p> : null}
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </Panel>
 
       <div className="two-column-layout">
         <Panel title="Memory composition" description="Counts of persisted memory objects across the explicit graph model.">
@@ -182,7 +250,7 @@ export function GraphPage() {
           )}
         </Panel>
 
-        <Panel title="Edge composition" description="Relationship coverage persisted in `graph_edges`.">
+        <Panel title="Relationship composition" description="Relationship coverage persisted in the explicit decision graph.">
           {summary ? (
             <div className="stack-sm">
               {Object.entries(summary.edge_counts).map(([label, count]) => (
@@ -199,7 +267,7 @@ export function GraphPage() {
       </div>
 
       <div className="two-column-layout">
-        <Panel title="Contradictions" description="Visible `CONTRADICTS` edges surfaced by `/api/contradictions`.">
+        <Panel title="Contradictions" description="Visible contradiction relationships surfaced from the explicit memory graph.">
           {contradictions.length === 0 ? (
             <EmptyState title="No contradiction edges" description="No contradiction records are currently visible in your scope." />
           ) : (
@@ -231,7 +299,7 @@ export function GraphPage() {
           )}
         </Panel>
 
-        <Panel title="Assumption drift" description="Assumptions marked stale, reversed, or weakening by the backend analysis list.">
+        <Panel title="Stale assumptions" description="Assumptions marked stale, reversed, or weakening by the memory-analysis surface.">
           {assumptionDrift.length === 0 ? (
             <EmptyState title="No drift signals" description="No visible assumption drift items are currently available." />
           ) : (

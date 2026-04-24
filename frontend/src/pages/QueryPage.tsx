@@ -40,27 +40,27 @@ export function QueryPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Query workspace"
-        title="Run a historical analysis"
-        description="Natural language prompts are classified into the MVP’s four query classes before the backend composes an evidence-backed response."
+        eyebrow="Ask the history"
+        title="Reconstruct what happened and what to do next"
+        description="Write the question in plain language. Izge routes it into a fixed memory-analysis mode so the response stays evidence-backed instead of drifting into chat."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <div className="two-column-layout">
-        <Panel title="Query input" description="Use plain language. The backend determines whether this is lineage, contradiction, drift, or next-action analysis.">
+        <Panel title="Historical question" description="Use plain language. Izge determines whether the question is about lineage, contradiction, stale assumptions, or next actions.">
           <form className="form-grid" onSubmit={handleSubmit}>
             <label className="field field-block">
               <span className="field-label">Question</span>
               <textarea value={queryText} onChange={(event) => setQueryText(event.target.value)} rows={10} minLength={3} required />
             </label>
             <button type="submit" className="primary-button" disabled={isSubmitting}>
-              {isSubmitting ? 'Submitting…' : 'Run analysis'}
+              {isSubmitting ? 'Submitting…' : 'Reconstruct answer'}
             </button>
           </form>
         </Panel>
 
-        <Panel title="Contract-defined modes" description="The UI avoids chat framing by keeping query intent tied to the locked analytical modes.">
+        <Panel title="Memory-analysis modes" description="Starter questions stay anchored to the locked MVP modes so the workflow reads as institutional reasoning, not generic search.">
           <div className="signal-grid">
             {starterPrompts.map((prompt) => (
               <button key={prompt} type="button" className="prompt-card" onClick={() => setQueryText(prompt)}>

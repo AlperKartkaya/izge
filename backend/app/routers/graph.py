@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import User
-from app.schemas.api import GraphSummary, GraphTimeline
-from app.services.querying import graph_summary, graph_timeline
+from app.schemas.api import GraphNeighborhood, GraphSummary, GraphTimeline
+from app.services.querying import graph_neighborhood, graph_summary, graph_timeline
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 
@@ -27,3 +27,16 @@ def get_graph_timeline(current_user: User = Depends(get_current_user), db: Sessi
         workspace_id=current_user.workspace_id,
         items=graph_timeline(db, current_user),
     )
+
+
+@router.get("/neighborhood/{memory_type}/{memory_id}", response_model=GraphNeighborhood)
+def get_graph_neighborhood(
+    memory_type: str,
+    memory_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GraphNeighborhood:
+    neighborhood = graph_neighborhood(db, current_user, memory_type=memory_type, memory_id=memory_id)
+    if neighborhood is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Graph neighborhood not found")
+    return neighborhood

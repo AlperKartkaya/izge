@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 import re
+from typing import Literal
 
+from pydantic import BaseModel, ValidationError, field_validator
 from pypdf import PdfReader
 from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
@@ -23,6 +25,7 @@ from app.models import (
     Outcome,
     User,
 )
+from app.services import LocalLLMError, run_structured_local_prompt
 from app.services.audit import log_event
 
 MEMORY_MODELS = {
@@ -193,6 +196,34 @@ class PersistedMemory:
     status: str | None = None
     owner_hint: str | None = None
     due_date: datetime | None = None
+
+
+class LLMExtractionObject(BaseModel):
+    memory_type: Literal["decision", "assumption", "constraint", "outcome", "commitment"]
+    text: str
+    evidence_quote: str
+    confidence: float
+    observed_at: str | None = None
+    owner: str | None = None
+    due_date: str | None = None
+
+    @field_validator("confidence")
+    @classmethod
+    def validate_confidence(cls, value: float) -> float:
+        if not 0 <= value <= 1:
+            raise ValueError("confidence must be between 0 and 1")
+        return value
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, value: str | None) -> str | None:
+        if value is None or _parse_date(value) is not None:
+            return value
+        raise ValueError("due_date must be YYYY-MM-DD when provided")
+
+
+class LLMExtractionEnvelope(BaseModel):
+    objects: list[LLMExtractionObject] = []
 
 
 def extract_text_for_artifact(artifact: Artifact) -> str:
@@ -383,7 +414,86 @@ def _extract_segment_timestamp(segment_text: str, fallback: datetime) -> datetim
     return fallback
 
 
+def _llm_system_prompt() -> str:
+    return (
+        "Extract institutional memory objects from one artifact chunk. "
+        "Return JSON only, matching the provided schema exactly. "
+        "Allowed memory_type values are decision, assumption, constraint, outcome, and commitment. "
+        "Only emit objects directly supported by the chunk text. "
+        "Each object must include an evidence_quote copied from the chunk. "
+        "For commitments, include owner and due_date only when the chunk states them explicitly. "
+        "Do not invent evidence or summarize the entire chunk."
+    )
+
+
+def _llm_user_prompt(*, artifact_title: str, chunk_sequence: int, chunk_text: str, artifact_timestamp: datetime) -> str:
+    return (
+        f"Artifact title: {artifact_title}\n"
+        f"Chunk sequence: {chunk_sequence}\n"
+        f"Artifact observed_at fallback: {artifact_timestamp.strftime('%Y-%m-%d')}\n\n"
+        "Extract memory-worthy claims from this chunk. If nothing qualifies, return {\"objects\": []}. "
+        "Use observed_at only when the chunk explicitly states a concrete YYYY-MM-DD date; otherwise leave it null.\n\n"
+        f"Chunk text:\n{chunk_text}"
+    )
+
+
+def _extract_memory_candidates_with_local_llm(chunks: list[str], artifact: Artifact, artifact_text: str) -> list[ExtractionItem]:
+    artifact_timestamp = _infer_artifact_timestamp(artifact, artifact_text)
+    schema = LLMExtractionEnvelope.model_json_schema()
+    items: list[ExtractionItem] = []
+    seen_keys: set[tuple[str, str, int]] = set()
+
+    for sequence_number, chunk_text_value in enumerate(chunks, start=1):
+        parsed = run_structured_local_prompt(
+            system_prompt=_llm_system_prompt(),
+            user_prompt=_llm_user_prompt(
+                artifact_title=artifact.title,
+                chunk_sequence=sequence_number,
+                chunk_text=chunk_text_value,
+                artifact_timestamp=artifact_timestamp,
+            ),
+            schema=schema,
+        )
+        envelope = LLMExtractionEnvelope.model_validate(parsed)
+        for obj in envelope.objects:
+            normalized_text = _normalize_whitespace(obj.text)
+            if not normalized_text:
+                continue
+            evidence_quote = _normalize_whitespace(obj.evidence_quote) or normalized_text
+            topic_key = _topic_key(normalized_text)
+            dedupe_key = (obj.memory_type, topic_key, sequence_number)
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            observed_at = _parse_date(obj.observed_at) if obj.observed_at else None
+            items.append(
+                ExtractionItem(
+                    memory_type=obj.memory_type,
+                    label=_trim_label(normalized_text),
+                    normalized_text=normalized_text,
+                    sequence_number=sequence_number,
+                    evidence_span=f"chunk {sequence_number}: {evidence_quote[:220]}",
+                    confidence_score=round(obj.confidence, 2),
+                    event_timestamp=observed_at or artifact_timestamp,
+                    topic_key=topic_key,
+                    owner_hint=(obj.owner and _normalize_whitespace(obj.owner)) or (_extract_owner_hint(normalized_text) if obj.memory_type == "commitment" else None),
+                    due_date=_parse_date(obj.due_date) if obj.due_date else (_extract_due_date_hint(normalized_text) if obj.memory_type == "commitment" else None),
+                )
+            )
+
+    return items
+
+
 def extract_memory_candidates(chunks: list[str], artifact: Artifact, artifact_text: str) -> list[ExtractionItem]:
+    settings = get_settings()
+    if settings.local_llm_enabled:
+        try:
+            llm_items = _extract_memory_candidates_with_local_llm(chunks, artifact, artifact_text)
+            if llm_items:
+                return llm_items
+        except (LocalLLMError, ValidationError):
+            pass
+
     sequence_map = _segment_sequence_map(chunks)
     artifact_timestamp = _infer_artifact_timestamp(artifact, artifact_text)
     items: list[ExtractionItem] = []

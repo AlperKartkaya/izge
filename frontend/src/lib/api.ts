@@ -4,6 +4,7 @@ import type {
   AssumptionDriftItem,
   AuditEventRead,
   ContradictionItem,
+  GraphNeighborhood,
   GraphSummary,
   GraphTimeline,
   IngestionJobRead,
@@ -189,6 +190,10 @@ export const api = {
     return request<GraphTimeline>('/graph/timeline', { token })
   },
 
+  getGraphNeighborhood(token: string, memoryType: string, memoryId: string) {
+    return request<GraphNeighborhood>(`/graph/neighborhood/${memoryType}/${memoryId}`, { token })
+  },
+
   getMemoryDetail(token: string, memoryType: string, memoryId: string) {
     return request<MemoryDetail>(`/memory/${memoryType}/${memoryId}`, { token })
   },
@@ -198,7 +203,7 @@ export const api = {
   },
 
   listAssumptionDrift(token: string) {
-    return request<AssumptionDriftItem[]>('/assumptions/drift', { token })
+    return request<AssumptionDriftItem[]>('/assumptions/stale', { token })
   },
 
   listAuditEvents(token: string) {

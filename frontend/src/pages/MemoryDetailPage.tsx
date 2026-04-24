@@ -42,12 +42,12 @@ export function MemoryDetailPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Memory detail"
-        title="Inspect structured memory output"
-        description="This surface reads directly from `/api/memory/:type/:id` so evidence-backed objects can be reviewed independently from query output."
+        eyebrow="Historical detail"
+        title="Inspect one remembered object"
+        description="Review the normalized memory object, its evidence span, and its source context independently from the result page."
         actions={
           <Link className="secondary-button" to="/query">
-            Back to query workspace
+            Back to history workspace
           </Link>
         }
       />

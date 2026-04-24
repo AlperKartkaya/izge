@@ -96,7 +96,7 @@ def main() -> None:
     upload_seed(token)
     auth_headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     contradiction_list = expect_list(request("/api/contradictions", headers={"Authorization": f"Bearer {token}"}), "contradictions")
-    drift_list = expect_list(request("/api/assumptions/drift", headers={"Authorization": f"Bearer {token}"}), "assumption drift")
+    drift_list = expect_list(request("/api/assumptions/stale", headers={"Authorization": f"Bearer {token}"}), "assumption drift")
 
     results = []
     for spec in EXPECTED["queries"]:

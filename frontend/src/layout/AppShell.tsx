@@ -4,10 +4,10 @@ import { formatDateTime } from '../lib/format'
 
 const primaryNavigation = [
   { to: '/', label: 'Dashboard', end: true },
-  { to: '/artifacts', label: 'Artifacts' },
-  { to: '/ingestion', label: 'Ingestion' },
-  { to: '/query', label: 'Query' },
-  { to: '/graph', label: 'Graph & timeline' },
+  { to: '/artifacts', label: 'Memory sources' },
+  { to: '/ingestion', label: 'Build memory' },
+  { to: '/query', label: 'Ask history' },
+  { to: '/graph', label: 'Decision history' },
 ]
 
 export function AppShell() {
@@ -21,7 +21,7 @@ export function AppShell() {
           <p className="eyebrow">Izge</p>
           <h1 className="brand-title">Institutional memory</h1>
           <p className="muted-copy">
-            A decision-intelligence workspace built around evidence, history, and permission-aware recall.
+            A local-first workspace for reconstructing what the team decided, why it decided it, and what history suggests next.
           </p>
         </div>
 
@@ -88,7 +88,7 @@ export function AppShell() {
         <header className="workspace-header panel">
           <div>
             <p className="eyebrow">Single workspace</p>
-            <h2 className="page-title">Decision intelligence console</h2>
+            <h2 className="page-title">Institutional memory workspace</h2>
           </div>
           <div className="identity-block">
             <p className="identity-name">{session?.user.display_name}</p>
