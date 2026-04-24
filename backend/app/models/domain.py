@@ -141,6 +141,7 @@ class Commitment(Base, MemoryMixin):
 
     commitment_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("com"))
     status: Mapped[str] = mapped_column(String(32), default="open", nullable=False)
+    owner_label: Mapped[str | None] = mapped_column(String(255))
     due_date: Mapped[datetime | None] = mapped_column(DateTime)
 
 

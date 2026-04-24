@@ -112,6 +112,9 @@ class MemoryReference(BaseModel):
     confidence_score: float
     source_artifact_id: str
     topic_key: str
+    status: str | None = None
+    due_date: datetime | None = None
+    owner_label: str | None = None
 
 
 class QueryCreate(BaseModel):
@@ -153,6 +156,9 @@ class MemoryDetail(BaseModel):
     source_artifact_id: str
     source_chunk_id: str | None
     evidence_span: str | None
+    status: str | None = None
+    due_date: datetime | None = None
+    owner_label: str | None = None
 
 
 class ContradictionItem(BaseModel):

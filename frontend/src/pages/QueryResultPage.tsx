@@ -3,7 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
+import { formatDate, formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { QueryResult } from '../lib/types'
 
 function readRecordField(record: Record<string, unknown>, field: string): string {
@@ -143,6 +143,13 @@ export function QueryResultPage() {
                       <div>
                         <p className="table-primary">{item.title_or_label}</p>
                         <p className="table-secondary">{item.memory_type} · {item.memory_id} · topic {item.topic_key}</p>
+                        {item.memory_type === 'commitment' ? (
+                          <p className="table-secondary">
+                            {item.status ? `Status ${formatLabel(item.status)} · ` : ''}
+                            {item.owner_label ? `Owner ${item.owner_label} · ` : ''}
+                            {item.due_date ? `Due ${formatDate(item.due_date)}` : 'No due date captured'}
+                          </p>
+                        ) : null}
                       </div>
                       <span className="table-secondary">Confidence {formatPercent(item.confidence_score)}</span>
                     </Link>

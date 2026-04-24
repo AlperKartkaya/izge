@@ -24,6 +24,8 @@ def initialize_database() -> None:
             columns = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()}
             if "topic_key" not in columns:
                 connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN topic_key VARCHAR(255) NOT NULL DEFAULT 'general'")
+            if table_name == "commitments" and "owner_label" not in columns:
+                connection.exec_driver_sql("ALTER TABLE commitments ADD COLUMN owner_label VARCHAR(255)")
         connection.exec_driver_sql(
             "CREATE VIRTUAL TABLE IF NOT EXISTS artifact_chunks_fts USING fts5(chunk_id UNINDEXED, artifact_id UNINDEXED, workspace_id UNINDEXED, text)"
         )

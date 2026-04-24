@@ -66,6 +66,9 @@ export interface MemoryReference {
   confidence_score: number
   source_artifact_id: string
   topic_key: string
+  status: string | null
+  due_date: string | null
+  owner_label: string | null
 }
 
 export interface QueryResult {
@@ -103,6 +106,9 @@ export interface MemoryDetail {
   source_artifact_id: string
   source_chunk_id: string | null
   evidence_span: string | null
+  status: string | null
+  due_date: string | null
+  owner_label: string | null
 }
 
 export interface ContradictionItem {

@@ -28,7 +28,9 @@
       "name": "next_action",
       "query": "What should the team do next about the onboarding launch plan?",
       "expected_query_class": "Next-action guidance",
-      "expected_actions_contains": ["Resolve the conflict", "Revalidate the assumption", "Review the open commitment"]
+      "expected_actions_contains": ["Resolve the conflict", "Revalidate the assumption", "Review the open commitment"],
+      "expected_supporting_memory_types": ["commitment"],
+      "expected_supporting_commitment_due_dates": ["2026-04-12"]
     }
   ]
 }

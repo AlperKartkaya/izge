@@ -71,6 +71,9 @@ class MemoryRecord:
     source_chunk_id: str | None
     evidence_span: str | None
     topic_key: str
+    status: str | None = None
+    due_date: datetime | None = None
+    owner_label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -150,6 +153,9 @@ def _load_memory_records(db: Session, user: User) -> list[MemoryRecord]:
                     source_chunk_id=row.source_chunk_id,
                     evidence_span=row.evidence_span,
                     topic_key=row.topic_key,
+                    status=getattr(row, "status", None),
+                    due_date=getattr(row, "due_date", None),
+                    owner_label=getattr(row, "owner_label", None),
                 )
             )
     return records
@@ -176,6 +182,9 @@ def _memory_reference(memory: MemoryRecord) -> MemoryReference:
         confidence_score=memory.confidence_score,
         source_artifact_id=memory.source_artifact_id,
         topic_key=memory.topic_key,
+        status=memory.status,
+        due_date=memory.due_date,
+        owner_label=memory.owner_label,
     )
 
 
@@ -271,9 +280,24 @@ def _safe_next_actions_from_payload(
         actions.append(f"Revalidate the assumption '{top['title_or_label']}' because later evidence now marks it {top['status']}.")
     commitment_nodes = [node for node in supporting_nodes if node.get("memory_type") == "commitment"]
     if commitment_nodes:
-        actions.append(
-            f"Review the open commitment '{commitment_nodes[0]['title_or_label']}' and confirm whether its due path is still realistic."
-        )
+        commitment = sorted(
+            commitment_nodes,
+            key=lambda node: (
+                0 if isinstance(node.get("due_date"), str) and node.get("due_date") else 1,
+                node.get("due_date") or "9999-12-31",
+            ),
+        )[0]
+        due_date = commitment.get("due_date")
+        owner_label = commitment.get("owner_label")
+        if isinstance(due_date, str) and due_date:
+            owner_text = f" for {owner_label}" if isinstance(owner_label, str) and owner_label else ""
+            actions.append(
+                f"Review the open commitment{owner_text} due on {due_date[:10]}: '{commitment['title_or_label']}'."
+            )
+        else:
+            actions.append(
+                f"Review the open commitment '{commitment['title_or_label']}' and confirm whether its due path is still realistic."
+            )
     return actions[:3]
 
 
@@ -516,8 +540,19 @@ def _next_action_result(db: Session, user: User, query_text: str) -> dict:
     memories = _load_memory_records(db, user)
     contradiction_items = _contradiction_dicts(db, user, query_text, memories)
     stale_assumptions = _stale_assumption_dicts(db, user, query_text, memories)
-    open_commitments = [memory for memory in memories if memory.memory_type == "commitment"]
-    supporting = _dedupe_memories(_memories_for_contradictions(db, user, contradiction_items) + _memories_for_assumptions(db, user, stale_assumptions) + open_commitments)[:12]
+    focus_text = " ".join(
+        [
+            query_text,
+            *(f"{item['from_title']} {item['to_title']}" for item in contradiction_items[:2]),
+            *(item["title_or_label"] for item in stale_assumptions[:2]),
+        ]
+    )
+    open_commitments = _rank_open_commitments([memory for memory in memories if memory.memory_type == "commitment"], focus_text=focus_text)
+    supporting = _dedupe_memories(
+        _memories_for_contradictions(db, user, contradiction_items)[:4]
+        + _memories_for_assumptions(db, user, stale_assumptions)[:4]
+        + open_commitments[:4]
+    )[:12]
     recommended_next_actions = _next_actions_from_support(supporting, contradiction_items, stale_assumptions)
     if recommended_next_actions:
         answer_text = recommended_next_actions[0]
@@ -795,6 +830,27 @@ def _compose_uncertainty(evidence: list[EvidenceReference], used_fallback: bool,
     return notes
 
 
+def _rank_open_commitments(commitments: list[MemoryRecord], *, focus_text: str = "") -> list[MemoryRecord]:
+    now = datetime.utcnow()
+    return sorted(
+        [commitment for commitment in commitments if commitment.status != "closed"],
+        key=lambda commitment: (
+            -_text_overlap(f"{commitment.title_or_label} {commitment.normalized_text}", focus_text),
+            0 if commitment.due_date and commitment.due_date <= now else 1,
+            0 if commitment.due_date else 1,
+            commitment.due_date or datetime.max,
+            -commitment.confidence_score,
+        ),
+    )
+
+
+def _commitment_action_text(commitment: MemoryRecord) -> str:
+    owner_text = f" for {commitment.owner_label}" if commitment.owner_label else ""
+    if commitment.due_date:
+        return f"Review the open commitment{owner_text} due on {commitment.due_date.strftime('%Y-%m-%d')}: '{commitment.title_or_label}'."
+    return f"Review the open commitment '{commitment.title_or_label}' and confirm whether its due path is still realistic."
+
+
 def _next_actions_from_support(memories: list[MemoryRecord], contradictions: list[dict], stale_assumptions: list[dict]) -> list[str]:
     actions: list[str] = []
     if contradictions:
@@ -803,9 +859,15 @@ def _next_actions_from_support(memories: list[MemoryRecord], contradictions: lis
     if stale_assumptions:
         top = stale_assumptions[0]
         actions.append(f"Revalidate the assumption '{top['title_or_label']}' because later evidence now marks it {top['status']}.")
-    open_commitments = [memory for memory in memories if memory.memory_type == "commitment"]
+    focus_text = " ".join(
+        [
+            *(f"{item['from_title']} {item['to_title']}" for item in contradictions[:2]),
+            *(item["title_or_label"] for item in stale_assumptions[:2]),
+        ]
+    )
+    open_commitments = _rank_open_commitments([memory for memory in memories if memory.memory_type == "commitment"], focus_text=focus_text)
     if open_commitments:
-        actions.append(f"Review the open commitment '{open_commitments[0].title_or_label}' and confirm whether its due path is still realistic.")
+        actions.append(_commitment_action_text(open_commitments[0]))
     return actions[:3]
 
 

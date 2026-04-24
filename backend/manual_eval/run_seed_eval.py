@@ -130,6 +130,11 @@ def main() -> None:
                 str(top_item.get("evidence_provenance", "")),
                 cast(list[str], spec["expected_top_provenance_contains"]),
             ),
+            "supporting_commitment_due_dates": not spec.get("expected_supporting_commitment_due_dates") or any(
+                node.get("memory_type") == "commitment"
+                and contains_any_fragment(str(node.get("due_date", "")), cast(list[str], spec["expected_supporting_commitment_due_dates"]))
+                for node in result.get("supporting_nodes", [])
+            ),
         }
         results.append(
             {

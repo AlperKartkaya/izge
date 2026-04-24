@@ -14,6 +14,21 @@ export function formatDateTime(value: string | null | undefined): string {
   }).format(parsed)
 }
 
+export function formatDate(value: string | null | undefined): string {
+  if (!value) {
+    return 'Unavailable'
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+  }).format(parsed)
+}
+
 export function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`
 }

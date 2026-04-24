@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, PageIntro, Panel } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import { formatDateTime, formatPercent } from '../lib/format'
+import { formatDate, formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { MemoryDetail } from '../lib/types'
 
 export function MemoryDetailPage() {
@@ -78,6 +78,24 @@ export function MemoryDetailPage() {
                 <dt>Source chunk</dt>
                 <dd>{detail.source_chunk_id ?? 'Unavailable'}</dd>
               </div>
+              {detail.status ? (
+                <div>
+                  <dt>Status</dt>
+                  <dd>{formatLabel(detail.status)}</dd>
+                </div>
+              ) : null}
+              {detail.owner_label ? (
+                <div>
+                  <dt>Owner</dt>
+                  <dd>{detail.owner_label}</dd>
+                </div>
+              ) : null}
+              {detail.due_date ? (
+                <div>
+                  <dt>Due date</dt>
+                  <dd>{formatDate(detail.due_date)}</dd>
+                </div>
+              ) : null}
             </dl>
 
             <div className="panel-subtle">

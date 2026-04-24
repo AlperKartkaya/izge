@@ -44,4 +44,7 @@ def get_memory_detail(memory_type: str, memory_id: str, current_user: User = Dep
         source_artifact_id=memory.source_artifact_id,
         source_chunk_id=memory.source_chunk_id,
         evidence_span=memory.evidence_span,
+        status=getattr(memory, "status", None),
+        due_date=getattr(memory, "due_date", None),
+        owner_label=getattr(memory, "owner_label", None),
     )

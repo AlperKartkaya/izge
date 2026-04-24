@@ -175,6 +175,7 @@ class ExtractionItem:
     event_timestamp: datetime
     topic_key: str
     owner_hint: str | None = None
+    due_date: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -189,7 +190,9 @@ class PersistedMemory:
     event_timestamp: datetime
     confidence_score: float
     topic_key: str
-    owner_hint: str | None
+    status: str | None = None
+    owner_hint: str | None = None
+    due_date: datetime | None = None
 
 
 def extract_text_for_artifact(artifact: Artifact) -> str:
@@ -355,9 +358,18 @@ def _infer_memory_type(text: str, section_path: str) -> tuple[str | None, float]
 
 
 def _extract_owner_hint(text: str) -> str | None:
-    owner_match = re.search(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+will\b", text)
+    owner_match = re.match(r"(?P<owner>.+?)\s+will\b", text)
     if owner_match:
-        return owner_match.group(1)
+        owner = _normalize_whitespace(owner_match.group("owner"))
+        if owner and owner.lower() not in {"we", "team", "leadership"} and len(owner) <= 80:
+            return owner
+    return None
+
+
+def _extract_due_date_hint(text: str) -> datetime | None:
+    due_date_match = re.search(r"\bby\s+(20\d{2}[-/]\d{2}[-/]\d{2})\b", text, re.IGNORECASE)
+    if due_date_match:
+        return _parse_date(due_date_match.group(1))
     return None
 
 
@@ -408,6 +420,7 @@ def extract_memory_candidates(chunks: list[str], artifact: Artifact, artifact_te
                 event_timestamp=_extract_segment_timestamp(normalized_text, artifact_timestamp),
                 topic_key=topic_key,
                 owner_hint=_extract_owner_hint(normalized_text) if memory_type == "commitment" else None,
+                due_date=_extract_due_date_hint(normalized_text) if memory_type == "commitment" else None,
             )
         )
     return items
@@ -521,7 +534,7 @@ def _store_memory_item(db: Session, *, artifact: Artifact, chunk: ArtifactChunk,
     elif item.memory_type == "outcome":
         entity = model(outcome_type="observed", **common_kwargs)
     else:
-        entity = model(status="open", **common_kwargs)
+        entity = model(status="open", owner_label=item.owner_hint, due_date=item.due_date, **common_kwargs)
     db.add(entity)
     db.flush()
     entity_id = getattr(entity, pk_name)
@@ -563,7 +576,9 @@ def _store_memory_item(db: Session, *, artifact: Artifact, chunk: ArtifactChunk,
         event_timestamp=item.event_timestamp,
         confidence_score=item.confidence_score,
         topic_key=item.topic_key,
+        status="open" if item.memory_type == "commitment" else ("active" if item.memory_type in {"decision", "assumption"} else None),
         owner_hint=item.owner_hint,
+        due_date=item.due_date,
     )
 
 
@@ -592,8 +607,10 @@ def _load_persisted_memories(db: Session, workspace_id: str) -> list[PersistedMe
                     source_chunk_id=row.source_chunk_id,
                     event_timestamp=row.event_timestamp,
                     confidence_score=row.confidence_score,
-                    topic_key=_topic_key(row.title_or_label),
-                    owner_hint=None,
+                    topic_key=row.topic_key,
+                    status=getattr(row, "status", None),
+                    owner_hint=getattr(row, "owner_label", None),
+                    due_date=getattr(row, "due_date", None),
                 )
             )
     return records
