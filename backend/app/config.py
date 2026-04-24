@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     chunk_size: int = 1200
     chunk_overlap: int = 120
     max_upload_bytes: int = 10 * 1024 * 1024
+    local_llm_enabled: bool = False
+    local_llm_base_url: str = "http://127.0.0.1:11434"
+    local_llm_model: str = "qwen3.5:9b"
+    local_llm_timeout_seconds: int = 60
 
     model_config = SettingsConfigDict(env_prefix="IZGE_", env_file=".env", extra="ignore")
 

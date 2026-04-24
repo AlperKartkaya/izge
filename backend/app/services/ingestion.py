@@ -757,15 +757,12 @@ def _update_assumption_drift(db: Session, memories: list[PersistedMemory], artif
             assumption_row.status = "reversed"
             assumption_row.validity_notes = f"Later decision shifted the operating basis: {strongest_signal.title_or_label}"
         for signal in related_signals:
-            edge_type = "RELATES_TO"
-            if assumption_row.status in {"stale", "reversed"}:
-                edge_type = "CONTRADICTS"
             _create_edge_if_missing(
                 db,
                 workspace_id=workspace_id,
                 from_node_id=signal.node_id,
                 to_node_id=assumption_memory.node_id,
-                edge_type=edge_type,
+                edge_type="RELATES_TO",
                 evidence_artifact_id=signal.source_artifact_id,
                 evidence_chunk_id=signal.source_chunk_id,
                 evidence_span=signal.title_or_label,

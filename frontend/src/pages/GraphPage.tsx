@@ -1,15 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { Callout, EmptyState, MetricCard, PageIntro, Panel } from '../components/ui'
+import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import { formatPercent } from '../lib/format'
-import type { AssumptionDriftItem, ContradictionItem, GraphSummary } from '../lib/types'
+import { formatDate, formatDateTime, formatLabel, formatPercent } from '../lib/format'
+import type { AssumptionDriftItem, ContradictionItem, GraphSummary, GraphTimelineItem } from '../lib/types'
 
 export function GraphPage() {
   const { session } = useAuth()
   const [summary, setSummary] = useState<GraphSummary | null>(null)
+  const [timelineItems, setTimelineItems] = useState<GraphTimelineItem[]>([])
   const [contradictions, setContradictions] = useState<ContradictionItem[]>([])
   const [assumptionDrift, setAssumptionDrift] = useState<AssumptionDriftItem[]>([])
+  const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -21,16 +24,19 @@ export function GraphPage() {
       }
 
       try {
-        const [graphSummary, contradictionList, assumptionList] = await Promise.all([
+        const [graphSummary, graphTimeline, contradictionList, assumptionList] = await Promise.all([
           api.getGraphSummary(session.token),
+          api.getGraphTimeline(session.token),
           api.listContradictions(session.token),
           api.listAssumptionDrift(session.token),
         ])
 
         if (!cancelled) {
           setSummary(graphSummary)
+          setTimelineItems(graphTimeline.items)
           setContradictions(contradictionList)
           setAssumptionDrift(assumptionList)
+          setSelectedMemoryId(graphTimeline.items[0]?.memory_id ?? null)
         }
       } catch (caughtError) {
         if (!cancelled) {
@@ -46,22 +52,119 @@ export function GraphPage() {
     }
   }, [session?.token])
 
+  const selectedTimelineItem = useMemo(
+    () => timelineItems.find((item) => item.memory_id === selectedMemoryId) ?? timelineItems[0] ?? null,
+    [selectedMemoryId, timelineItems],
+  )
+
   return (
     <div className="stack-xl">
       <PageIntro
         eyebrow="Graph & timeline"
-        title="Review structural signals"
-        description="This view concentrates explicit graph counts and the two analytical side-lists the backend already exposes: contradictions and assumption drift."
+        title="Reconstruct the history"
+        description="This view starts with a timeline of remembered decisions, assumptions, constraints, outcomes, and commitments so the graph reads like institutional history rather than a database summary."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <section className="metric-grid">
         <MetricCard label="Artifacts in graph scope" value={summary?.artifact_count ?? '—'} />
-        <MetricCard label="Memory families" value={Object.keys(summary?.memory_counts ?? {}).length || '—'} />
+        <MetricCard label="Timeline cards" value={timelineItems.length || '—'} />
         <MetricCard label="Edge families" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} />
         <MetricCard label="Contradiction edges" value={contradictions.length} />
       </section>
+
+      <div className="two-column-layout wide-right-column">
+        <Panel title="Timeline of remembered changes" description="Ordered memory cards make the product read like historical reconstruction, not graph wallpaper.">
+          {timelineItems.length === 0 ? (
+            <EmptyState title="No timeline entries yet" description="Run ingestion on roadmap artifacts to populate the explicit institutional memory timeline." />
+          ) : (
+            <div className="timeline-list">
+              {timelineItems.map((item) => (
+                <button
+                  key={`${item.memory_type}-${item.memory_id}`}
+                  type="button"
+                  className={selectedTimelineItem?.memory_id === item.memory_id ? 'timeline-card timeline-card-active' : 'timeline-card'}
+                  onClick={() => setSelectedMemoryId(item.memory_id)}
+                >
+                  <div className="timeline-card-head">
+                    <p className="section-label">{formatDate(item.event_timestamp)}</p>
+                    <StatusBadge value={formatLabel(item.timeline_status)} />
+                  </div>
+                  <p className="table-primary">{item.title_or_label}</p>
+                  <p className="table-secondary">{item.memory_type} · topic {item.topic_key}</p>
+                  <p className="muted-copy">{item.source_artifact_title}</p>
+                  <div className="timeline-stats">
+                    <span>{item.related_count} linked</span>
+                    <span>{item.contradiction_count} contradictions</span>
+                    <span>{item.supersedes_count} supersessions</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </Panel>
+
+        <Panel
+          title={selectedTimelineItem ? 'Selected memory detail' : 'Timeline detail'}
+          description={
+            selectedTimelineItem
+              ? 'Inspect evidence-bearing memory details and jump directly into the dedicated memory page.'
+              : 'Select a timeline card to inspect its evidence context.'
+          }
+        >
+          {selectedTimelineItem ? (
+            <div className="stack-md">
+              <div className="detail-grid">
+                <article className="panel-subtle detail-card">
+                  <p className="section-label">Kind</p>
+                  <p className="table-primary">{selectedTimelineItem.memory_type}</p>
+                </article>
+                <article className="panel-subtle detail-card">
+                  <p className="section-label">Observed</p>
+                  <p className="table-primary">{formatDateTime(selectedTimelineItem.event_timestamp)}</p>
+                </article>
+              </div>
+
+              <div className="panel-subtle stack-sm">
+                <p className="section-label">Historical reading</p>
+                <p className="table-primary">{selectedTimelineItem.title_or_label}</p>
+                <p className="table-secondary">
+                  {selectedTimelineItem.source_artifact_title} · status {formatLabel(selectedTimelineItem.timeline_status)}
+                </p>
+                {selectedTimelineItem.owner_label ? <p className="table-secondary">Owner: {selectedTimelineItem.owner_label}</p> : null}
+                {selectedTimelineItem.due_date ? <p className="table-secondary">Due: {formatDate(selectedTimelineItem.due_date)}</p> : null}
+                <p className="muted-copy">{selectedTimelineItem.evidence_span ?? 'No explicit evidence span recorded for this timeline item.'}</p>
+              </div>
+
+              <dl className="meta-list compact-meta-list">
+                <div>
+                  <dt>Related links</dt>
+                  <dd>{selectedTimelineItem.related_count}</dd>
+                </div>
+                <div>
+                  <dt>Contradictions</dt>
+                  <dd>{selectedTimelineItem.contradiction_count}</dd>
+                </div>
+                <div>
+                  <dt>Supersessions</dt>
+                  <dd>{selectedTimelineItem.supersedes_count}</dd>
+                </div>
+                <div>
+                  <dt>Source chunk</dt>
+                  <dd>{selectedTimelineItem.source_chunk_id ?? 'Unavailable'}</dd>
+                </div>
+              </dl>
+
+              <Link className="secondary-button" to={`/memory/${selectedTimelineItem.memory_type}/${selectedTimelineItem.memory_id}`}>
+                Open full memory detail
+              </Link>
+            </div>
+          ) : (
+            <EmptyState title="Nothing selected" description="Choose a timeline card to inspect its evidence-bearing memory details." />
+          )}
+        </Panel>
+      </div>
 
       <div className="two-column-layout">
         <Panel title="Memory composition" description="Counts of persisted memory objects across the explicit graph model.">
@@ -105,8 +208,20 @@ export function GraphPage() {
                 <article key={item.edge_id} className="panel-subtle stack-sm">
                   <p className="table-primary">{item.from_title} → {item.to_title}</p>
                   <p className="table-secondary">{item.from_type} {item.relation_label} {item.to_type} · topic {item.topic_key}</p>
-                  <p className="muted-copy">{item.evidence_span || `Edge ${item.edge_id}`}</p>
-                  {item.evidence_provenance ? <p className="table-secondary">{item.evidence_provenance}</p> : null}
+                  <div className="stack-sm">
+                    <div className="panel-subtle stack-sm">
+                      <p className="section-label">Later claim evidence</p>
+                      <p className="table-secondary">{item.from_evidence.artifact_title}</p>
+                      <p className="muted-copy">{item.from_evidence.excerpt}</p>
+                      <p className="table-secondary">{item.from_evidence.provenance}</p>
+                    </div>
+                    <div className="panel-subtle stack-sm">
+                      <p className="section-label">Earlier claim evidence</p>
+                      <p className="table-secondary">{item.to_evidence.artifact_title}</p>
+                      <p className="muted-copy">{item.to_evidence.excerpt}</p>
+                      <p className="table-secondary">{item.to_evidence.provenance}</p>
+                    </div>
+                  </div>
                   {item.ranking_basis.length > 0 ? <p className="table-secondary">Ranked for: {item.ranking_basis.join(', ')}</p> : null}
                   {item.uncertainty_note ? <p className="muted-copy">{item.uncertainty_note}</p> : null}
                   <p className="muted-copy">Confidence {formatPercent(item.confidence_score)}</p>

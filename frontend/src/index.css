@@ -376,7 +376,9 @@ code {
 .signal-grid,
 .choice-grid,
 .bullet-list,
-.result-grid {
+.result-grid,
+.timeline-list,
+.timeline-stats {
   display: grid;
 }
 
@@ -387,12 +389,56 @@ code {
 
 .choice-grid,
 .bullet-list,
-.result-grid {
+.result-grid,
+.timeline-list {
   gap: var(--space-3);
 }
 
 .result-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.timeline-list {
+  max-height: 48rem;
+  overflow-y: auto;
+}
+
+.timeline-card {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  text-align: left;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-elevated);
+  transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+}
+
+.timeline-card:hover {
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+
+.timeline-card-active {
+  background: var(--color-accent-soft);
+  border-color: rgba(35, 76, 99, 0.24);
+}
+
+.timeline-card-head,
+.timeline-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.timeline-stats {
+  color: var(--color-ink-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .section-panel {

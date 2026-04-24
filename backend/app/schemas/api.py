@@ -139,11 +139,64 @@ class QueryResult(BaseModel):
     created_at: datetime
 
 
+class QueryTraceEvidence(BaseModel):
+    artifact_id: str
+    artifact_title: str
+    chunk_id: str | None = None
+    evidence_kind: str | None = None
+    excerpt: str | None = None
+    why_selected: str | None = None
+
+
+class QueryTraceMemory(BaseModel):
+    memory_type: str
+    memory_id: str
+    title_or_label: str
+    source_artifact_id: str
+
+
+class QueryTraceStepRead(BaseModel):
+    step_kind: str
+    payload: dict[str, Any]
+    created_at: datetime
+
+
+class QueryTraceRead(BaseModel):
+    query_run_id: str
+    query_class: str
+    route_confidence: float
+    permissions_limited: bool
+    steps: list[QueryTraceStepRead]
+
+
 class GraphSummary(BaseModel):
     workspace_id: str
     artifact_count: int
     memory_counts: dict[str, int]
     edge_counts: dict[str, int]
+
+
+class GraphTimelineItem(BaseModel):
+    memory_type: str
+    memory_id: str
+    title_or_label: str
+    event_timestamp: datetime
+    timeline_status: str
+    topic_key: str
+    source_artifact_id: str
+    source_artifact_title: str
+    source_chunk_id: str | None
+    evidence_span: str | None = None
+    owner_label: str | None = None
+    due_date: datetime | None = None
+    contradiction_count: int = 0
+    supersedes_count: int = 0
+    related_count: int = 0
+
+
+class GraphTimeline(BaseModel):
+    workspace_id: str
+    items: list[GraphTimelineItem]
 
 
 class MemoryDetail(BaseModel):
@@ -161,6 +214,15 @@ class MemoryDetail(BaseModel):
     owner_label: str | None = None
 
 
+class ContradictionEvidence(BaseModel):
+    artifact_id: str
+    artifact_title: str
+    chunk_id: str | None = None
+    excerpt: str
+    provenance: str
+    time_label: str
+
+
 class ContradictionItem(BaseModel):
     edge_id: str
     from_node_id: str
@@ -175,6 +237,8 @@ class ContradictionItem(BaseModel):
     evidence_chunk_id: str | None
     evidence_span: str | None = None
     evidence_provenance: str | None = None
+    from_evidence: ContradictionEvidence
+    to_evidence: ContradictionEvidence
     topic_key: str
     ranking_basis: list[str] = Field(default_factory=list)
     uncertainty_note: str | None = None

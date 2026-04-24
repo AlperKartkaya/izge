@@ -19,9 +19,10 @@ from app.models import (
     GraphNode,
     Outcome,
     QueryRun,
+    QueryTraceStep,
     User,
 )
-from app.schemas.api import EvidenceReference, MemoryReference, QueryResult
+from app.schemas.api import EvidenceReference, GraphTimelineItem, MemoryReference, QueryResult, QueryTraceRead, QueryTraceStepRead
 from app.services.audit import log_event
 from app.services.permissions import artifact_is_visible_to_user
 
@@ -58,6 +59,43 @@ STOPWORDS = {
     "with",
 }
 
+CONTRADICTION_ACTION_TERMS = {
+    "decided",
+    "decision",
+    "move",
+    "moved",
+    "moving",
+    "launch",
+    "target",
+    "late",
+    "early",
+    "reintroduce",
+    "reintroduced",
+    "support",
+    "activation",
+    "prioritize",
+    "prioritized",
+    "foundation",
+    "work",
+    "prepare",
+    "publish",
+    "decide",
+    "decides",
+    "keep",
+    "revert",
+    "roadmap",
+    "plan",
+    "plans",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+    "2024",
+    "2025",
+    "2026",
+    "2027",
+}
+
 
 @dataclass(frozen=True)
 class MemoryRecord:
@@ -84,6 +122,14 @@ class NodeRecord:
     title_or_label: str
 
 
+@dataclass(frozen=True)
+class QueryRouteDecision:
+    query_class: str
+    route_confidence: float
+    route_rationale: str
+    secondary_signals: list[str]
+
+
 def _query_terms(value: str) -> set[str]:
     return {token for token in re.findall(r"[a-z0-9]+", value.lower()) if token not in STOPWORDS and len(token) > 2}
 
@@ -92,7 +138,30 @@ def _text_overlap(left: str, right: str) -> int:
     return len(_query_terms(left) & _query_terms(right))
 
 
-def classify_query(query_text: str) -> str:
+def _contradiction_family_terms(memory: MemoryRecord) -> set[str]:
+    tokens = _query_terms(f"{memory.title_or_label} {memory.normalized_text}")
+    return {token for token in tokens if token not in CONTRADICTION_ACTION_TERMS}
+
+
+def _contradiction_family_key(memory: MemoryRecord) -> str:
+    tokens = sorted(_contradiction_family_terms(memory))
+    if not tokens:
+        return memory.topic_key
+    return " ".join(tokens[:4])
+
+
+def _is_contradiction_comparable_pair(from_memory: MemoryRecord, to_memory: MemoryRecord) -> bool:
+    pair = {from_memory.memory_type, to_memory.memory_type}
+    if pair not in ({"decision"}, {"decision", "commitment"}, {"commitment"}):
+        return False
+    from_terms = _contradiction_family_terms(from_memory)
+    to_terms = _contradiction_family_terms(to_memory)
+    if not from_terms or not to_terms:
+        return False
+    return len(from_terms & to_terms) >= 2
+
+
+def classify_query_with_trace(query_text: str) -> QueryRouteDecision:
     lowered = query_text.lower()
     scores = {
         "Decision lineage": 0,
@@ -100,21 +169,45 @@ def classify_query(query_text: str) -> str:
         "Assumption drift": 0,
         "Next-action guidance": 0,
     }
+    matched_terms: dict[str, list[str]] = {label: [] for label in scores}
     for term in ("contradict", "conflict", "tension", "oppose", "inconsistent"):
         if term in lowered:
             scores["Contradiction analysis"] += 2
+            matched_terms["Contradiction analysis"].append(term)
     for term in ("assumption", "stale", "drift", "outdated", "still valid"):
         if term in lowered:
             scores["Assumption drift"] += 2
+            matched_terms["Assumption drift"].append(term)
     for term in ("next", "should", "recommend", "action", "now", "do next"):
         if term in lowered:
             scores["Next-action guidance"] += 2
+            matched_terms["Next-action guidance"].append(term)
     for term in ("decide", "decision", "why", "when", "lineage", "history"):
         if term in lowered:
             scores["Decision lineage"] += 1
-    if max(scores.values()) == 0:
-        return "Decision lineage"
-    return max(scores.items(), key=lambda item: item[1])[0]
+            matched_terms["Decision lineage"].append(term)
+
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    best_class, best_score = ranked[0]
+    second_score = ranked[1][1]
+    if best_score == 0:
+        return QueryRouteDecision(
+            query_class="Decision lineage",
+            route_confidence=0.3,
+            route_rationale="No explicit mode keywords matched, so the query fell back to the baseline historical-lineage route.",
+            secondary_signals=[],
+        )
+    confidence = min(0.98, 0.45 + (best_score * 0.12) + ((best_score - second_score) * 0.08))
+    return QueryRouteDecision(
+        query_class=best_class,
+        route_confidence=round(confidence, 2),
+        route_rationale=f"Matched route terms: {', '.join(matched_terms[best_class])}.",
+        secondary_signals=[label for label, score in ranked[1:] if score > 0][:2],
+    )
+
+
+def classify_query(query_text: str) -> str:
+    return classify_query_with_trace(query_text).query_class
 
 
 def _visible_artifacts(db: Session, user: User) -> list[Artifact]:
@@ -215,6 +308,24 @@ def _evidence_excerpt(db: Session, *, chunk_id: str | None, fallback: str) -> st
     return re.sub(r"\s+", " ", excerpt).strip()
 
 
+def _contradiction_side_evidence(
+    db: Session,
+    *,
+    memory: MemoryRecord,
+    artifact_titles: dict[str, str],
+    time_label: str,
+) -> dict[str, str | None]:
+    artifact_title = _artifact_title_for_id(artifact_titles, memory.source_artifact_id)
+    return {
+        "artifact_id": memory.source_artifact_id,
+        "artifact_title": artifact_title,
+        "chunk_id": memory.source_chunk_id,
+        "excerpt": _evidence_excerpt(db, chunk_id=memory.source_chunk_id, fallback=memory.evidence_span or memory.normalized_text),
+        "provenance": f"{time_label.capitalize()} claim evidence from {artifact_title}.",
+        "time_label": time_label,
+    }
+
+
 def _contradiction_provenance(
     *,
     artifact_title: str,
@@ -264,6 +375,57 @@ def _drift_signal_sort_key(signal: MemoryRecord, *, assumption: Assumption, quer
 def _payload_item_visible(item: dict[str, Any], artifact_keys: list[str], visible_artifact_ids: set[str]) -> bool:
     artifact_ids = {item.get(key) for key in artifact_keys if item.get(key) is not None}
     return all(isinstance(artifact_id, str) and artifact_id in visible_artifact_ids for artifact_id in artifact_ids)
+
+
+def _memory_trace_payload_items(nodes: list[MemoryReference]) -> list[dict[str, Any]]:
+    return [
+        {
+            "memory_type": node.memory_type,
+            "memory_id": node.memory_id,
+            "title_or_label": node.title_or_label,
+            "source_artifact_id": node.source_artifact_id,
+        }
+        for node in nodes[:6]
+    ]
+
+
+def _evidence_trace_payload_items(evidence: list[EvidenceReference]) -> list[dict[str, Any]]:
+    return [
+        {
+            "artifact_id": item.artifact_id,
+            "artifact_title": item.artifact_title,
+            "chunk_id": item.chunk_id,
+            "evidence_kind": item.evidence_kind,
+            "excerpt": item.excerpt,
+            "why_selected": "Selected as visible evidence supporting the final answer packet.",
+        }
+        for item in evidence[:6]
+    ]
+
+
+def _contradiction_trace_payload_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "from_title": item["from_title"],
+            "to_title": item["to_title"],
+            "from_source_artifact_id": item["from_source_artifact_id"],
+            "to_source_artifact_id": item["to_source_artifact_id"],
+            "claim_family_key": item.get("claim_family_key"),
+        }
+        for item in items[:4]
+    ]
+
+
+def _drift_trace_payload_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "title_or_label": item["title_or_label"],
+            "status": item["status"],
+            "source_artifact_id": item["source_artifact_id"],
+            "supporting_signal_source_artifact_id": item.get("supporting_signal_source_artifact_id"),
+        }
+        for item in items[:4]
+    ]
 
 
 def _safe_next_actions_from_payload(
@@ -648,6 +810,8 @@ def _contradiction_dicts(db: Session, user: User, query_text: str, memories: lis
         to_memory = memory_by_id.get(to_node.entity_id)
         if from_memory is None or to_memory is None:
             continue
+        if not _is_contradiction_comparable_pair(from_memory, to_memory):
+            continue
         if from_memory.topic_key == "general" and to_memory.topic_key == "general":
             continue
         if from_memory.topic_key != to_memory.topic_key and _text_overlap(from_memory.topic_key, to_memory.topic_key) == 0:
@@ -664,7 +828,8 @@ def _contradiction_dicts(db: Session, user: User, query_text: str, memories: lis
             type_bonus += 2
         chronology_bonus = 1 if from_memory.event_timestamp >= to_memory.event_timestamp else 0
         direct_evidence_bonus = 1 if edge.evidence_chunk_id else 0
-        topic_key = from_memory.topic_key if from_memory.topic_key == to_memory.topic_key else from_memory.topic_key
+        family_key = _contradiction_family_key(from_memory)
+        topic_key = family_key if family_key != "general" else (from_memory.topic_key if from_memory.topic_key == to_memory.topic_key else from_memory.topic_key)
         evidence_span = _evidence_excerpt(
             db,
             chunk_id=edge.evidence_chunk_id,
@@ -693,7 +858,10 @@ def _contradiction_dicts(db: Session, user: User, query_text: str, memories: lis
                 "evidence_chunk_id": edge.evidence_chunk_id,
                 "evidence_span": evidence_span,
                 "evidence_provenance": evidence_provenance,
+                "from_evidence": _contradiction_side_evidence(db, memory=from_memory, artifact_titles=artifact_titles, time_label="later"),
+                "to_evidence": _contradiction_side_evidence(db, memory=to_memory, artifact_titles=artifact_titles, time_label="earlier"),
                 "topic_key": topic_key,
+                "claim_family_key": family_key,
                 "relevance": relevance,
                 "type_bonus": type_bonus,
                 "chronology_bonus": chronology_bonus,
@@ -780,7 +948,15 @@ def _memories_for_contradictions(db: Session, user: User, contradiction_items: l
     nodes = _load_nodes_by_id(db, user)
     memory_by_id = {memory.memory_id: memory for memory in _load_memory_records(db, user)}
     supporting: list[MemoryRecord] = []
-    for item in contradiction_items:
+    if contradiction_items:
+        primary_family = contradiction_items[0].get("claim_family_key")
+        filtered_items = [
+            item for item in contradiction_items[:4]
+            if not primary_family or item.get("claim_family_key") == primary_family
+        ] or contradiction_items[:2]
+    else:
+        filtered_items = contradiction_items
+    for item in filtered_items:
         for node_id in (item["from_node_id"], item["to_node_id"]):
             node = nodes.get(node_id)
             if node is None:
@@ -871,6 +1047,124 @@ def _next_actions_from_support(memories: list[MemoryRecord], contradictions: lis
     return actions[:3]
 
 
+def _persist_query_trace_steps(
+    db: Session,
+    *,
+    query_run: QueryRun,
+    route_decision: QueryRouteDecision,
+    result_data: dict[str, Any],
+    permissions_limited: bool,
+    hidden_artifact_count: int,
+) -> None:
+    supporting_nodes = result_data.get("supporting_nodes", [])
+    supporting_evidence = result_data.get("supporting_evidence", [])
+    contradictions = result_data.get("contradictions", [])
+    stale_assumptions = result_data.get("stale_assumptions", [])
+    uncertainty_notes = result_data.get("uncertainty_notes", [])
+
+    trace_payloads: list[tuple[str, dict[str, Any]]] = [
+        (
+            "route_decision",
+            {
+                "query_class": route_decision.query_class,
+                "route_confidence": route_decision.route_confidence,
+                "route_rationale": route_decision.route_rationale,
+                "secondary_signals": route_decision.secondary_signals,
+            },
+        ),
+        (
+            "seed_selection",
+            {
+                "supporting_nodes": _memory_trace_payload_items(supporting_nodes),
+                "contradiction_pairs": _contradiction_trace_payload_items(contradictions),
+                "stale_assumptions": _drift_trace_payload_items(stale_assumptions),
+            },
+        ),
+        (
+            "evidence_selection",
+            {
+                "supporting_evidence": _evidence_trace_payload_items(supporting_evidence),
+                "selected_evidence_count": len(supporting_evidence),
+                "graph_evidence_count": sum(1 for item in supporting_evidence if item.evidence_kind == "graph"),
+                "search_fallback_count": sum(1 for item in supporting_evidence if item.evidence_kind != "graph"),
+            },
+        ),
+        (
+            "answer_composition",
+            {
+                "direct_answer": result_data["answer_text"],
+                "why_this_answer": result_data["why_this_answer"],
+                "section_counts": {
+                    "supporting_nodes": len(supporting_nodes),
+                    "supporting_evidence": len(supporting_evidence),
+                    "contradictions": len(contradictions),
+                    "assumption_drift": len(stale_assumptions),
+                    "recommended_next_actions": len(result_data.get("recommended_next_actions", [])),
+                },
+            },
+        ),
+        (
+            "uncertainty_note",
+            {
+                "notes": uncertainty_notes,
+                "permissions_limited": permissions_limited,
+                "hidden_artifact_count": hidden_artifact_count,
+            },
+        ),
+    ]
+
+    for step_kind, payload in trace_payloads:
+        db.add(
+            QueryTraceStep(
+                query_run_id=query_run.query_run_id,
+                workspace_id=query_run.workspace_id,
+                step_kind=step_kind,
+                payload_json=payload,
+            )
+        )
+
+
+def _filter_trace_payload(payload: dict[str, Any], visible_artifact_ids: set[str]) -> dict[str, Any]:
+    filtered = dict(payload)
+    omitted_count = 0
+
+    if isinstance(filtered.get("supporting_nodes"), list):
+        original = [item for item in filtered["supporting_nodes"] if isinstance(item, dict)]
+        kept = [item for item in original if item.get("source_artifact_id") in visible_artifact_ids]
+        omitted_count += len(original) - len(kept)
+        filtered["supporting_nodes"] = kept
+
+    if isinstance(filtered.get("contradiction_pairs"), list):
+        original = [item for item in filtered["contradiction_pairs"] if isinstance(item, dict)]
+        kept = [
+            item
+            for item in original
+            if _payload_item_visible(item, ["from_source_artifact_id", "to_source_artifact_id"], visible_artifact_ids)
+        ]
+        omitted_count += len(original) - len(kept)
+        filtered["contradiction_pairs"] = kept
+
+    if isinstance(filtered.get("stale_assumptions"), list):
+        original = [item for item in filtered["stale_assumptions"] if isinstance(item, dict)]
+        kept = [
+            item
+            for item in original
+            if _payload_item_visible(item, ["source_artifact_id", "supporting_signal_source_artifact_id"], visible_artifact_ids)
+        ]
+        omitted_count += len(original) - len(kept)
+        filtered["stale_assumptions"] = kept
+
+    if isinstance(filtered.get("supporting_evidence"), list):
+        original = [item for item in filtered["supporting_evidence"] if isinstance(item, dict)]
+        kept = [item for item in original if item.get("artifact_id") in visible_artifact_ids]
+        omitted_count += len(original) - len(kept)
+        filtered["supporting_evidence"] = kept
+
+    if omitted_count:
+        filtered["omitted_items"] = omitted_count
+    return filtered
+
+
 def list_ranked_contradictions(db: Session, user: User, limit: int = 12) -> list[dict]:
     return _contradiction_dicts(db, user, "", _load_memory_records(db, user), limit=limit)
 
@@ -880,10 +1174,12 @@ def list_ranked_assumption_drift(db: Session, user: User, limit: int = 12) -> li
 
 
 def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
-    query_class = classify_query(query_text)
+    route_decision = classify_query_with_trace(query_text)
+    query_class = route_decision.query_class
     all_workspace_artifacts = db.scalars(select(Artifact).where(Artifact.workspace_id == actor.workspace_id)).all()
     visible_artifacts = _visible_artifacts(db, actor)
     permissions_limited = len(visible_artifacts) < len(all_workspace_artifacts)
+    hidden_artifact_count = max(len(all_workspace_artifacts) - len(visible_artifacts), 0)
 
     if query_class == "Contradiction analysis":
         result_data = _contradiction_result(db, actor, query_text)
@@ -899,6 +1195,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         created_by=actor.user_id,
         query_text=query_text,
         query_class=query_class,
+        route_confidence=route_decision.route_confidence,
         status="completed",
         answer_text=result_data["answer_text"],
         answer_payload={},
@@ -924,6 +1221,14 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         created_at=query_run.created_at,
     )
     query_run.answer_payload = payload.model_dump(mode="json")
+    _persist_query_trace_steps(
+        db,
+        query_run=query_run,
+        route_decision=route_decision,
+        result_data=result_data,
+        permissions_limited=permissions_limited,
+        hidden_artifact_count=hidden_artifact_count,
+    )
     db.commit()
     log_event(
         db,
@@ -932,7 +1237,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         event_type="QUERY_SUBMITTED",
         target_type="query_run",
         target_id=query_run.query_run_id,
-        event_metadata={"query_class": query_class},
+        event_metadata={"query_class": query_class, "route_confidence": route_decision.route_confidence},
     )
     log_event(
         db,
@@ -1013,6 +1318,31 @@ def build_query_result_for_reader(db: Session, query_run: QueryRun, reader: User
     )
 
 
+def build_query_trace_for_reader(db: Session, query_run: QueryRun, reader: User) -> QueryTraceRead:
+    visible_artifact_ids = _visible_artifact_ids(db, reader)
+    trace_steps = db.scalars(
+        select(QueryTraceStep)
+        .where(QueryTraceStep.query_run_id == query_run.query_run_id, QueryTraceStep.workspace_id == reader.workspace_id)
+        .order_by(QueryTraceStep.created_at.asc())
+    ).all()
+    steps = [
+        QueryTraceStepRead(
+            step_kind=step.step_kind,
+            payload=_filter_trace_payload(step.payload_json, visible_artifact_ids),
+            created_at=step.created_at,
+        )
+        for step in trace_steps
+    ]
+    permissions_limited = query_run.permissions_limited or len(visible_artifact_ids) < db.query(Artifact).filter(Artifact.workspace_id == reader.workspace_id).count()
+    return QueryTraceRead(
+        query_run_id=query_run.query_run_id,
+        query_class=query_run.query_class,
+        route_confidence=query_run.route_confidence,
+        permissions_limited=permissions_limited,
+        steps=steps,
+    )
+
+
 def graph_summary(db: Session, user: User) -> tuple[dict[str, int], dict[str, int], int]:
     visible_artifact_ids = _visible_artifact_ids(db, user)
     memory_counts = {
@@ -1030,3 +1360,74 @@ def graph_summary(db: Session, user: User) -> tuple[dict[str, int], dict[str, in
     edge_counts = {edge_type: count for edge_type, count in rows}
     artifact_count = len(visible_artifact_ids)
     return memory_counts, edge_counts, artifact_count
+
+
+def _timeline_status(memory: MemoryRecord, *, node_id: str, edges: list[GraphEdge]) -> str:
+    if memory.memory_type == "commitment":
+        if memory.status == "closed":
+            return "closed"
+        if memory.due_date and memory.due_date < datetime.utcnow():
+            return "overdue"
+        return memory.status or "open"
+    if memory.memory_type == "assumption":
+        return memory.status or "active"
+    if memory.memory_type == "decision":
+        if any(edge.edge_type == "SUPERSEDES" and edge.to_node_id == node_id for edge in edges):
+            return "superseded"
+        if any(edge.edge_type == "CONTRADICTS" for edge in edges):
+            return "contested"
+        return memory.status or "active"
+    if memory.memory_type == "outcome":
+        return "observed"
+    return memory.status or "active"
+
+
+def graph_timeline(db: Session, user: User, *, limit: int = 40) -> list[GraphTimelineItem]:
+    memories = _load_memory_records(db, user)
+    nodes_by_id = _load_nodes_by_id(db, user)
+    node_id_by_entity_id = {node.entity_id: node_id for node_id, node in nodes_by_id.items()}
+    edges = _visible_edges(db, user)
+    edges_by_node_id: dict[str, list[GraphEdge]] = {}
+    for edge in edges:
+        edges_by_node_id.setdefault(edge.from_node_id, []).append(edge)
+        edges_by_node_id.setdefault(edge.to_node_id, []).append(edge)
+    artifact_titles = _artifact_title_map(db, _visible_artifact_ids(db, user))
+
+    items: list[GraphTimelineItem] = []
+    for memory in memories:
+        node_id = node_id_by_entity_id.get(memory.memory_id)
+        if not node_id:
+            continue
+        related_edges = [edge for edge in edges_by_node_id.get(node_id, []) if edge.edge_type != "MENTIONED_IN"]
+        contradiction_count = sum(1 for edge in related_edges if edge.edge_type == "CONTRADICTS")
+        supersedes_count = sum(1 for edge in related_edges if edge.edge_type == "SUPERSEDES")
+        items.append(
+            GraphTimelineItem(
+                memory_type=memory.memory_type,
+                memory_id=memory.memory_id,
+                title_or_label=memory.title_or_label,
+                event_timestamp=memory.event_timestamp,
+                timeline_status=_timeline_status(memory, node_id=node_id, edges=related_edges),
+                topic_key=memory.topic_key,
+                source_artifact_id=memory.source_artifact_id,
+                source_artifact_title=_artifact_title_for_id(artifact_titles, memory.source_artifact_id),
+                source_chunk_id=memory.source_chunk_id,
+                evidence_span=memory.evidence_span,
+                owner_label=memory.owner_label,
+                due_date=memory.due_date,
+                contradiction_count=contradiction_count,
+                supersedes_count=supersedes_count,
+                related_count=len(related_edges),
+            )
+        )
+
+    items.sort(
+        key=lambda item: (
+            item.event_timestamp,
+            item.contradiction_count,
+            item.supersedes_count,
+            item.related_count,
+        ),
+        reverse=True,
+    )
+    return items[:limit]

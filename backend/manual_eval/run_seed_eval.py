@@ -107,6 +107,8 @@ def main() -> None:
         contradiction_top = result.get("contradictions", [{}])[0] if result.get("contradictions") else {}
         drift_top = result.get("stale_assumptions", [{}])[0] if result.get("stale_assumptions") else {}
         top_item = contradiction_top if spec["name"] == "contradiction" else drift_top
+        top_from_evidence = contradiction_top.get("from_evidence", {}) if isinstance(contradiction_top, dict) else {}
+        top_to_evidence = contradiction_top.get("to_evidence", {}) if isinstance(contradiction_top, dict) else {}
         checks = {
             "query_class": result["query_class"] == spec["expected_query_class"],
             "answer_contains": all(
@@ -130,6 +132,18 @@ def main() -> None:
                 str(top_item.get("evidence_provenance", "")),
                 cast(list[str], spec["expected_top_provenance_contains"]),
             ),
+            "paired_contradiction_evidence": spec["name"] != "contradiction" or (
+                (not spec.get("expected_top_from_evidence_contains") or contains_any_fragment(
+                    str(top_from_evidence.get("excerpt", "")),
+                    cast(list[str], spec["expected_top_from_evidence_contains"]),
+                ))
+                and (not spec.get("expected_top_to_evidence_contains") or contains_any_fragment(
+                    str(top_to_evidence.get("excerpt", "")),
+                    cast(list[str], spec["expected_top_to_evidence_contains"]),
+                ))
+                and (spec.get("expected_top_from_artifact_title") is None or str(top_from_evidence.get("artifact_title", "")) == spec["expected_top_from_artifact_title"])
+                and (spec.get("expected_top_to_artifact_title") is None or str(top_to_evidence.get("artifact_title", "")) == spec["expected_top_to_artifact_title"])
+            ),
             "supporting_commitment_due_dates": not spec.get("expected_supporting_commitment_due_dates") or any(
                 node.get("memory_type") == "commitment"
                 and contains_any_fragment(str(node.get("due_date", "")), cast(list[str], spec["expected_supporting_commitment_due_dates"]))
@@ -144,6 +158,8 @@ def main() -> None:
                 "top_answer": result["answer_text"],
                 "top_evidence_span": top_item.get("evidence_span"),
                 "top_evidence_provenance": top_item.get("evidence_provenance"),
+                "top_from_evidence": top_from_evidence,
+                "top_to_evidence": top_to_evidence,
             }
         )
 

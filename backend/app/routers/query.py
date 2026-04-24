@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import QueryRun, User
-from app.schemas.api import QueryCreate, QueryResult
-from app.services.querying import build_query_result_for_reader, execute_query
+from app.schemas.api import QueryCreate, QueryResult, QueryTraceRead
+from app.services.querying import build_query_result_for_reader, build_query_trace_for_reader, execute_query
 
 router = APIRouter(prefix="/query", tags=["query"])
 
@@ -27,3 +27,13 @@ def get_query_result(query_run_id: str, current_user: User = Depends(get_current
     if current_user.role != "Admin" and query_run.created_by != current_user.user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Query result access denied")
     return build_query_result_for_reader(db, query_run, current_user)
+
+
+@router.get("/{query_run_id}/trace", response_model=QueryTraceRead)
+def get_query_trace(query_run_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> QueryTraceRead:
+    query_run = db.scalar(select(QueryRun).where(QueryRun.query_run_id == query_run_id, QueryRun.workspace_id == current_user.workspace_id))
+    if query_run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Query run not found")
+    if current_user.role != "Admin" and query_run.created_by != current_user.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Query trace access denied")
+    return build_query_trace_for_reader(db, query_run, current_user)

@@ -89,11 +89,48 @@ export interface QueryResult {
   created_at: string
 }
 
+export interface QueryTraceStepRead {
+  step_kind: string
+  payload: Record<string, unknown>
+  created_at: string
+}
+
+export interface QueryTraceRead {
+  query_run_id: string
+  query_class: string
+  route_confidence: number
+  permissions_limited: boolean
+  steps: QueryTraceStepRead[]
+}
+
 export interface GraphSummary {
   workspace_id: string
   artifact_count: number
   memory_counts: Record<string, number>
   edge_counts: Record<string, number>
+}
+
+export interface GraphTimelineItem {
+  memory_type: string
+  memory_id: string
+  title_or_label: string
+  event_timestamp: string
+  timeline_status: string
+  topic_key: string
+  source_artifact_id: string
+  source_artifact_title: string
+  source_chunk_id: string | null
+  evidence_span: string | null
+  owner_label: string | null
+  due_date: string | null
+  contradiction_count: number
+  supersedes_count: number
+  related_count: number
+}
+
+export interface GraphTimeline {
+  workspace_id: string
+  items: GraphTimelineItem[]
 }
 
 export interface MemoryDetail {
@@ -111,6 +148,15 @@ export interface MemoryDetail {
   owner_label: string | null
 }
 
+export interface ContradictionEvidence {
+  artifact_id: string
+  artifact_title: string
+  chunk_id: string | null
+  excerpt: string
+  provenance: string
+  time_label: string
+}
+
 export interface ContradictionItem {
   edge_id: string
   from_node_id: string
@@ -125,6 +171,8 @@ export interface ContradictionItem {
   evidence_chunk_id: string | null
   evidence_span: string | null
   evidence_provenance: string | null
+  from_evidence: ContradictionEvidence
+  to_evidence: ContradictionEvidence
   topic_key: string
   ranking_basis: string[]
   uncertainty_note: string | null

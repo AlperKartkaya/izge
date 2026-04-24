@@ -167,12 +167,24 @@ class QueryRun(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False)
     query_text: Mapped[str] = mapped_column(Text, nullable=False)
     query_class: Mapped[str] = mapped_column(String(64), nullable=False)
+    route_confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="completed", nullable=False)
     answer_text: Mapped[str] = mapped_column(Text, nullable=False)
     answer_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     permissions_limited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class QueryTraceStep(Base):
+    __tablename__ = "query_trace_steps"
+
+    trace_step_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("qts"))
+    query_run_id: Mapped[str] = mapped_column(ForeignKey("query_runs.query_run_id"), nullable=False, index=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    step_kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    payload_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class AuditEvent(Base):

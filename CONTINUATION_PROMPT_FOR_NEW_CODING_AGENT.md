@@ -65,6 +65,9 @@ These docs define:
 
 If implementation and the docs appear to conflict, treat the docs as the source of truth and resolve the discrepancy deliberately.
 
+Make use of the skills under the folder skills/ when you dive into implementation regarding the concepts explained there. These skills are the building blocks of the system and better be followed for technical eork.
+
+
 ---
 
 ## 3. Do not assume blank-slate repo state

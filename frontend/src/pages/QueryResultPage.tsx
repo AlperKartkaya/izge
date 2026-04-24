@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDate, formatDateTime, formatLabel, formatPercent } from '../lib/format'
-import type { QueryResult } from '../lib/types'
+import type { QueryResult, QueryTraceRead, QueryTraceStepRead } from '../lib/types'
 
 function readRecordField(record: Record<string, unknown>, field: string): string {
   const value = record[field]
@@ -16,12 +16,35 @@ function readStringArray(record: Record<string, unknown>, field: string): string
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
+function readRecordArray(record: Record<string, unknown>, field: string): Array<Record<string, unknown>> {
+  const value = record[field]
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null) : []
+}
+
+function stepTitle(stepKind: string): string {
+  switch (stepKind) {
+    case 'route_decision':
+      return 'Grounding'
+    case 'seed_selection':
+      return 'Seed selection'
+    case 'evidence_selection':
+      return 'Evidence selection'
+    case 'answer_composition':
+      return 'Synthesis'
+    case 'uncertainty_note':
+      return 'Uncertainty'
+    default:
+      return stepKind.replace(/_/g, ' ')
+  }
+}
+
 export function QueryResultPage() {
   const { queryRunId = '' } = useParams()
   const location = useLocation()
   const { session } = useAuth()
   const routedResult = (location.state as { result?: QueryResult } | null)?.result
   const [result, setResult] = useState<QueryResult | null>(routedResult ?? null)
+  const [trace, setTrace] = useState<QueryTraceRead | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(!routedResult)
 
@@ -29,7 +52,7 @@ export function QueryResultPage() {
     let cancelled = false
 
     async function load() {
-      if (!session?.token || !queryRunId || routedResult?.query_run_id === queryRunId) {
+      if (!session?.token || !queryRunId) {
         return
       }
 
@@ -37,9 +60,13 @@ export function QueryResultPage() {
       setError(null)
 
       try {
-        const nextResult = await api.getQueryResult(session.token, queryRunId)
+        const [nextResult, nextTrace] = await Promise.all([
+          routedResult?.query_run_id === queryRunId ? Promise.resolve(routedResult) : api.getQueryResult(session.token, queryRunId),
+          api.getQueryTrace(session.token, queryRunId),
+        ])
         if (!cancelled) {
           setResult(nextResult)
+          setTrace(nextTrace)
         }
       } catch (caughtError) {
         if (!cancelled) {
@@ -113,6 +140,106 @@ export function QueryResultPage() {
               <p className="muted-copy">{activeResult.why_this_answer}</p>
             </Panel>
 
+            <Panel title="Trace / Explainability" description="Persisted query-trace stages show how the system routed the question, narrowed history, selected evidence, and composed the final answer.">
+              {!trace ? (
+                <EmptyState title="Trace not loaded" description="The query result is visible, but the explainability trace could not be loaded." />
+              ) : (
+                <div className="stack-md">
+                  <article className="panel-subtle stack-sm">
+                    <p className="section-label">Route confidence</p>
+                    <p className="table-primary">{formatPercent(trace.route_confidence)}</p>
+                    <p className="table-secondary">{trace.query_class}</p>
+                    {trace.permissions_limited ? <p className="muted-copy">Some trace items may be reduced because artifact permissions hide part of the reasoning path.</p> : null}
+                  </article>
+
+                  {trace.steps.map((step: QueryTraceStepRead) => {
+                    const payload = step.payload as Record<string, unknown>
+                    const supportingNodes = readRecordArray(payload, 'supporting_nodes')
+                    const contradictionPairs = readRecordArray(payload, 'contradiction_pairs')
+                    const staleAssumptions = readRecordArray(payload, 'stale_assumptions')
+                    const supportingEvidence = readRecordArray(payload, 'supporting_evidence')
+                    const sectionCounts = payload.section_counts as Record<string, unknown> | undefined
+                    return (
+                      <article key={`${step.step_kind}-${step.created_at}`} className="panel-subtle stack-sm">
+                        <div className="timeline-card-head">
+                          <p className="table-primary">{stepTitle(step.step_kind)}</p>
+                          <p className="table-secondary">{formatDateTime(step.created_at)}</p>
+                        </div>
+
+                        {readRecordField(payload, 'route_rationale') !== 'Unavailable' ? <p className="muted-copy">{readRecordField(payload, 'route_rationale')}</p> : null}
+                        {readStringArray(payload, 'secondary_signals').length > 0 ? <p className="table-secondary">Secondary signals: {readStringArray(payload, 'secondary_signals').join(', ')}</p> : null}
+
+                        {supportingNodes.length > 0 ? (
+                          <div className="stack-sm">
+                            <p className="section-label">Selected memory seeds</p>
+                            {supportingNodes.map((item) => (
+                              <p key={`${readRecordField(item, 'memory_type')}-${readRecordField(item, 'memory_id')}`} className="table-secondary">
+                                {readRecordField(item, 'memory_type')} · {readRecordField(item, 'title_or_label')}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {contradictionPairs.length > 0 ? (
+                          <div className="stack-sm">
+                            <p className="section-label">Compared contradiction pairs</p>
+                            {contradictionPairs.map((item) => (
+                              <p key={`${readRecordField(item, 'from_title')}-${readRecordField(item, 'to_title')}`} className="table-secondary">
+                                {readRecordField(item, 'from_title')} → {readRecordField(item, 'to_title')}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {staleAssumptions.length > 0 ? (
+                          <div className="stack-sm">
+                            <p className="section-label">Drift candidates</p>
+                            {staleAssumptions.map((item) => (
+                              <p key={readRecordField(item, 'title_or_label')} className="table-secondary">
+                                {readRecordField(item, 'title_or_label')} · {formatLabel(readRecordField(item, 'status'))}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {supportingEvidence.length > 0 ? (
+                          <div className="stack-sm">
+                            <p className="section-label">Selected evidence</p>
+                            {supportingEvidence.map((item) => (
+                              <article key={`${readRecordField(item, 'artifact_id')}-${readRecordField(item, 'chunk_id')}`} className="panel-subtle stack-sm">
+                                <p className="table-secondary">{readRecordField(item, 'artifact_title')} · {readRecordField(item, 'evidence_kind')}</p>
+                                {readRecordField(item, 'excerpt') !== 'Unavailable' ? <p className="muted-copy">{readRecordField(item, 'excerpt')}</p> : null}
+                                {readRecordField(item, 'why_selected') !== 'Unavailable' ? <p className="table-secondary">{readRecordField(item, 'why_selected')}</p> : null}
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {sectionCounts ? (
+                          <div className="stack-sm">
+                            <p className="section-label">Answer composition</p>
+                            <p className="table-secondary">
+                              Nodes {String(sectionCounts.supporting_nodes ?? 0)} · Evidence {String(sectionCounts.supporting_evidence ?? 0)} · Contradictions {String(sectionCounts.contradictions ?? 0)} · Drift {String(sectionCounts.assumption_drift ?? 0)} · Actions {String(sectionCounts.recommended_next_actions ?? 0)}
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {readRecordField(payload, 'direct_answer') !== 'Unavailable' ? <p className="muted-copy">{readRecordField(payload, 'direct_answer')}</p> : null}
+                        {readStringArray(payload, 'notes').length > 0 ? (
+                          <ul className="bullet-list">
+                            {readStringArray(payload, 'notes').map((note) => (
+                              <li key={note}>{note}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        {typeof payload.omitted_items === 'number' && payload.omitted_items > 0 ? <p className="table-secondary">Hidden by current permissions: {String(payload.omitted_items)} trace item(s)</p> : null}
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
+            </Panel>
+
             <Panel title="Supporting Evidence" description="Permitted evidence excerpts surfaced in the response.">
               {activeResult.supporting_evidence.length === 0 ? (
                 <EmptyState title="No evidence references" description="The backend did not return any visible evidence excerpts for this query." />
@@ -167,8 +294,20 @@ export function QueryResultPage() {
                     <article key={readRecordField(item, 'edge_id')} className="panel-subtle stack-sm">
                       <p className="table-primary">{readRecordField(item, 'from_title')} → {readRecordField(item, 'to_title')}</p>
                       <p className="table-secondary">{readRecordField(item, 'from_type')} {readRecordField(item, 'relation_label')} {readRecordField(item, 'to_type')} · topic {readRecordField(item, 'topic_key')}</p>
-                      <p className="muted-copy">{readRecordField(item, 'evidence_span')}</p>
-                      <p className="table-secondary">{readRecordField(item, 'evidence_provenance')}</p>
+                      <div className="stack-sm">
+                        <div className="panel-subtle stack-sm">
+                          <p className="section-label">Later claim evidence</p>
+                          <p className="table-secondary">{readRecordField(item.from_evidence as Record<string, unknown>, 'artifact_title')}</p>
+                          <p className="muted-copy">{readRecordField(item.from_evidence as Record<string, unknown>, 'excerpt')}</p>
+                          <p className="table-secondary">{readRecordField(item.from_evidence as Record<string, unknown>, 'provenance')}</p>
+                        </div>
+                        <div className="panel-subtle stack-sm">
+                          <p className="section-label">Earlier claim evidence</p>
+                          <p className="table-secondary">{readRecordField(item.to_evidence as Record<string, unknown>, 'artifact_title')}</p>
+                          <p className="muted-copy">{readRecordField(item.to_evidence as Record<string, unknown>, 'excerpt')}</p>
+                          <p className="table-secondary">{readRecordField(item.to_evidence as Record<string, unknown>, 'provenance')}</p>
+                        </div>
+                      </div>
                       {readStringArray(item, 'ranking_basis').length > 0 ? <p className="table-secondary">Ranked for: {readStringArray(item, 'ranking_basis').join(', ')}</p> : null}
                       {readRecordField(item, 'uncertainty_note') !== 'Unavailable' ? <p className="muted-copy">{readRecordField(item, 'uncertainty_note')}</p> : null}
                     </article>

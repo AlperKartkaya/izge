@@ -5,9 +5,11 @@ import type {
   AuditEventRead,
   ContradictionItem,
   GraphSummary,
+  GraphTimeline,
   IngestionJobRead,
   MemoryDetail,
   QueryResult,
+  QueryTraceRead,
   TokenResponse,
   UserRead,
   UserRole,
@@ -175,8 +177,16 @@ export const api = {
     return request<QueryResult>(`/query/${queryRunId}`, { token })
   },
 
+  getQueryTrace(token: string, queryRunId: string) {
+    return request<QueryTraceRead>(`/query/${queryRunId}/trace`, { token })
+  },
+
   getGraphSummary(token: string) {
     return request<GraphSummary>('/graph/summary', { token })
+  },
+
+  getGraphTimeline(token: string) {
+    return request<GraphTimeline>('/graph/timeline', { token })
   },
 
   getMemoryDetail(token: string, memoryType: string, memoryId: string) {
