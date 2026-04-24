@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import mimetypes
 from pathlib import Path
+from typing import Any, cast
 import urllib.request
 
 
@@ -15,6 +16,28 @@ def request(path: str, *, method: str = "GET", data: bytes | None = None, header
     req = urllib.request.Request(BASE + path, data=data, headers=headers or {}, method=method)
     with urllib.request.urlopen(req) as response:
         return json.loads(response.read().decode())
+
+
+def expect_object(payload: dict | list, label: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise TypeError(f"Expected {label} to be an object.")
+    return cast(dict[str, Any], payload)
+
+
+def expect_list(payload: dict | list, label: str) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        raise TypeError(f"Expected {label} to be a list.")
+    return [cast(dict[str, Any], item) for item in payload if isinstance(item, dict)]
+
+
+def contains_all_fragments(value: str, fragments: list[str]) -> bool:
+    lowered = value.lower()
+    return all(fragment.lower() in lowered for fragment in fragments)
+
+
+def contains_any_fragment(value: str, fragments: list[str]) -> bool:
+    lowered = value.lower()
+    return any(fragment.lower() in lowered for fragment in fragments)
 
 
 def upload_seed(token: str) -> None:
@@ -42,11 +65,14 @@ def upload_seed(token: str) -> None:
         )
         parts.append(f"--{boundary}--\r\n".encode())
         body = b"".join(parts)
-        artifact = request(
+        artifact = expect_object(
+            request(
             "/api/artifacts/upload",
             method="POST",
             data=body,
             headers={**headers, "Content-Type": f"multipart/form-data; boundary={boundary}"},
+            ),
+            f"artifact upload response for {path.name}",
         )
         request(
             "/api/ingestion/run",
@@ -57,22 +83,30 @@ def upload_seed(token: str) -> None:
 
 
 def main() -> None:
-    signin = request(
+    signin = expect_object(
+        request(
         "/api/auth/sign-in",
         method="POST",
         data=json.dumps({"email": "admin@example.com", "password": "change-me-admin"}).encode(),
         headers={"Content-Type": "application/json"},
+        ),
+        "sign-in response",
     )
     token = signin["access_token"]
     upload_seed(token)
     auth_headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    contradiction_list = request("/api/contradictions", headers={"Authorization": f"Bearer {token}"})
-    drift_list = request("/api/assumptions/drift", headers={"Authorization": f"Bearer {token}"})
+    contradiction_list = expect_list(request("/api/contradictions", headers={"Authorization": f"Bearer {token}"}), "contradictions")
+    drift_list = expect_list(request("/api/assumptions/drift", headers={"Authorization": f"Bearer {token}"}), "assumption drift")
 
     results = []
     for spec in EXPECTED["queries"]:
-        result = request("/api/query", method="POST", data=json.dumps({"query_text": spec["query"]}).encode(), headers=auth_headers)
+        result = expect_object(
+            request("/api/query", method="POST", data=json.dumps({"query_text": spec["query"]}).encode(), headers=auth_headers),
+            f"query result for {spec['name']}",
+        )
         contradiction_top = result.get("contradictions", [{}])[0] if result.get("contradictions") else {}
+        drift_top = result.get("stale_assumptions", [{}])[0] if result.get("stale_assumptions") else {}
+        top_item = contradiction_top if spec["name"] == "contradiction" else drift_top
         checks = {
             "query_class": result["query_class"] == spec["expected_query_class"],
             "answer_contains": all(
@@ -88,8 +122,25 @@ def main() -> None:
             ),
             "statuses": not spec.get("expected_statuses") or any(item.get("status") in spec["expected_statuses"] for item in result.get("stale_assumptions", [])),
             "relation_types": not spec.get("expected_top_relation_types") or [contradiction_top.get("from_type"), contradiction_top.get("to_type")] in spec["expected_top_relation_types"],
+            "top_evidence_precision": not spec.get("expected_top_evidence_contains") or contains_any_fragment(
+                str(top_item.get("evidence_span", "")),
+                cast(list[str], spec["expected_top_evidence_contains"]),
+            ),
+            "top_provenance_precision": not spec.get("expected_top_provenance_contains") or contains_all_fragments(
+                str(top_item.get("evidence_provenance", "")),
+                cast(list[str], spec["expected_top_provenance_contains"]),
+            ),
         }
-        results.append({"name": spec["name"], "checks": checks, "query_class": result["query_class"], "top_answer": result["answer_text"]})
+        results.append(
+            {
+                "name": spec["name"],
+                "checks": checks,
+                "query_class": result["query_class"],
+                "top_answer": result["answer_text"],
+                "top_evidence_span": top_item.get("evidence_span"),
+                "top_evidence_provenance": top_item.get("evidence_provenance"),
+            }
+        )
 
     standalone = {
         "contradictions": {

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import re
+from typing import Any
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -194,6 +195,133 @@ def _artifact_title_map(db: Session, artifact_ids: set[str]) -> dict[str, str]:
     return {artifact.artifact_id: artifact.title for artifact in artifacts}
 
 
+def _artifact_title_for_id(titles: dict[str, str], artifact_id: str | None) -> str:
+    if artifact_id is None:
+        return "Unknown artifact"
+    return titles.get(artifact_id, artifact_id)
+
+
+def _evidence_excerpt(db: Session, *, chunk_id: str | None, fallback: str) -> str:
+    excerpt = _chunk_excerpt(db, chunk_id, fallback)
+    return re.sub(r"\s+", " ", excerpt).strip()
+
+
+def _contradiction_provenance(
+    *,
+    artifact_title: str,
+    chunk_id: str | None,
+    from_title: str,
+    to_title: str,
+) -> tuple[str, str | None]:
+    if chunk_id:
+        return (
+            f"Direct contradiction excerpt from {artifact_title} supporting the later-vs-earlier conflict between '{from_title}' and '{to_title}'.",
+            None,
+        )
+    return (
+        f"Graph contradiction link tied to {artifact_title}, but no direct quoted chunk was preserved for the conflict between '{from_title}' and '{to_title}'.",
+        "No direct excerpt is attached to this contradiction edge.",
+    )
+
+
+def _drift_provenance(*, artifact_title: str, chunk_id: str | None, assumption_title: str, signal_title: str | None) -> tuple[str, str | None]:
+    if signal_title and chunk_id:
+        return (
+            f"Direct later-signal excerpt from {artifact_title} showing why '{assumption_title}' no longer holds against '{signal_title}'.",
+            None,
+        )
+    if signal_title:
+        return (
+            f"Later signal from {artifact_title} was linked to '{assumption_title}', but no direct quoted chunk was preserved for '{signal_title}'.",
+            "No direct later signal excerpt could be surfaced for this drift item.",
+        )
+    return (
+        f"Persisted assumption status from {artifact_title} without a directly linked later signal.",
+        "No direct later signal could be linked for this drift item.",
+    )
+
+
+def _drift_signal_sort_key(signal: MemoryRecord, *, assumption: Assumption, query_text: str) -> tuple[int, int, int, datetime, float]:
+    signal_text = f"{signal.title_or_label} {signal.normalized_text}"
+    return (
+        1 if signal.source_chunk_id else 0,
+        _text_overlap(signal_text, query_text),
+        _text_overlap(signal_text, f"{assumption.title_or_label} {assumption.normalized_text}"),
+        signal.event_timestamp,
+        signal.confidence_score,
+    )
+
+
+def _payload_item_visible(item: dict[str, Any], artifact_keys: list[str], visible_artifact_ids: set[str]) -> bool:
+    artifact_ids = {item.get(key) for key in artifact_keys if item.get(key) is not None}
+    return all(isinstance(artifact_id, str) and artifact_id in visible_artifact_ids for artifact_id in artifact_ids)
+
+
+def _safe_next_actions_from_payload(
+    contradictions: list[dict[str, Any]],
+    stale_assumptions: list[dict[str, Any]],
+    supporting_nodes: list[dict[str, Any]],
+) -> list[str]:
+    actions: list[str] = []
+    if contradictions:
+        top = contradictions[0]
+        actions.append(f"Resolve the conflict between {top['from_title']} and {top['to_title']} before committing to the current roadmap path.")
+    if stale_assumptions:
+        top = stale_assumptions[0]
+        actions.append(f"Revalidate the assumption '{top['title_or_label']}' because later evidence now marks it {top['status']}.")
+    commitment_nodes = [node for node in supporting_nodes if node.get("memory_type") == "commitment"]
+    if commitment_nodes:
+        actions.append(
+            f"Review the open commitment '{commitment_nodes[0]['title_or_label']}' and confirm whether its due path is still realistic."
+        )
+    return actions[:3]
+
+
+def _redacted_query_text(
+    *,
+    query_class: str,
+    contradictions: list[dict[str, Any]],
+    stale_assumptions: list[dict[str, Any]],
+    supporting_nodes: list[dict[str, Any]],
+) -> tuple[str, str, list[str]]:
+    recommended_next_actions = _safe_next_actions_from_payload(contradictions, stale_assumptions, supporting_nodes)
+    why_this_answer = "Some previously cached support is no longer visible, so this result was reduced to the currently permitted evidence only."
+
+    if query_class == "Contradiction analysis":
+        if contradictions:
+            top = contradictions[0]
+            answer_text = f"The clearest contradiction still visible is between {top['from_title']} and {top['to_title']}."
+        else:
+            answer_text = "No contradiction can be shown from the currently permitted evidence."
+            recommended_next_actions = []
+        return answer_text, why_this_answer, recommended_next_actions
+
+    if query_class == "Assumption drift":
+        if stale_assumptions:
+            top = stale_assumptions[0]
+            answer_text = f"The strongest drift signal still visible is {top['title_or_label']} with status {top['status']}."
+        else:
+            answer_text = "No stale-assumption signal can be shown from the currently permitted evidence."
+            recommended_next_actions = []
+        return answer_text, why_this_answer, recommended_next_actions
+
+    if query_class == "Next-action guidance":
+        answer_text = recommended_next_actions[0] if recommended_next_actions else "No high-confidence next action can be shown from the currently permitted evidence."
+        return answer_text, why_this_answer, recommended_next_actions
+
+    visible_decisions = [node for node in supporting_nodes if node.get("memory_type") == "decision"]
+    if len(visible_decisions) >= 2:
+        answer_text = (
+            f"The visible lineage starts with '{visible_decisions[-1]['title_or_label']}' and later shifts to '{visible_decisions[0]['title_or_label']}'."
+        )
+    elif visible_decisions:
+        answer_text = f"The clearest visible decision lineage is '{visible_decisions[0]['title_or_label']}'."
+    else:
+        answer_text = "No decision lineage can be shown from the currently permitted evidence."
+        recommended_next_actions = []
+    return answer_text, why_this_answer, recommended_next_actions
+
+
 def _evidence_from_memories(db: Session, memories: list[MemoryRecord]) -> list[EvidenceReference]:
     titles = _artifact_title_map(db, {memory.source_artifact_id for memory in memories})
     evidence: list[EvidenceReference] = []
@@ -206,7 +334,7 @@ def _evidence_from_memories(db: Session, memories: list[MemoryRecord]) -> list[E
         evidence.append(
             EvidenceReference(
                 artifact_id=memory.source_artifact_id,
-                artifact_title=titles.get(memory.source_artifact_id, memory.source_artifact_id),
+                artifact_title=_artifact_title_for_id(titles, memory.source_artifact_id),
                 chunk_id=memory.source_chunk_id,
                 excerpt=_chunk_excerpt(db, memory.source_chunk_id, memory.evidence_span or memory.normalized_text),
                 evidence_kind="graph",
@@ -233,12 +361,15 @@ def _fts_evidence(db: Session, user: User, query_text: str) -> list[EvidenceRefe
     for chunk_id, artifact_id, text_value in rows:
         if artifact_id not in visible_artifact_ids:
             continue
+        artifact_id_text = artifact_id if isinstance(artifact_id, str) else None
+        chunk_id_text = chunk_id if isinstance(chunk_id, str) else None
+        text_excerpt = text_value if isinstance(text_value, str) else str(text_value)
         evidence.append(
             EvidenceReference(
-                artifact_id=artifact_id,
-                artifact_title=titles.get(artifact_id, artifact_id),
-                chunk_id=chunk_id,
-                excerpt=(text_value[:240] + "...") if len(text_value) > 240 else text_value,
+                artifact_id=artifact_id_text or "unknown-artifact",
+                artifact_title=_artifact_title_for_id(titles, artifact_id_text),
+                chunk_id=chunk_id_text,
+                excerpt=(text_excerpt[:240] + "...") if len(text_excerpt) > 240 else text_excerpt,
                 evidence_kind="search_fallback",
             )
         )
@@ -468,6 +599,7 @@ def _ranking_basis(from_type: str, to_type: str, topic_key: str, chronology_bonu
 def _contradiction_dicts(db: Session, user: User, query_text: str, memories: list[MemoryRecord], limit: int = 6) -> list[dict]:
     nodes = _load_nodes_by_id(db, user)
     memory_by_id = {memory.memory_id: memory for memory in _load_memory_records(db, user)}
+    artifact_titles = _artifact_title_map(db, _visible_artifact_ids(db, user))
     ranked: list[dict] = []
     query_terms = _query_terms(query_text)
     for edge in _visible_edges(db, user):
@@ -498,8 +630,17 @@ def _contradiction_dicts(db: Session, user: User, query_text: str, memories: lis
         chronology_bonus = 1 if from_memory.event_timestamp >= to_memory.event_timestamp else 0
         direct_evidence_bonus = 1 if edge.evidence_chunk_id else 0
         topic_key = from_memory.topic_key if from_memory.topic_key == to_memory.topic_key else from_memory.topic_key
-        evidence_provenance = "Graph-backed contradiction evidence" if edge.evidence_chunk_id else "Graph relationship without a direct quoted chunk"
-        uncertainty_note = None if edge.evidence_chunk_id else "No direct excerpt is attached to this contradiction edge."
+        evidence_span = _evidence_excerpt(
+            db,
+            chunk_id=edge.evidence_chunk_id,
+            fallback=edge.evidence_span or f"{from_node.title_or_label} contradicts {to_node.title_or_label}",
+        )
+        evidence_provenance, uncertainty_note = _contradiction_provenance(
+            artifact_title=_artifact_title_for_id(artifact_titles, edge.evidence_artifact_id),
+            chunk_id=edge.evidence_chunk_id,
+            from_title=from_node.title_or_label,
+            to_title=to_node.title_or_label,
+        )
         ranked.append(
             {
                 "edge_id": edge.edge_id,
@@ -509,11 +650,13 @@ def _contradiction_dicts(db: Session, user: User, query_text: str, memories: lis
                 "to_type": to_node.node_type,
                 "from_title": from_node.title_or_label,
                 "to_title": to_node.title_or_label,
+                "from_source_artifact_id": from_memory.source_artifact_id,
+                "to_source_artifact_id": to_memory.source_artifact_id,
                 "relation_label": "Contradicts",
                 "confidence_score": edge.confidence_score,
                 "evidence_artifact_id": edge.evidence_artifact_id,
                 "evidence_chunk_id": edge.evidence_chunk_id,
-                "evidence_span": edge.evidence_span,
+                "evidence_span": evidence_span,
                 "evidence_provenance": evidence_provenance,
                 "topic_key": topic_key,
                 "relevance": relevance,
@@ -540,6 +683,7 @@ def _contradiction_dicts(db: Session, user: User, query_text: str, memories: lis
 def _stale_assumption_dicts(db: Session, user: User, query_text: str, memories: list[MemoryRecord], limit: int = 6) -> list[dict]:
     visible_artifact_ids = _visible_artifact_ids(db, user)
     memory_by_id = {memory.memory_id: memory for memory in memories}
+    artifact_titles = _artifact_title_map(db, visible_artifact_ids)
     assumptions = db.scalars(select(Assumption).where(Assumption.workspace_id == user.workspace_id).order_by(Assumption.event_timestamp.desc())).all()
     items: list[dict] = []
     for row in assumptions:
@@ -553,8 +697,22 @@ def _stale_assumption_dicts(db: Session, user: User, query_text: str, memories: 
         if assumption_memory is not None:
             related = [memory for memory in _related_memories_for_node(db, user, _node_id_for_memory(db, user, assumption_memory)) if memory.memory_id != row.assumption_id]
             if related:
-                related.sort(key=lambda memory: (1 if memory.source_chunk_id else 0, memory.event_timestamp, memory.confidence_score), reverse=True)
+                related.sort(key=lambda memory: _drift_signal_sort_key(memory, assumption=row, query_text=query_text), reverse=True)
                 supporting_signal = related[0]
+        evidence_span = _evidence_excerpt(
+            db,
+            chunk_id=supporting_signal.source_chunk_id if supporting_signal is not None else row.source_chunk_id,
+            fallback=(supporting_signal.evidence_span if supporting_signal is not None else None) or row.evidence_span or row.normalized_text,
+        )
+        evidence_provenance, uncertainty_note = _drift_provenance(
+            artifact_title=_artifact_title_for_id(
+                artifact_titles,
+                supporting_signal.source_artifact_id if supporting_signal is not None else row.source_artifact_id,
+            ),
+            chunk_id=supporting_signal.source_chunk_id if supporting_signal is not None else row.source_chunk_id,
+            assumption_title=row.title_or_label,
+            signal_title=supporting_signal.title_or_label if supporting_signal is not None else None,
+        )
         items.append(
             {
                 "assumption_id": row.assumption_id,
@@ -564,17 +722,18 @@ def _stale_assumption_dicts(db: Session, user: User, query_text: str, memories: 
                 "source_artifact_id": row.source_artifact_id,
                 "confidence_score": row.confidence_score,
                 "topic_key": row.topic_key,
+                "supporting_signal_source_artifact_id": supporting_signal.source_artifact_id if supporting_signal is not None else None,
                 "supporting_signal_title": supporting_signal.title_or_label if supporting_signal is not None else None,
                 "supporting_signal_type": supporting_signal.memory_type if supporting_signal is not None else None,
                 "supporting_signal_memory_id": supporting_signal.memory_id if supporting_signal is not None else None,
-                "evidence_span": supporting_signal.evidence_span if supporting_signal is not None else row.evidence_span,
-                "evidence_provenance": "Graph-linked drift signal" if supporting_signal is not None and supporting_signal.source_chunk_id else "Persisted assumption status",
+                "evidence_span": evidence_span,
+                "evidence_provenance": evidence_provenance,
                 "ranking_basis": [
                     f"status:{row.status}",
                     f"topic:{row.topic_key}",
                     "later evidence linked" if supporting_signal is not None else "status persisted without linked signal",
                 ],
-                "uncertainty_note": None if supporting_signal is not None else "No direct later signal could be linked for this drift item.",
+                "uncertainty_note": uncertainty_note,
                 "relevance": relevance,
             }
         )
@@ -729,27 +888,63 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
 def build_query_result_for_reader(db: Session, query_run: QueryRun, reader: User) -> QueryResult:
     payload = query_run.answer_payload
     visible_artifact_ids = _visible_artifact_ids(db, reader)
-    supporting_nodes = [item for item in payload.get("supporting_nodes", []) if item.get("source_artifact_id") in visible_artifact_ids]
-    supporting_evidence = [item for item in payload.get("supporting_evidence", []) if item.get("artifact_id") in visible_artifact_ids]
-    contradictions = [item for item in payload.get("contradictions", []) if item.get("evidence_artifact_id") in visible_artifact_ids or item.get("evidence_artifact_id") is None]
-    stale_assumptions = [item for item in payload.get("stale_assumptions", []) if item.get("source_artifact_id") in visible_artifact_ids]
+    payload_supporting_nodes = [item for item in payload.get("supporting_nodes", []) if isinstance(item, dict)]
+    payload_supporting_evidence = [item for item in payload.get("supporting_evidence", []) if isinstance(item, dict)]
+    payload_contradictions = [item for item in payload.get("contradictions", []) if isinstance(item, dict)]
+    payload_stale_assumptions = [item for item in payload.get("stale_assumptions", []) if isinstance(item, dict)]
+
+    supporting_node_dicts = [item for item in payload_supporting_nodes if item.get("source_artifact_id") in visible_artifact_ids]
+    supporting_evidence_dicts = [item for item in payload_supporting_evidence if item.get("artifact_id") in visible_artifact_ids]
+    contradictions = [
+        item
+        for item in payload_contradictions
+        if _payload_item_visible(item, ["evidence_artifact_id", "from_source_artifact_id", "to_source_artifact_id"], visible_artifact_ids)
+    ]
+    stale_assumptions = [
+        item
+        for item in payload_stale_assumptions
+        if _payload_item_visible(item, ["source_artifact_id", "supporting_signal_source_artifact_id"], visible_artifact_ids)
+    ]
+    supporting_nodes = [MemoryReference.model_validate(item) for item in supporting_node_dicts]
+    supporting_evidence = [EvidenceReference.model_validate(item) for item in supporting_evidence_dicts]
     permissions_limited = payload.get("permissions_limited", False) or len(visible_artifact_ids) < db.query(Artifact).filter(Artifact.workspace_id == reader.workspace_id).count()
     uncertainty_notes = list(payload.get("uncertainty_notes", []))
+    answer_text = query_run.answer_text
+    why_this_answer = payload.get("why_this_answer", "This answer was composed from the available memory objects and evidence references.")
+    recommended_next_actions = payload.get("recommended_next_actions", [])
+
+    redacted_payload = any(
+        (
+            len(supporting_nodes) != len(payload_supporting_nodes),
+            len(supporting_evidence) != len(payload_supporting_evidence),
+            len(contradictions) != len(payload_contradictions),
+            len(stale_assumptions) != len(payload_stale_assumptions),
+        )
+    )
+    if redacted_payload:
+        answer_text, why_this_answer, recommended_next_actions = _redacted_query_text(
+            query_class=query_run.query_class,
+            contradictions=contradictions,
+            stale_assumptions=stale_assumptions,
+            supporting_nodes=supporting_node_dicts,
+        )
     if permissions_limited and "Some relevant evidence may be unavailable due to artifact permissions." not in uncertainty_notes:
         uncertainty_notes.append("Some relevant evidence may be unavailable due to artifact permissions.")
+    if redacted_payload and "This cached result was reduced to remove details from artifacts you can no longer access." not in uncertainty_notes:
+        uncertainty_notes.append("This cached result was reduced to remove details from artifacts you can no longer access.")
     return QueryResult(
         query_run_id=query_run.query_run_id,
         query_text=query_run.query_text,
         query_class=query_run.query_class,
         status=query_run.status,
-        answer_text=query_run.answer_text,
-        why_this_answer=payload.get("why_this_answer", "This answer was composed from the available memory objects and evidence references."),
+        answer_text=answer_text,
+        why_this_answer=why_this_answer,
         answer_type=payload.get("answer_type", "institutional_memory_response"),
         supporting_nodes=supporting_nodes,
         supporting_evidence=supporting_evidence,
         contradictions=contradictions,
         stale_assumptions=stale_assumptions,
-        recommended_next_actions=payload.get("recommended_next_actions", []),
+        recommended_next_actions=recommended_next_actions,
         uncertainty_notes=uncertainty_notes,
         permissions_limited=permissions_limited,
         created_at=query_run.created_at,

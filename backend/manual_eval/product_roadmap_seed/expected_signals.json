@@ -12,13 +12,17 @@
       "query": "Which roadmap decisions now contradict earlier commitments on self-serve onboarding?",
       "expected_query_class": "Contradiction analysis",
       "expected_top_relation_types": [["decision", "decision"], ["decision", "commitment"]],
-      "expected_topic_key": "self serve onboarding"
+      "expected_topic_key": "self serve onboarding",
+      "expected_top_evidence_contains": ["late q2 2026"],
+      "expected_top_provenance_contains": ["03 Launch Reversal", "later-vs-earlier conflict"]
     },
     {
       "name": "assumption_drift",
       "query": "Which assumptions about manual onboarding support now look stale?",
       "expected_query_class": "Assumption drift",
-      "expected_statuses": ["stale", "reversed"]
+      "expected_statuses": ["stale", "reversed"],
+      "expected_top_evidence_contains": ["68 accounts per month", "nine days"],
+      "expected_top_provenance_contains": ["02 Capacity Review", "Direct later-signal excerpt"]
     },
     {
       "name": "next_action",
