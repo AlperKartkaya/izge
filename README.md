@@ -71,6 +71,19 @@ The current seed dataset and lightweight harness live under:
 
 These are intended for repeatable sanity checks as reasoning quality improves.
 
+For the demo-readiness confidence check, run the isolated seed evaluation:
+
+```bash
+cd backend
+.venv/bin/python -m manual_eval.run_isolated_seed_eval
+```
+
+This starts a temporary local backend with isolated SQLite and storage paths,
+ingests the product/roadmap seed corpus, verifies lineage, contradiction,
+assumption-drift, next-action, provenance, and permission-limited evidence
+behavior, then shuts the temporary backend down. It exits nonzero if the
+institutional-memory demo story regresses.
+
 ## Development note
 
 When continuing implementation, treat Izge as an **institution memory engine first** and **decision intelligence product second**. Avoid drifting into chat-over-files, generic search, PM-copilot behavior, premature integrations, or speculative simulation work.

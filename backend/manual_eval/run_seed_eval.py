@@ -2,20 +2,39 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
 from pathlib import Path
+import sys
 from typing import Any, cast
+import uuid
+import urllib.error
 import urllib.request
 
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("IZGE_EVAL_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 SEED_DIR = Path(__file__).resolve().parent / "product_roadmap_seed"
 EXPECTED = json.loads((SEED_DIR / "expected_signals.json").read_text(encoding="utf-8"))
+RESTRICTED_TITLE = "Restricted Demo Evidence"
+RESTRICTED_MARKER = "SECRET_RESTRICTED_EVIDENCE_MARKER"
 
 
 def request(path: str, *, method: str = "GET", data: bytes | None = None, headers: dict[str, str] | None = None) -> dict | list:
     req = urllib.request.Request(BASE + path, data=data, headers=headers or {}, method=method)
-    with urllib.request.urlopen(req) as response:
-        return json.loads(response.read().decode())
+    try:
+        with urllib.request.urlopen(req) as response:
+            return json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"{method} {path} failed with HTTP {exc.code}: {detail}") from exc
+
+
+def request_status(path: str, *, method: str = "GET", data: bytes | None = None, headers: dict[str, str] | None = None) -> tuple[int, str]:
+    req = urllib.request.Request(BASE + path, data=data, headers=headers or {}, method=method)
+    try:
+        with urllib.request.urlopen(req) as response:
+            return response.status, response.read().decode("utf-8", errors="ignore")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", errors="ignore")
 
 
 def expect_object(payload: dict | list, label: str) -> dict[str, Any]:
@@ -67,10 +86,10 @@ def upload_seed(token: str) -> None:
         body = b"".join(parts)
         artifact = expect_object(
             request(
-            "/api/artifacts/upload",
-            method="POST",
-            data=body,
-            headers={**headers, "Content-Type": f"multipart/form-data; boundary={boundary}"},
+                "/api/artifacts/upload",
+                method="POST",
+                data=body,
+                headers={**headers, "Content-Type": f"multipart/form-data; boundary={boundary}"},
             ),
             f"artifact upload response for {path.name}",
         )
@@ -82,13 +101,171 @@ def upload_seed(token: str) -> None:
         )
 
 
-def main() -> None:
+def create_permission_regression_fixture(token: str) -> dict[str, Any]:
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    suffix = uuid.uuid4().hex[:10]
+    member_email = f"demo-member-{suffix}@example.com"
+    member_password = "member-demo-password"
+    member = expect_object(
+        request(
+            "/api/users",
+            method="POST",
+            data=json.dumps(
+                {
+                    "display_name": "Demo Member",
+                    "email": member_email,
+                    "role": "Member",
+                    "password": member_password,
+                    "is_active": True,
+                }
+            ).encode(),
+            headers=headers,
+        ),
+        "member creation response",
+    )
+    restricted_text = (
+        "# Restricted launch note\n"
+        "Date: 2026-05-01\n\n"
+        "## Decision\n"
+        f"We decided {RESTRICTED_MARKER} should remain visible only to administrators.\n\n"
+        "## Assumption\n"
+        "The confidential launch-risk memo should not appear in member evidence, traces, contradictions, or drift items.\n"
+    )
+    restricted_artifact = expect_object(
+        request(
+            "/api/artifacts/pasted-text",
+            method="POST",
+            data=json.dumps(
+                {
+                    "title": RESTRICTED_TITLE,
+                    "text": restricted_text,
+                    "visibility_scope": "restricted",
+                    "permitted_user_ids": [],
+                }
+            ).encode(),
+            headers=headers,
+        ),
+        "restricted pasted-text response",
+    )
+    request(
+        "/api/ingestion/run",
+        method="POST",
+        data=json.dumps({"artifact_id": restricted_artifact["artifact_id"]}).encode(),
+        headers=headers,
+    )
+    member_signin = expect_object(
+        request(
+            "/api/auth/sign-in",
+            method="POST",
+            data=json.dumps({"email": member_email, "password": member_password}).encode(),
+            headers={"Content-Type": "application/json"},
+        ),
+        "member sign-in response",
+    )
+    return {
+        "member": member,
+        "member_token": member_signin["access_token"],
+        "restricted_artifact": restricted_artifact,
+    }
+
+
+def payload_contains_forbidden_value(value: Any, *, restricted_artifact_id: str) -> bool:
+    serialized = json.dumps(value, sort_keys=True, default=str)
+    return any(forbidden in serialized for forbidden in (RESTRICTED_TITLE, RESTRICTED_MARKER, restricted_artifact_id))
+
+
+def permission_regression_checks(admin_token: str) -> dict[str, Any]:
+    fixture = create_permission_regression_fixture(admin_token)
+    member_token = fixture["member_token"]
+    restricted_artifact = fixture["restricted_artifact"]
+    restricted_artifact_id = restricted_artifact["artifact_id"]
+    member_headers = {"Authorization": f"Bearer {member_token}", "Content-Type": "application/json"}
+
+    artifact_detail_status, _artifact_detail_body = request_status(
+        f"/api/artifacts/{restricted_artifact_id}",
+        headers={"Authorization": f"Bearer {member_token}"},
+    )
+    member_artifacts = expect_list(request("/api/artifacts", headers={"Authorization": f"Bearer {member_token}"}), "member artifact list")
+    result = expect_object(
+        request(
+            "/api/query",
+            method="POST",
+            data=json.dumps({"query_text": "What should the team do next about the onboarding launch plan?"}).encode(),
+            headers=member_headers,
+        ),
+        "member query result",
+    )
+    trace = expect_object(
+        request(
+            f"/api/query/{result['query_run_id']}/trace",
+            headers={"Authorization": f"Bearer {member_token}"},
+        ),
+        "member query trace",
+    )
+
+    visible_artifact_titles = {str(item.get("title")) for item in member_artifacts}
+    forbidden_payloads = {
+        "artifact_list": member_artifacts,
+        "supporting_evidence": result.get("supporting_evidence", []),
+        "supporting_nodes": result.get("supporting_nodes", []),
+        "contradictions": result.get("contradictions", []),
+        "stale_assumptions": result.get("stale_assumptions", []),
+        "trace": trace,
+    }
+    checks = {
+        "restricted_artifact_detail_forbidden": artifact_detail_status == 403,
+        "restricted_artifact_hidden_from_list": RESTRICTED_TITLE not in visible_artifact_titles,
+        "member_result_permission_limited": result.get("permissions_limited") is True,
+        "member_result_has_permission_caveat": any("permission" in str(note).lower() for note in result.get("uncertainty_notes", [])),
+        "supporting_evidence_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["supporting_evidence"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "supporting_nodes_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["supporting_nodes"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "contradictions_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["contradictions"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "assumption_drift_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["stale_assumptions"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "trace_redacted": not payload_contains_forbidden_value(forbidden_payloads["trace"], restricted_artifact_id=restricted_artifact_id),
+        "artifact_list_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["artifact_list"], restricted_artifact_id=restricted_artifact_id
+        ),
+    }
+    return {
+        "restricted_artifact_id": restricted_artifact_id,
+        "member_user_id": fixture["member"]["user_id"],
+        "checks": checks,
+        "member_result_query_class": result.get("query_class"),
+        "member_uncertainty_notes": result.get("uncertainty_notes", []),
+    }
+
+
+def collect_failures(report: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    for result in report["results"]:
+        for check_name, passed in result["checks"].items():
+            if not passed:
+                failures.append(f"query:{result['name']}:{check_name}")
+    for section_name, section in report["standalone"].items():
+        for check_name, passed in section["checks"].items():
+            if not passed:
+                failures.append(f"standalone:{section_name}:{check_name}")
+    for check_name, passed in report["permission_regression"]["checks"].items():
+        if not passed:
+            failures.append(f"permission:{check_name}")
+    return failures
+
+
+def run_eval() -> dict[str, Any]:
     signin = expect_object(
         request(
-        "/api/auth/sign-in",
-        method="POST",
-        data=json.dumps({"email": "admin@example.com", "password": "change-me-admin"}).encode(),
-        headers={"Content-Type": "application/json"},
+            "/api/auth/sign-in",
+            method="POST",
+            data=json.dumps({"email": "admin@example.com", "password": "change-me-admin"}).encode(),
+            headers={"Content-Type": "application/json"},
         ),
         "sign-in response",
     )
@@ -97,6 +274,7 @@ def main() -> None:
     auth_headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     contradiction_list = expect_list(request("/api/contradictions", headers={"Authorization": f"Bearer {token}"}), "contradictions")
     drift_list = expect_list(request("/api/assumptions/stale", headers={"Authorization": f"Bearer {token}"}), "assumption drift")
+    permission_regression = permission_regression_checks(token)
 
     results = []
     for spec in EXPECTED["queries"]:
@@ -188,7 +366,33 @@ def main() -> None:
         },
     }
 
-    print(json.dumps({"results": results, "standalone": standalone}, indent=2))
+    report = {
+        "base_url": BASE,
+        "results": results,
+        "standalone": standalone,
+        "permission_regression": permission_regression,
+    }
+    failures = collect_failures(report)
+    total_checks = (
+        sum(len(result["checks"]) for result in results)
+        + sum(len(section["checks"]) for section in standalone.values())
+        + len(permission_regression["checks"])
+    )
+    report["summary"] = {
+        "total_checks": total_checks,
+        "passed_checks": total_checks - len(failures),
+        "failed_checks": len(failures),
+        "failures": failures,
+    }
+    return report
+
+
+def main() -> None:
+    report = run_eval()
+    print(json.dumps(report, indent=2))
+    if report["summary"]["failed_checks"]:
+        print(f"Seed eval failed: {report['summary']['failed_checks']} check(s) failed.", file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
