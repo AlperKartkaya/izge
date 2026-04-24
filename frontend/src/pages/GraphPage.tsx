@@ -99,9 +99,9 @@ export function GraphPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Decision history"
-        title="Reconstruct how the roadmap changed"
-        description="This view starts with a timeline of remembered decisions, assumptions, constraints, outcomes, and commitments so the graph reads like institutional history rather than a database summary."
+        eyebrow="Lineage / contradiction / drift"
+        title="Reconstruct how the record changed"
+        description="This view treats the graph as institutional history: remembered decisions, assumptions, constraints, outcomes, commitments, conflict edges, and drift warnings."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
@@ -267,13 +267,13 @@ export function GraphPage() {
       </div>
 
       <div className="two-column-layout">
-        <Panel title="Contradictions" description="Visible contradiction relationships surfaced from the explicit memory graph.">
+        <Panel title="Contradictions" description="Visible contradiction relationships surfaced from the explicit memory graph. These conflicts are first-class product events.">
           {contradictions.length === 0 ? (
             <EmptyState title="No contradiction edges" description="No contradiction records are currently visible in your scope." />
           ) : (
             <div className="stack-sm">
               {contradictions.map((item) => (
-                <article key={item.edge_id} className="panel-subtle stack-sm">
+                <article key={item.edge_id} className="panel-subtle stack-sm critical-card">
                   <p className="table-primary">{item.from_title} → {item.to_title}</p>
                   <p className="table-secondary">{item.from_type} {item.relation_label} {item.to_type} · topic {item.topic_key}</p>
                   <div className="stack-sm">
@@ -299,13 +299,13 @@ export function GraphPage() {
           )}
         </Panel>
 
-        <Panel title="Stale assumptions" description="Assumptions marked stale, reversed, or weakening by the memory-analysis surface.">
+        <Panel title="Assumption drift" description="Assumptions marked stale, reversed, or weakening by the memory-analysis surface.">
           {assumptionDrift.length === 0 ? (
             <EmptyState title="No drift signals" description="No visible assumption drift items are currently available." />
           ) : (
             <div className="stack-sm">
               {assumptionDrift.map((item) => (
-                <article key={item.assumption_id} className="panel-subtle stack-sm">
+                <article key={item.assumption_id} className="panel-subtle stack-sm drift-card">
                   <p className="table-primary">{item.title_or_label}</p>
                   <p className="table-secondary">{item.status} · {item.assumption_id} · topic {item.topic_key}</p>
                   <p className="muted-copy">{item.validity_notes || 'No validity notes recorded.'}</p>

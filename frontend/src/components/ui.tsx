@@ -39,7 +39,13 @@ export function MetricCard({ label, value, detail }: { label: string; value: str
 }
 
 export function StatusBadge({ value }: { value: string }) {
-  return <span className="status-badge">{value}</span>
+  const normalizedValue = value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+
+  return (
+    <span className="status-badge" data-status={normalizedValue}>
+      {value}
+    </span>
+  )
 }
 
 export function EmptyState({ title, description }: { title: string; description: string }) {

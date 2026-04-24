@@ -34,10 +34,10 @@ export function SignInPage() {
     <main className="auth-layout">
       <section className="auth-panel panel">
         <div className="auth-copy">
-          <p className="eyebrow">Izge MVP</p>
-          <h1 className="auth-title">Access the institutional memory workspace</h1>
+          <p className="eyebrow">Izge / local-first decision intelligence</p>
+          <h1 className="auth-title">Enter the memory system that exposes drift</h1>
           <p className="page-description">
-            Sign in to review artifacts, run ingestion, trace historical decisions, and inspect evidence-backed query results.
+            Sign in to review artifacts, build memory objects, trace historical decisions, and inspect evidence-backed contradictions before the team moves again.
           </p>
         </div>
 

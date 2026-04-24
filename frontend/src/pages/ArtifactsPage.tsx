@@ -87,6 +87,8 @@ export function ArtifactsPage() {
   }, [isAdmin, selectedArtifactId, session?.token])
 
   const selectableUsers = useMemo(() => users.filter((user) => user.is_active), [users])
+  const selectedChunkProvenance = selectedArtifact?.chunk_provenance ?? []
+  const selectedPermittedUserIds = selectedArtifact?.permitted_user_ids ?? []
 
   function toggleUserSelection(userId: string, state: string[], setter: (next: string[]) => void) {
     setter(state.includes(userId) ? state.filter((value) => value !== userId) : [...state, userId])
@@ -157,16 +159,16 @@ export function ArtifactsPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Artifact intake"
-        title="Load evidence into the workspace"
-        description="Capture product and roadmap history through supported files or direct pasted text, then inspect the artifact record before ingestion."
+        eyebrow="Evidence intake"
+        title="Load the record before the system reasons"
+        description="Capture roadmap history, meeting notes, product decisions, and copied snippets as inspectable evidence. Izge does not reason from vibes; it reasons from artifacts."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {success ? <Callout>{success}</Callout> : null}
 
       <div className="two-column-layout">
-        <Panel title="Upload supported files" description="Accepted inputs match the MVP contract: Markdown, plain text, and text-extractable PDFs.">
+        <Panel title="Upload source artifact" description="Accepted inputs match the MVP contract: Markdown, plain text, and text-extractable PDFs.">
           <form className="form-grid" onSubmit={handleUpload}>
             <label className="field">
               <span className="field-label">Title</span>
@@ -221,7 +223,7 @@ export function ArtifactsPage() {
           </form>
         </Panel>
 
-        <Panel title="Submit pasted text" description="Use for meeting excerpts, copied notes, or historical snippets that should join the artifact record.">
+        <Panel title="Capture raw institutional memory" description="Use for meeting excerpts, copied notes, or historical snippets that should join the evidence record.">
           <form className="form-grid" onSubmit={handlePastedText}>
             <label className="field">
               <span className="field-label">Title</span>
@@ -283,7 +285,7 @@ export function ArtifactsPage() {
       </div>
 
       <div className="two-column-layout wide-right-column">
-        <Panel title="Artifact inventory" description="Visible artifacts and their current ingestion state.">
+        <Panel title="Evidence inventory" description="Visible artifacts and their current ingestion state.">
           {artifacts.length === 0 ? (
             <EmptyState title="No artifacts available" description="Add a file or pasted text artifact to begin populating evidence." />
           ) : (
@@ -323,7 +325,7 @@ export function ArtifactsPage() {
           )}
         </Panel>
 
-        <Panel title="Artifact detail" description="Detail pane backed by `/api/artifacts/:id`.">
+        <Panel title="Selected evidence detail" description="Detail pane backed by `/api/artifacts/:id`, including provenance and extraction state.">
           {!selectedArtifact ? (
             <EmptyState title="Select an artifact" description="Choose an artifact from the inventory to inspect extracted text previews and permissions." />
           ) : (
@@ -352,10 +354,10 @@ export function ArtifactsPage() {
               </div>
               <div className="panel-subtle stack-sm">
                 <p className="section-label">Chunk extraction provenance</p>
-                {selectedArtifact.chunk_provenance.length === 0 ? (
+                {selectedChunkProvenance.length === 0 ? (
                   <p className="muted-copy">No chunk-level provenance is available until ingestion has processed this artifact.</p>
                 ) : (
-                  selectedArtifact.chunk_provenance.map((chunk) => (
+                  selectedChunkProvenance.map((chunk) => (
                     <article key={chunk.chunk_id} className="panel-subtle stack-sm">
                       <p className="table-primary">Chunk {chunk.sequence_number}</p>
                       <p className="table-secondary">
@@ -370,7 +372,7 @@ export function ArtifactsPage() {
               {selectedArtifact.visibility_scope === 'restricted' ? (
                 <div className="panel-subtle">
                   <p className="section-label">Permitted user IDs</p>
-                  <p className="muted-copy">{selectedArtifact.permitted_user_ids.join(', ') || 'No explicit users recorded.'}</p>
+                  <p className="muted-copy">{selectedPermittedUserIds.join(', ') || 'No explicit users recorded.'}</p>
                 </div>
               ) : null}
             </div>

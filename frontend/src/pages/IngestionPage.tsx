@@ -111,15 +111,15 @@ export function IngestionPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Ingestion status"
-        title="Run and inspect ingestion jobs"
-        description="Create an ingestion run for a stored artifact, then monitor the persisted job record as text extraction and graph persistence complete."
+        eyebrow="Memory construction"
+        title="Turn evidence into traceable memory objects"
+        description="Create an ingestion run for a stored artifact, then inspect the persisted job record as text extraction, source chunks, and graph persistence make the reasoning substrate visible."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <div className="two-column-layout">
-        <Panel title="Start ingestion" description="Creates a new `/api/ingestion/run` job for the selected artifact.">
+        <Panel title="Start memory build" description="Creates a new `/api/ingestion/run` job for the selected artifact.">
           {artifacts.length === 0 ? (
             <EmptyState title="No artifacts ready" description="Artifacts must be stored before you can run ingestion." />
           ) : (
@@ -147,7 +147,7 @@ export function IngestionPage() {
           )}
         </Panel>
 
-        <Panel title="Fetch job record" description="Retrieve a specific job by ID if you want to re-open an existing run.">
+        <Panel title="Inspect build job" description="Retrieve a specific job by ID if you want to re-open an existing run.">
           <div className="form-grid">
             <label className="field">
               <span className="field-label">Job ID</span>
@@ -160,7 +160,7 @@ export function IngestionPage() {
         </Panel>
       </div>
 
-      <Panel title="Current job detail" description="Live view of the selected ingestion job record.">
+      <Panel title="Current memory build detail" description="Live view of the selected ingestion job record.">
         {!job ? (
           <EmptyState title="No job selected" description="Start an ingestion run or load a known job ID to inspect its current status." />
         ) : (

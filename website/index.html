@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Izge is a local-first institutional memory and decision intelligence system for reconstructing decisions, contradictions, assumption drift, and evidence-grounded next actions."
+    />
+    <title>Izge — Memory before magic</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23030506'/%3E%3Cpath d='M18 14h28v6H34v24h12v6H18v-6h10V20H18z' fill='%23d8dcdd'/%3E%3Cpath d='M43 17l8 8-8 8' fill='none' stroke='%235f7563' stroke-width='4'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=Instrument+Serif:ital@0;1&family=Sora:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="memory-field" aria-hidden="true"></canvas>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="scroll-meter" aria-hidden="true"><span></span></div>
+
+    <header class="site-header" data-reveal>
+      <a class="brand-mark" href="#top" aria-label="Izge home">
+        <span class="brand-glyph">İ</span>
+        <span>Izge</span>
+      </a>
+      <nav class="top-nav" aria-label="Site navigation">
+        <a href="#tension">Anti-category</a>
+        <a href="#system">System</a>
+        <a href="#modes">Modes</a>
+        <a href="#manifesto">Manifesto</a>
+      </nav>
+      <a class="nav-cta" href="#contact">Request the brief</a>
+    </header>
+
+    <main id="top">
+      <section class="hero scene scene-hero" aria-labelledby="hero-title">
+        <div class="hero-copy" data-reveal>
+          <p class="kicker">Local-first decision intelligence / pre-incubation ready</p>
+          <h1 id="hero-title">Organizations do not lack information. They lack memory.</h1>
+          <p class="hero-subhead">
+            Izge reconstructs what was decided, why it happened, which assumptions shaped it, what later contradicted it,
+            and what the team should do next.
+          </p>
+          <div class="cta-row" aria-label="Primary actions">
+            <a class="button primary" href="#system">See the memory system</a>
+            <a class="button secondary" href="#manifesto">Read the belief system</a>
+          </div>
+        </div>
+
+        <div class="hero-stage" data-reveal aria-label="Izge decision intelligence preview">
+          <div class="stage-label">Live memory reconstruction</div>
+          <div class="lineage-map">
+            <article class="memory-node node-decision">
+              <span>Decision / Q2</span>
+              <strong>Prioritize onboarding redesign</strong>
+              <small>Evidence: roadmap.md · 84%</small>
+            </article>
+            <article class="memory-node node-assumption">
+              <span>Assumption</span>
+              <strong>Activation bottleneck is education</strong>
+              <small>Meeting note · 71%</small>
+            </article>
+            <article class="memory-node node-conflict">
+              <span>Contradiction detected</span>
+              <strong>New plan shifts effort to pricing</strong>
+              <small>Strategy PDF · conflict edge</small>
+            </article>
+            <article class="memory-node node-action">
+              <span>Next action</span>
+              <strong>Review rationale before reallocating sprint capacity</strong>
+              <small>Grounded in 3 evidence spans</small>
+            </article>
+            <svg class="connector-web" viewBox="0 0 620 420" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M120 86 C260 110, 280 176, 365 185" />
+              <path d="M405 205 C430 260, 370 310, 302 335" />
+              <path d="M195 285 C250 245, 295 222, 365 202" />
+              <path class="hot" d="M440 190 C520 188, 535 88, 505 66" />
+            </svg>
+          </div>
+          <div class="evidence-tape" aria-hidden="true">
+            <span>memory before magic</span>
+            <span>history before speculation</span>
+            <span>evidence before confidence</span>
+          </div>
+          <div class="assumption-drift" aria-hidden="true">
+            <span>assumption drift</span>
+            <i></i>
+            <b></b>
+            <em></em>
+          </div>
+        </div>
+      </section>
+
+      <section id="tension" class="anti-category scene scene-left" aria-labelledby="tension-title">
+        <div class="section-heading split-heading" data-reveal>
+          <p class="kicker">Category refusal</p>
+          <h2 id="tension-title">If it looks like chat over files, it already lost the plot.</h2>
+        </div>
+        <div class="not-this-grid">
+          <p class="strike-card" data-reveal>Not internal search.</p>
+          <p class="strike-card" data-reveal>Not chat over files.</p>
+          <p class="strike-card" data-reveal>Not a PM copilot.</p>
+          <p class="truth-card" data-reveal>A system that remembers why decisions happened.</p>
+        </div>
+      </section>
+
+      <section class="problem scene scene-debris" aria-labelledby="problem-title">
+        <div class="section-heading" data-reveal>
+          <p class="kicker">The actual failure mode</p>
+          <h2 id="problem-title">The old debate returns wearing a new filename.</h2>
+          <p>
+            Critical context is scattered across roadmap notes, product strategy docs, meeting writeups, pasted text, and PDFs.
+            Teams repeat decisions, act on expired assumptions, and create commitments that quietly contradict the record.
+          </p>
+        </div>
+        <div class="artifact-field" aria-label="Broken organizational memory visualization">
+          <article class="artifact-card offset-a" data-reveal>
+            <span>roadmap.md</span>
+            <strong>“Focus onboarding until activation stabilizes.”</strong>
+          </article>
+          <article class="artifact-card offset-b disputed" data-reveal>
+            <span>strategy.pdf</span>
+            <strong>“Move sprint capacity into pricing experiments.”</strong>
+          </article>
+          <article class="artifact-card offset-c" data-reveal>
+            <span>meeting-notes.txt</span>
+            <strong>“Assumption: education is the bottleneck.”</strong>
+          </article>
+          <article class="artifact-card offset-d faded" data-reveal>
+            <span>pasted text</span>
+            <strong>“Decision owner unclear after reorg.”</strong>
+          </article>
+        </div>
+      </section>
+
+      <section id="system" class="system scene scene-pin sticky-story" aria-labelledby="system-title">
+        <div class="sticky-stage" aria-hidden="true">
+          <div class="memory-core">
+            <span class="core-ring ring-one"></span>
+            <span class="core-ring ring-two"></span>
+            <span class="core-ring ring-three"></span>
+            <strong>Memory engine</strong>
+          </div>
+        </div>
+        <div class="story-steps">
+          <div class="story-step" data-reveal>
+            <p class="kicker">01 / Ingest</p>
+            <h2 id="system-title">Artifacts enter as evidence, not vibes.</h2>
+            <p>Markdown, plain text, PDFs, and pasted text become source-bounded objects with provenance attached.</p>
+          </div>
+          <div class="story-step" data-reveal>
+            <p class="kicker">02 / Reconstruct</p>
+            <h2>Decisions become structured memory.</h2>
+            <p>Izge extracts decisions, assumptions, constraints, outcomes, commitments, owners, and timestamps into a traceable graph.</p>
+          </div>
+          <div class="story-step" data-reveal>
+            <p class="kicker">03 / Reason</p>
+            <h2>The record starts arguing with itself.</h2>
+            <p>Contradictions, drift, lineage, uncertainty, and permission limits become visible before recommendations appear.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="modes" class="modes scene scene-rise" aria-labelledby="modes-title">
+        <div class="section-heading split-heading" data-reveal>
+          <p class="kicker">Four reasoning modes</p>
+          <h2 id="modes-title">Decision intelligence is not a chat box. It is a sequence of checks.</h2>
+        </div>
+        <div class="mode-sequence">
+          <article class="mode-panel" data-reveal>
+            <span>01</span>
+            <h3>Decision lineage</h3>
+            <p>Rebuild the path from proposal to decision to consequence.</p>
+          </article>
+          <article class="mode-panel conflict" data-reveal>
+            <span>02</span>
+            <h3>Contradiction analysis</h3>
+            <p>Expose when a later plan conflicts with an earlier commitment.</p>
+          </article>
+          <article class="mode-panel drift" data-reveal>
+            <span>03</span>
+            <h3>Assumption drift</h3>
+            <p>Detect assumptions that quietly expired while the team kept moving.</p>
+          </article>
+          <article class="mode-panel action" data-reveal>
+            <span>04</span>
+            <h3>Next-action guidance</h3>
+            <p>Recommend the next move only after the evidence is inspectable.</p>
+          </article>
+        </div>
+        <div class="reasoning-console" data-reveal aria-label="Evidence-grounded reasoning sequence preview">
+          <div class="console-track">
+            <span>source span</span>
+            <span>decision edge</span>
+            <span>conflict edge</span>
+            <span>recommended check</span>
+          </div>
+          <div class="console-body">
+            <p>Current plan conflicts with the recorded onboarding commitment.</p>
+            <strong>Next action: inspect rationale before reallocating sprint capacity.</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="architecture scene scene-stack" aria-labelledby="architecture-title">
+        <div class="section-heading" data-reveal>
+          <p class="kicker">Product trajectory</p>
+          <h2 id="architecture-title">A layered system for organizational judgment.</h2>
+        </div>
+        <div class="layers" aria-label="Izge product architecture layers">
+          <article class="layer-card" data-reveal>
+            <span>Layer 01</span>
+            <h3>Institution Memory Engine</h3>
+            <p>Structured extraction, graph relationships, provenance, permissions, and auditability.</p>
+          </article>
+          <article class="layer-card" data-reveal>
+            <span>Layer 02</span>
+            <h3>Decision Guidance Layer</h3>
+            <p>Evidence-aware reasoning over lineage, contradiction, drift, uncertainty, and next actions.</p>
+          </article>
+          <article class="layer-card" data-reveal>
+            <span>Layer 03</span>
+            <h3>Bounded Scenario Support</h3>
+            <p>Simulation only when the remembered record is strong enough to bound speculation.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="why-now scene scene-left" aria-labelledby="why-title">
+        <div class="section-heading split-heading" data-reveal>
+          <p class="kicker">Why it can win</p>
+          <h2 id="why-title">Trust is not a feature added later. It is the architecture.</h2>
+        </div>
+        <div class="why-grid">
+          <article data-reveal><strong>Local-first from day one</strong><span>Private memory should not begin inside a black box.</span></article>
+          <article data-reveal><strong>Evidence-aware reasoning</strong><span>Every answer should show where its confidence came from.</span></article>
+          <article data-reveal><strong>Graph-backed intelligence</strong><span>Contradictions need relationships, not keyword matches.</span></article>
+          <article data-reveal><strong>Auditability</strong><span>The system must remember how it reasoned, not just what it said.</span></article>
+        </div>
+      </section>
+
+      <section id="manifesto" class="manifesto scene scene-manifesto" aria-labelledby="manifesto-title">
+        <p class="kicker" data-reveal>Manifesto</p>
+        <h2 id="manifesto-title" data-reveal>Memory before magic.</h2>
+        <div class="manifesto-lines" data-reveal>
+          <p>History before speculation.</p>
+          <p>Evidence before confidence.</p>
+          <p>Structure before summary.</p>
+          <p>Local-first trust from day one.</p>
+        </div>
+      </section>
+
+      <section id="contact" class="final-cta scene scene-rise" aria-labelledby="cta-title">
+        <div data-reveal>
+          <p class="kicker">Izge</p>
+          <h2 id="cta-title">Build memory that survives the next meeting.</h2>
+          <p>
+            For product and roadmap teams entering the phase where forgotten rationale becomes strategic drag.
+          </p>
+          <div class="cta-row">
+            <a class="button primary" href="mailto:founders@izge.local?subject=Izge%20pre-incubation%20brief">Request the brief</a>
+            <a class="button secondary" href="#top">Return to the opening claim</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="./memory-field.js" defer></script>
+  </body>
+</html>

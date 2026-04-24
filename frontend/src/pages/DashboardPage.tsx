@@ -61,16 +61,16 @@ export function DashboardPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Workspace dashboard"
-        title="Institutional memory at a glance"
-        description="Track which sources have been ingested, how much structured memory is available, and where to inspect the current decision history."
+        eyebrow="Decision intelligence command board"
+        title="See what changed before the team moves again"
+        description="Izge turns artifacts into a hard-edged institutional record: decisions, later conflicts, drifting assumptions, evidence spans, and grounded next actions."
         actions={
           <div className="inline-actions">
             <Link className="secondary-button" to="/artifacts">
-              Review sources
+              Load evidence
             </Link>
             <Link className="primary-button" to="/query">
-              Ask the history
+              Interrogate history
             </Link>
           </div>
         }
@@ -86,23 +86,23 @@ export function DashboardPage() {
       </section>
 
       <div className="two-column-layout">
-        <Panel title="How Izge reasons" description="The MVP reconstructs history through fixed institutional-memory modes instead of open-ended chat.">
+        <Panel title="Reasoning modes, not chat modes" description="Each block is a fixed institutional-memory operation designed to expose why a recommendation is justified.">
           <div className="signal-grid">
             {[
-              'Decision lineage',
-              'Contradiction analysis',
-              'Assumption drift',
-              'Next-action guidance',
-            ].map((item) => (
+              ['Decision lineage', 'Trace who decided what, when, and under which source record.'],
+              ['Contradiction analysis', 'Make later claims visually collide with earlier commitments.'],
+              ['Assumption drift', 'Mark stale assumptions as operational risk, not weak metadata.'],
+              ['Next-action guidance', 'Recommend moves only after evidence, conflict, and uncertainty are visible.'],
+            ].map(([item, detail]) => (
               <article key={item} className="signal-card panel-subtle">
                 <p className="signal-title">{item}</p>
-                <p className="muted-copy">Available through the history workspace with evidence-backed sections and inspectable supporting memory.</p>
+                <p className="muted-copy">{detail}</p>
               </article>
             ))}
           </div>
         </Panel>
 
-        <Panel title="Current workspace identity" description="Session and scope details for the single remembered workspace.">
+        <Panel title="Current memory boundary" description="Scope and permissions are part of the reasoning record; hidden evidence must stay visible as a constraint.">
           <dl className="meta-list">
             <div>
               <dt>Name</dt>
@@ -118,13 +118,13 @@ export function DashboardPage() {
             </div>
             <div>
               <dt>Product stance</dt>
-              <dd>Institutional memory first, decision guidance second.</dd>
+              <dd>Reconstruct first. Compare second. Recommend last.</dd>
             </div>
           </dl>
         </Panel>
       </div>
 
-      <Panel title="Recent memory sources" description="Latest permitted artifacts, ready for inspection or ingestion.">
+      <Panel title="Recent evidence entering memory" description="Sources are treated as inspectable provenance, not background files.">
         {isLoading ? <p className="muted-copy">Loading source inventory…</p> : null}
         {!isLoading && artifacts.length === 0 ? (
           <EmptyState title="No sources yet" description="Upload a file or submit pasted text to start reconstructing institutional memory." />

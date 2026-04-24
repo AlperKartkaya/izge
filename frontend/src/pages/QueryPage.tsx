@@ -40,15 +40,15 @@ export function QueryPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Ask the history"
-        title="Reconstruct what happened and what to do next"
-        description="Write the question in plain language. Izge routes it into a fixed memory-analysis mode so the response stays evidence-backed instead of drifting into chat."
+        eyebrow="Interrogate institutional history"
+        title="Ask for lineage, conflict, drift, or the next justified move"
+        description="Write the question in plain language. Izge routes it into a fixed memory-analysis mode so the response stays evidence-backed instead of collapsing into a generic assistant reply."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <div className="two-column-layout">
-        <Panel title="Historical question" description="Use plain language. Izge determines whether the question is about lineage, contradiction, stale assumptions, or next actions.">
+        <Panel title="Historical question" description="The system compares remembered decisions against later evidence and returns an inspectable reasoning path.">
           <form className="form-grid" onSubmit={handleSubmit}>
             <label className="field field-block">
               <span className="field-label">Question</span>
@@ -60,7 +60,7 @@ export function QueryPage() {
           </form>
         </Panel>
 
-        <Panel title="Memory-analysis modes" description="Starter questions stay anchored to the locked MVP modes so the workflow reads as institutional reasoning, not generic search.">
+        <Panel title="Memory-analysis modes" description="Starter questions stay anchored to the locked MVP modes: lineage, contradiction, drift, and next action.">
           <div className="signal-grid">
             {starterPrompts.map((prompt) => (
               <button key={prompt} type="button" className="prompt-card" onClick={() => setQueryText(prompt)}>

@@ -42,8 +42,8 @@ export function MemoryDetailPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Historical detail"
-        title="Inspect one remembered object"
+        eyebrow="Memory object detail"
+        title="Inspect the exact remembered claim"
         description="Review the normalized memory object, its evidence span, and its source context independently from the result page."
         actions={
           <Link className="secondary-button" to="/query">

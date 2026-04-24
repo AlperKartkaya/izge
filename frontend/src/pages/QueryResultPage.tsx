@@ -91,9 +91,9 @@ export function QueryResultPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Query result"
-        title="Evidence-backed historical reading"
-        description="Result sections stay fixed so remembered decisions, tensions, drift, and uncertainty remain inspectable instead of collapsing into a freeform chat reply."
+        eyebrow="Evidence-backed historical reading"
+        title="The answer is only credible because the record is visible"
+        description="Result sections stay fixed so remembered decisions, contradictions, drift, next actions, and uncertainty remain inspectable instead of collapsing into a freeform chat reply."
         actions={
           <Link className="secondary-button" to="/query">
             Ask another question
@@ -185,13 +185,13 @@ export function QueryResultPage() {
               )}
             </Panel>
 
-            <Panel title="Contradictions / Tensions" description="Conflict signals preserved as a dedicated section.">
+            <Panel title="Contradictions / Tensions" description="Conflict signals are preserved as a dedicated section so a later claim visibly collides with the earlier record.">
               {activeResult.contradictions.length === 0 ? (
                 <EmptyState title="No contradictions returned" description="This result did not surface contradiction edges in the current permitted scope." />
               ) : (
                 <div className="stack-sm">
                   {activeResult.contradictions.map((item) => (
-                    <article key={readRecordField(item, 'edge_id')} className="panel-subtle stack-sm">
+                    <article key={readRecordField(item, 'edge_id')} className="panel-subtle stack-sm critical-card">
                       <p className="table-primary">{readRecordField(item, 'from_title')} → {readRecordField(item, 'to_title')}</p>
                       <p className="table-secondary">{readRecordField(item, 'from_type')} {readRecordField(item, 'relation_label')} {readRecordField(item, 'to_type')} · topic {readRecordField(item, 'topic_key')}</p>
                       <div className="stack-sm">
@@ -216,13 +216,13 @@ export function QueryResultPage() {
               )}
             </Panel>
 
-            <Panel title="Stale Assumptions" description="Assumptions flagged as stale, weakened, or reversed.">
+            <Panel title="Assumption Drift" description="Assumptions flagged as stale, weakened, or reversed.">
               {activeResult.stale_assumptions.length === 0 ? (
                 <EmptyState title="No drift returned" description="No visible stale assumptions were attached to this response." />
               ) : (
                 <div className="stack-sm">
                   {activeResult.stale_assumptions.map((item) => (
-                    <article key={readRecordField(item, 'assumption_id')} className="panel-subtle stack-sm">
+                    <article key={readRecordField(item, 'assumption_id')} className="panel-subtle stack-sm drift-card">
                       <p className="table-primary">{readRecordField(item, 'title_or_label')}</p>
                       <p className="table-secondary">Status: {formatLabel(readRecordField(item, 'status'))} · topic {readRecordField(item, 'topic_key')}</p>
                       <p className="muted-copy">{readRecordField(item, 'validity_notes')}</p>
@@ -237,11 +237,11 @@ export function QueryResultPage() {
               )}
             </Panel>
 
-            <Panel title="Recommended Next Actions" description="Action guidance remains explicit rather than implied.">
+            <Panel title="Recommended Next Actions" description="Action guidance remains explicit, grounded, and downstream of the visible evidence.">
               {activeResult.recommended_next_actions.length === 0 ? (
                 <EmptyState title="No next actions returned" description="This result did not require recommendation output from the current analysis path." />
               ) : (
-                <ul className="bullet-list">
+                <ul className="bullet-list action-list">
                   {activeResult.recommended_next_actions.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
