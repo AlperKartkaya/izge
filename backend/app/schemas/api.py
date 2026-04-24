@@ -77,6 +77,7 @@ class ArtifactDetail(ArtifactRead):
     extracted_text_preview: str | None = None
     chunk_count: int = 0
     permitted_user_ids: list[str] = Field(default_factory=list)
+    chunk_provenance: list["ArtifactChunkProvenance"] = Field(default_factory=list)
 
 
 class IngestionRunCreate(BaseModel):
@@ -95,6 +96,16 @@ class IngestionJobRead(BaseModel):
     detail: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class ArtifactChunkProvenance(BaseModel):
+    chunk_id: str
+    sequence_number: int
+    extraction_method: str
+    extraction_status: str
+    extracted_object_count: int
+    fallback_reason: str | None = None
+    chunk_excerpt: str
 
 
 class EvidenceReference(BaseModel):
@@ -238,6 +249,10 @@ class MemoryDetail(BaseModel):
     status: str | None = None
     due_date: datetime | None = None
     owner_label: str | None = None
+    extraction_method: str = "heuristic"
+    source_artifact_title: str | None = None
+    source_chunk_excerpt: str | None = None
+    extraction_fallback_reason: str | None = None
 
 
 class ContradictionEvidence(BaseModel):
@@ -301,3 +316,4 @@ class AuditEventRead(BaseModel):
 
 
 TokenResponse.model_rebuild()
+ArtifactDetail.model_rebuild()

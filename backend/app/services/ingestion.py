@@ -177,6 +177,7 @@ class ExtractionItem:
     confidence_score: float
     event_timestamp: datetime
     topic_key: str
+    extraction_method: str = "heuristic"
     owner_hint: str | None = None
     due_date: datetime | None = None
 
@@ -193,9 +194,16 @@ class PersistedMemory:
     event_timestamp: datetime
     confidence_score: float
     topic_key: str
+    extraction_method: str = "heuristic"
     status: str | None = None
     owner_hint: str | None = None
     due_date: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ExtractionDiagnostics:
+    extraction_method: str
+    fallback_reason: str | None = None
 
 
 class LLMExtractionObject(BaseModel):
@@ -476,6 +484,7 @@ def _extract_memory_candidates_with_local_llm(chunks: list[str], artifact: Artif
                     confidence_score=round(obj.confidence, 2),
                     event_timestamp=observed_at or artifact_timestamp,
                     topic_key=topic_key,
+                    extraction_method="local_llm",
                     owner_hint=(obj.owner and _normalize_whitespace(obj.owner)) or (_extract_owner_hint(normalized_text) if obj.memory_type == "commitment" else None),
                     due_date=_parse_date(obj.due_date) if obj.due_date else (_extract_due_date_hint(normalized_text) if obj.memory_type == "commitment" else None),
                 )
@@ -484,15 +493,17 @@ def _extract_memory_candidates_with_local_llm(chunks: list[str], artifact: Artif
     return items
 
 
-def extract_memory_candidates(chunks: list[str], artifact: Artifact, artifact_text: str) -> list[ExtractionItem]:
+def extract_memory_candidates(chunks: list[str], artifact: Artifact, artifact_text: str) -> tuple[list[ExtractionItem], ExtractionDiagnostics]:
     settings = get_settings()
     if settings.local_llm_enabled:
+        fallback_reason: str | None = None
         try:
             llm_items = _extract_memory_candidates_with_local_llm(chunks, artifact, artifact_text)
             if llm_items:
-                return llm_items
-        except (LocalLLMError, ValidationError):
-            pass
+                return llm_items, ExtractionDiagnostics(extraction_method="local_llm")
+            fallback_reason = "Local LLM returned no extractable memory objects; falling back to heuristic extraction."
+        except (LocalLLMError, ValidationError) as exc:
+            fallback_reason = str(exc)
 
     sequence_map = _segment_sequence_map(chunks)
     artifact_timestamp = _infer_artifact_timestamp(artifact, artifact_text)
@@ -529,11 +540,12 @@ def extract_memory_candidates(chunks: list[str], artifact: Artifact, artifact_te
                 confidence_score=round(confidence, 2),
                 event_timestamp=_extract_segment_timestamp(normalized_text, artifact_timestamp),
                 topic_key=topic_key,
+                extraction_method="heuristic",
                 owner_hint=_extract_owner_hint(normalized_text) if memory_type == "commitment" else None,
                 due_date=_extract_due_date_hint(normalized_text) if memory_type == "commitment" else None,
             )
         )
-    return items
+    return items, ExtractionDiagnostics(extraction_method="heuristic", fallback_reason=fallback_reason if settings.local_llm_enabled else None)
 
 
 def _create_graph_node(db: Session, *, workspace_id: str, node_type: str, entity_id: str, title_or_label: str, visibility_scope: str) -> GraphNode:
@@ -634,6 +646,7 @@ def _store_memory_item(db: Session, *, artifact: Artifact, chunk: ArtifactChunk,
         normalized_text=item.normalized_text,
         title_or_label=item.label,
         topic_key=item.topic_key,
+        extraction_method=item.extraction_method,
     )
     if item.memory_type == "decision":
         entity = model(status="active", **common_kwargs)
@@ -686,6 +699,7 @@ def _store_memory_item(db: Session, *, artifact: Artifact, chunk: ArtifactChunk,
         event_timestamp=item.event_timestamp,
         confidence_score=item.confidence_score,
         topic_key=item.topic_key,
+        extraction_method=item.extraction_method,
         status="open" if item.memory_type == "commitment" else ("active" if item.memory_type in {"decision", "assumption"} else None),
         owner_hint=item.owner_hint,
         due_date=item.due_date,
@@ -718,6 +732,7 @@ def _load_persisted_memories(db: Session, workspace_id: str) -> list[PersistedMe
                     event_timestamp=row.event_timestamp,
                     confidence_score=row.confidence_score,
                     topic_key=row.topic_key,
+                    extraction_method=getattr(row, "extraction_method", "heuristic"),
                     status=getattr(row, "status", None),
                     owner_hint=getattr(row, "owner_label", None),
                     due_date=getattr(row, "due_date", None),
@@ -932,9 +947,10 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
 
         job.stage = "structured_extraction"
         db.commit()
-        candidates = extract_memory_candidates(chunks, artifact, artifact_text)
+        candidates, extraction_diagnostics = extract_memory_candidates(chunks, artifact, artifact_text)
         chunk_by_seq = {chunk.sequence_number: chunk for chunk in stored_chunks}
         extracted_counts = {key: 0 for key in MEMORY_MODELS}
+        per_chunk_object_counts = {chunk.sequence_number: 0 for chunk in stored_chunks}
         persisted_items: list[PersistedMemory] = []
         for item in candidates:
             chunk = chunk_by_seq.get(item.sequence_number)
@@ -942,6 +958,17 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
                 continue
             persisted_items.append(_store_memory_item(db, artifact=artifact, chunk=chunk, item=item))
             extracted_counts[item.memory_type] += 1
+            per_chunk_object_counts[item.sequence_number] += 1
+
+        for chunk in stored_chunks:
+            chunk.chunk_metadata = {
+                **(chunk.chunk_metadata or {}),
+                "extraction_method": extraction_diagnostics.extraction_method,
+                "extraction_status": "completed",
+                "extracted_object_count": per_chunk_object_counts.get(chunk.sequence_number, 0),
+                "fallback_reason": extraction_diagnostics.fallback_reason,
+                "chunk_excerpt": (chunk.text[:200] + "...") if len(chunk.text) > 200 else chunk.text,
+            }
 
         job.stage = "graph_linking"
         db.commit()
@@ -952,7 +979,10 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
 
         artifact.ingestion_status = "completed"
         job.status = "completed"
-        job.detail = f"Stored {len(stored_chunks)} chunks and {sum(extracted_counts.values())} extracted memory objects"
+        job.detail = (
+            f"Stored {len(stored_chunks)} chunks and {sum(extracted_counts.values())} extracted memory objects "
+            f"using {extraction_diagnostics.extraction_method} extraction."
+        )
         db.commit()
         log_event(
             db,

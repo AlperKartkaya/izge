@@ -37,6 +37,7 @@ export interface ArtifactDetail extends ArtifactRead {
   extracted_text_preview: string | null
   chunk_count: number
   permitted_user_ids: string[]
+  chunk_provenance: ArtifactChunkProvenance[]
 }
 
 export interface IngestionJobRead {
@@ -49,6 +50,16 @@ export interface IngestionJobRead {
   detail: string | null
   created_at: string
   updated_at: string
+}
+
+export interface ArtifactChunkProvenance {
+  chunk_id: string
+  sequence_number: number
+  extraction_method: string
+  extraction_status: string
+  extracted_object_count: number
+  fallback_reason: string | null
+  chunk_excerpt: string
 }
 
 export interface EvidenceReference {
@@ -172,6 +183,10 @@ export interface MemoryDetail {
   status: string | null
   due_date: string | null
   owner_label: string | null
+  extraction_method: string
+  source_artifact_title: string | null
+  source_chunk_excerpt: string | null
+  extraction_fallback_reason: string | null
 }
 
 export interface ContradictionEvidence {

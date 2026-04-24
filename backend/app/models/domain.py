@@ -103,6 +103,7 @@ class MemoryMixin:
     normalized_text: Mapped[str] = mapped_column(Text, nullable=False)
     title_or_label: Mapped[str] = mapped_column(String(255), nullable=False)
     topic_key: Mapped[str] = mapped_column(String(255), default="general", nullable=False, index=True)
+    extraction_method: Mapped[str] = mapped_column(String(64), default="heuristic", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

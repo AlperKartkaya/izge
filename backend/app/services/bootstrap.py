@@ -24,6 +24,8 @@ def initialize_database() -> None:
             columns = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()}
             if "topic_key" not in columns:
                 connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN topic_key VARCHAR(255) NOT NULL DEFAULT 'general'")
+            if "extraction_method" not in columns:
+                connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN extraction_method VARCHAR(64) NOT NULL DEFAULT 'heuristic'")
             if table_name == "commitments" and "owner_label" not in columns:
                 connection.exec_driver_sql("ALTER TABLE commitments ADD COLUMN owner_label VARCHAR(255)")
         query_run_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(query_runs)").fetchall()}

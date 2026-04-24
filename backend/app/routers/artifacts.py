@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import Artifact, ArtifactChunk, User
-from app.schemas.api import ArtifactDetail, ArtifactPermissionUpdate, ArtifactRead, PastedTextCreate
+from app.schemas.api import ArtifactChunkProvenance, ArtifactDetail, ArtifactPermissionUpdate, ArtifactRead, PastedTextCreate
 from app.config import get_settings
 from app.services.audit import log_event
 from app.services.permissions import list_permitted_user_ids, require_admin, require_artifact_access, set_artifact_permissions
@@ -119,12 +119,25 @@ def get_artifact(artifact_id: str, current_user: User = Depends(get_current_user
     if artifact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
     require_artifact_access(db, artifact, current_user)
-    chunk_count = db.query(ArtifactChunk).filter(ArtifactChunk.artifact_id == artifact.artifact_id).count()
+    chunks = db.scalars(select(ArtifactChunk).where(ArtifactChunk.artifact_id == artifact.artifact_id).order_by(ArtifactChunk.sequence_number.asc())).all()
+    chunk_count = len(chunks)
     return ArtifactDetail(
         **ArtifactRead.model_validate(artifact).model_dump(),
         extracted_text_preview=(artifact.extracted_text or "")[:500] or None,
         chunk_count=chunk_count,
         permitted_user_ids=list_permitted_user_ids(db, artifact.artifact_id),
+        chunk_provenance=[
+            ArtifactChunkProvenance(
+                chunk_id=chunk.chunk_id,
+                sequence_number=chunk.sequence_number,
+                extraction_method=str((chunk.chunk_metadata or {}).get("extraction_method", "pending")),
+                extraction_status=str((chunk.chunk_metadata or {}).get("extraction_status", "pending")),
+                extracted_object_count=int((chunk.chunk_metadata or {}).get("extracted_object_count", 0)),
+                fallback_reason=(chunk.chunk_metadata or {}).get("fallback_reason"),
+                chunk_excerpt=str((chunk.chunk_metadata or {}).get("chunk_excerpt") or (chunk.text[:200] + "..." if len(chunk.text) > 200 else chunk.text)),
+            )
+            for chunk in chunks
+        ],
     )
 
 

@@ -107,6 +107,14 @@ export function MemoryDetailPage() {
               <p className="section-label">Evidence span</p>
               <p className="muted-copy">{detail.evidence_span ?? 'No explicit evidence span recorded.'}</p>
             </div>
+
+            <div className="panel-subtle stack-sm">
+              <p className="section-label">Extraction provenance</p>
+              <p className="table-secondary">Method: {formatLabel(detail.extraction_method)}</p>
+              {detail.source_artifact_title ? <p className="table-secondary">Artifact: {detail.source_artifact_title}</p> : null}
+              {detail.source_chunk_excerpt ? <p className="muted-copy">{detail.source_chunk_excerpt}</p> : null}
+              {detail.extraction_fallback_reason ? <p className="table-secondary">Fallback: {detail.extraction_fallback_reason}</p> : null}
+            </div>
           </div>
         </Panel>
       ) : null}

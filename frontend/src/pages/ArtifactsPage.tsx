@@ -350,6 +350,23 @@ export function ArtifactsPage() {
                 <p className="section-label">Extracted text preview</p>
                 <p className="evidence-block">{selectedArtifact.extracted_text_preview || 'No extracted text available yet.'}</p>
               </div>
+              <div className="panel-subtle stack-sm">
+                <p className="section-label">Chunk extraction provenance</p>
+                {selectedArtifact.chunk_provenance.length === 0 ? (
+                  <p className="muted-copy">No chunk-level provenance is available until ingestion has processed this artifact.</p>
+                ) : (
+                  selectedArtifact.chunk_provenance.map((chunk) => (
+                    <article key={chunk.chunk_id} className="panel-subtle stack-sm">
+                      <p className="table-primary">Chunk {chunk.sequence_number}</p>
+                      <p className="table-secondary">
+                        Method {chunk.extraction_method} · Status {chunk.extraction_status} · Objects {chunk.extracted_object_count}
+                      </p>
+                      <p className="muted-copy">{chunk.chunk_excerpt}</p>
+                      {chunk.fallback_reason ? <p className="table-secondary">Fallback: {chunk.fallback_reason}</p> : null}
+                    </article>
+                  ))
+                )}
+              </div>
               {selectedArtifact.visibility_scope === 'restricted' ? (
                 <div className="panel-subtle">
                   <p className="section-label">Permitted user IDs</p>
