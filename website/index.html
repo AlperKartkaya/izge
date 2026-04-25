@@ -29,6 +29,7 @@
       </a>
       <nav class="top-nav" aria-label="Site navigation">
         <a href="#tension">Anti-category</a>
+        <a href="#scenario">Scenario</a>
         <a href="#system">System</a>
         <a href="#modes">Modes</a>
         <a href="#manifesto">Manifesto</a>
@@ -105,6 +106,115 @@
           <p class="strike-card" data-reveal>Not chat over files.</p>
           <p class="strike-card" data-reveal>Not a PM copilot.</p>
           <p class="truth-card" data-reveal>A system that remembers why decisions happened.</p>
+        </div>
+      </section>
+
+      <section id="scenario" class="use-case scene scene-pin scenario-story" data-scenario-section data-active-step="0" aria-labelledby="scenario-title">
+        <div class="section-heading scenario-heading" data-reveal>
+          <p class="kicker">Use case scenario</p>
+          <h2 id="scenario-title">Watch a decision come back to life.</h2>
+          <p>
+            Upload the fragments. Izge reconstructs what was decided, why it happened, what later contradicted it,
+            and what should happen next.
+          </p>
+        </div>
+
+        <div class="scenario-layout">
+          <div class="scenario-stage" aria-hidden="true">
+            <div class="scenario-stage-label">
+              <span>Evidence reconstruction</span>
+              <i></i>
+            </div>
+
+            <div class="scenario-artifacts">
+              <article class="scenario-doc doc-roadmap">
+                <span>roadmap_notes.md</span>
+                <strong>Delay self-serve onboarding to Q3.</strong>
+              </article>
+              <article class="scenario-doc doc-planning">
+                <span>q2_planning.pdf</span>
+                <strong>Reopen late-Q2 launch scope.</strong>
+              </article>
+              <article class="scenario-doc doc-review">
+                <span>launch_review.txt</span>
+                <strong>Manual onboarding capacity is strained.</strong>
+              </article>
+              <article class="scenario-doc doc-paste">
+                <span>pasted meeting excerpt</span>
+                <strong>Security approval still unresolved.</strong>
+              </article>
+            </div>
+
+            <div class="scenario-extraction">
+              <span class="extract-tag tag-decision">Decision</span>
+              <span class="extract-tag tag-assumption">Assumption</span>
+              <span class="extract-tag tag-constraint">Constraint</span>
+              <span class="extract-tag tag-commitment">Commitment</span>
+              <span class="extract-tag tag-outcome">Outcome</span>
+            </div>
+
+            <div class="scenario-graph">
+              <svg viewBox="0 0 720 460" preserveAspectRatio="none" aria-hidden="true">
+                <path class="line line-based" d="M176 122 C270 145, 300 202, 360 216" />
+                <path class="line line-constrained" d="M172 322 C260 290, 312 246, 360 226" />
+                <path class="line line-contradiction" d="M394 220 C505 214, 542 132, 590 116" />
+                <path class="line line-action" d="M390 246 C462 310, 508 338, 590 346" />
+              </svg>
+              <article class="graph-node graph-decision">
+                <span>Decision</span>
+                <strong>Self-serve onboarding delayed to Q3</strong>
+              </article>
+              <article class="graph-node graph-assumption">
+                <span>Based on</span>
+                <strong>Activation instrumentation not ready</strong>
+              </article>
+              <article class="graph-node graph-constraint">
+                <span>Constrained by</span>
+                <strong>Manual onboarding capacity</strong>
+              </article>
+              <article class="graph-node graph-conflict">
+                <span>Later plan</span>
+                <strong>Reintroduce launch in late Q2</strong>
+              </article>
+            </div>
+
+            <div class="scenario-action-card">
+              <span>Evidence-grounded next move</span>
+              <strong>Schedule activation-readiness review before reopening launch scope.</strong>
+              <ul>
+                <li>Resolve security approval dependency.</li>
+                <li>Revalidate manual onboarding capacity assumption.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="scenario-scroll-panels" aria-label="Decision reconstruction steps">
+            <article class="scenario-panel" data-scenario-step="0" data-reveal>
+              <p class="kicker">01 / Ingest the fragments</p>
+              <h3>A messy artifact pile enters the record.</h3>
+              <p>Roadmap notes, a planning PDF, a launch review, and a pasted meeting excerpt arrive as evidence-bearing sources.</p>
+            </article>
+            <article class="scenario-panel" data-scenario-step="1" data-reveal>
+              <p class="kicker">02 / Extract the memory</p>
+              <h3>The fragments become institutional memory objects.</h3>
+              <p>Izge extracts decisions, assumptions, constraints, commitments, and outcomes without turning the product into chat over files.</p>
+            </article>
+            <article class="scenario-panel" data-scenario-step="2" data-reveal>
+              <p class="kicker">03 / Rebuild the lineage</p>
+              <h3>The original reasoning becomes visible again.</h3>
+              <p>The Q3 delay connects to activation instrumentation and manual onboarding capacity, making the decision inspectable.</p>
+            </article>
+            <article class="scenario-panel" data-scenario-step="3" data-reveal>
+              <p class="kicker">04 / Surface the contradiction</p>
+              <h3>The record starts arguing with the new plan.</h3>
+              <p>A later late-Q2 launch proposal collides with the prior Q3 decision. The conflict is evidence-linked, not inferred from vibes.</p>
+            </article>
+            <article class="scenario-panel" data-scenario-step="4" data-reveal>
+              <p class="kicker">05 / Recommend the next move</p>
+              <h3>The action is serious because the evidence is visible.</h3>
+              <p>Izge recommends readiness review, security approval resolution, and assumption revalidation before scope reopens.</p>
+            </article>
+          </div>
         </div>
       </section>
 

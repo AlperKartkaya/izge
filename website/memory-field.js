@@ -4,6 +4,7 @@ const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)
 const canvas = document.querySelector('#memory-field');
 const context = canvas?.getContext('2d');
 const scenes = Array.from(document.querySelectorAll('.scene'));
+const scenarioSections = Array.from(document.querySelectorAll('[data-scenario-section]'));
 let width = 0;
 let height = 0;
 let nodes = [];
@@ -89,6 +90,32 @@ function updateScroll() {
     scene.style.setProperty('--scene-progress', sceneProgress.toFixed(4));
     scene.style.setProperty('--scene-presence', presence.toFixed(4));
     scene.classList.toggle('is-current-scene', sceneProgress > 0.18 && sceneProgress < 0.86);
+  });
+
+  scenarioSections.forEach(section => {
+    const rect = section.getBoundingClientRect();
+    const rawProgress = (window.innerHeight * 0.45 - rect.top) / Math.max(rect.height - window.innerHeight * 0.3, 1);
+    const scenarioProgress = Math.min(1, Math.max(0, rawProgress));
+    const panels = Array.from(section.querySelectorAll('[data-scenario-step]'));
+    let activeIndex = 0;
+    let activeDistance = Number.POSITIVE_INFINITY;
+
+    panels.forEach((panel, index) => {
+      const panelRect = panel.getBoundingClientRect();
+      const panelCenter = panelRect.top + panelRect.height * 0.5;
+      const distance = Math.abs(panelCenter - window.innerHeight * 0.5);
+      if (distance < activeDistance) {
+        activeDistance = distance;
+        activeIndex = index;
+      }
+    });
+
+    if (rect.top > window.innerHeight * 0.62) activeIndex = 0;
+    if (rect.bottom < window.innerHeight * 0.42) activeIndex = panels.length - 1;
+
+    section.dataset.activeStep = String(activeIndex);
+    section.style.setProperty('--scenario-progress', scenarioProgress.toFixed(4));
+    panels.forEach((panel, index) => panel.classList.toggle('is-active', index === activeIndex));
   });
 }
 
