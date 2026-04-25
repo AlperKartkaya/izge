@@ -1,0 +1,22 @@
+[Unit]
+Description=Izge FastAPI backend
+After=network.target
+
+[Service]
+Type=simple
+User=izge
+Group=izge
+WorkingDirectory=/srv/izge/current/backend
+EnvironmentFile=/etc/izge/backend.env
+ExecStart=/srv/izge/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+# Demo-safe hardening. Keep write access available through /srv/izge/data.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/srv/izge/data
+
+[Install]
+WantedBy=multi-user.target

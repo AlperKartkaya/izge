@@ -27,6 +27,7 @@ Keep these files at the root of `docs/` because project prompts and repo guidanc
 - `DECISION_GRAPH_SPEC.md`
 - `API_SPEC.md`
 - `SECURITY_GOVERNANCE.md`
+- `DEPLOYMENT_MVP.md`
 
 ### UX, evaluation, and implementation
 

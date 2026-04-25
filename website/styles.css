@@ -1060,6 +1060,30 @@ h3 {
   filter: blur(0);
 }
 
+.layers .layer-card[data-reveal],
+.layers .layer-card[data-reveal].is-visible {
+  filter: blur(0);
+}
+
+.layers .layer-card:nth-child(1)[data-reveal],
+.layers .layer-card:nth-child(1)[data-reveal].is-visible {
+  transform: translateY(0) rotateX(0deg);
+}
+
+.layers .layer-card:nth-child(2)[data-reveal],
+.layers .layer-card:nth-child(2)[data-reveal].is-visible {
+  transform: translateY(-26px) scale(.96);
+}
+
+.layers .layer-card:nth-child(3)[data-reveal],
+.layers .layer-card:nth-child(3)[data-reveal].is-visible {
+  transform: translateY(-52px) scale(.92);
+}
+
+.layers .layer-card[data-reveal].is-visible {
+  opacity: 1;
+}
+
 @keyframes trace { to { stroke-dashoffset: -120; } }
 @keyframes tape { from { transform: translateX(0); } to { transform: translateX(-120%); } }
 @keyframes breathe { from { transform: scale(.95); opacity: .38; } to { transform: scale(1.08); opacity: .88; } }
