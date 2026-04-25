@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-DEFAULT_HOST="52.29.117.150"
-HOST="${IZGE_EC2_HOST:-$DEFAULT_HOST}"
+HOST="${IZGE_EC2_HOST:-}"
 USER_NAME="${IZGE_EC2_USER:-ubuntu}"
 SSH_KEY="${IZGE_SSH_KEY:-}"
 REMOTE_RELEASE="${IZGE_REMOTE_RELEASE:-/tmp/izge-release}"
@@ -18,11 +17,10 @@ Usage: deploy/redeploy-ec2.sh [options]
 Redeploy the current Izge repo to the MVP EC2 host.
 
 Defaults:
-  host: 52.29.117.150
   user: ubuntu
 
 Options:
-  --host HOST              EC2 host or IP. Default: 52.29.117.150
+  --host HOST              EC2 host or public IP. Required unless IZGE_EC2_HOST is set.
   --user USER              SSH user. Default: ubuntu
   -i, --identity-file KEY  SSH private key path. Or set IZGE_SSH_KEY.
   --skip-local-checks      Skip local JS/static/git checks before upload.
@@ -31,9 +29,9 @@ Options:
   -h, --help               Show this help.
 
 Examples:
-  deploy/redeploy-ec2.sh -i ~/.ssh/izge.pem
-  IZGE_SSH_KEY=~/.ssh/izge.pem deploy/redeploy-ec2.sh
-  deploy/redeploy-ec2.sh --host 52.29.117.150 --user ubuntu --run-eval
+  deploy/redeploy-ec2.sh --host EC2_PUBLIC_IP -i ~/.ssh/izge.pem
+  IZGE_EC2_HOST=EC2_PUBLIC_IP IZGE_SSH_KEY=~/.ssh/izge.pem deploy/redeploy-ec2.sh
+  deploy/redeploy-ec2.sh --host EC2_PUBLIC_IP --user ubuntu --run-eval
 USAGE
 }
 
@@ -62,7 +60,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$HOST" ]] || fail "Host is required"
+[[ -n "$HOST" ]] || fail "Host is required. Pass --host EC2_PUBLIC_IP or set IZGE_EC2_HOST."
 [[ -n "$USER_NAME" ]] || fail "SSH user is required"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -130,6 +128,27 @@ set -Eeuo pipefail
 
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 warn() { printf '\n\033[1;33mWARN: %s\033[0m\n' "$*" >&2; }
+show_backend_logs() {
+  warn "Backend did not become healthy. Recent systemd status/logs follow."
+  sudo systemctl status izge-backend --no-pager -l || true
+  sudo journalctl -u izge-backend -n 120 --no-pager || true
+}
+wait_for_url() {
+  url="$1"
+  label="$2"
+  attempts="${3:-30}"
+  delay="${4:-2}"
+
+  for attempt in $(seq 1 "$attempts"); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      printf '%s healthy after %s attempt(s)\n' "$label" "$attempt"
+      return 0
+    fi
+    sleep "$delay"
+  done
+
+  return 1
+}
 
 : "${REMOTE_RELEASE:=/tmp/izge-release}"
 : "${REMOTE_APP_ROOT:=/srv/izge/current}"
@@ -150,18 +169,23 @@ sudo -u izge /srv/izge/venv/bin/pip install -e "$REMOTE_APP_ROOT/backend"
 log "Restarting backend"
 sudo systemctl daemon-reload
 sudo systemctl restart izge-backend
-sudo systemctl is-active --quiet izge-backend
-curl -fsS http://127.0.0.1:8000/health >/dev/null
+if ! sudo systemctl is-active --quiet izge-backend; then
+  show_backend_logs
+  exit 1
+fi
+if ! wait_for_url http://127.0.0.1:8000/health "backend" 45 2; then
+  show_backend_logs
+  exit 1
+fi
 
 log "Publishing marketing website"
 sudo rsync -a --delete "$REMOTE_APP_ROOT/website/" /var/www/izge/website/
 
 log "Building frontend"
-cd "$REMOTE_APP_ROOT/frontend"
-if sudo -u izge npm ci; then
-  sudo -u izge npm run build
+if sudo -u izge bash -lc "cd '$REMOTE_APP_ROOT/frontend' && npm ci && npm run build"; then
+  printf 'frontend built as izge user\n'
 else
-  warn "sudo -u izge npm ci failed; falling back to root npm install/build and repairing ownership"
+  warn "izge-user npm build failed; falling back to root npm install/build and repairing ownership"
   sudo bash -lc "cd '$REMOTE_APP_ROOT/frontend' && npm install && npm run build"
   sudo chown -R izge:izge "$REMOTE_APP_ROOT/frontend"
 fi
@@ -175,9 +199,9 @@ sudo nginx -t
 sudo systemctl reload nginx
 
 log "Remote smoke checks"
-curl -fsSI -H 'Host: izge.dev' http://127.0.0.1/ >/dev/null
-curl -fsSI -H 'Host: app.izge.dev' http://127.0.0.1/ >/dev/null
-curl -fsS -H 'Host: app.izge.dev' http://127.0.0.1/health >/dev/null
+curl -fsSI --retry 10 --retry-connrefused --retry-delay 2 -H 'Host: izge.dev' http://127.0.0.1/ >/dev/null
+curl -fsSI --retry 10 --retry-connrefused --retry-delay 2 -H 'Host: app.izge.dev' http://127.0.0.1/ >/dev/null
+curl -fsS --retry 10 --retry-connrefused --retry-delay 2 -H 'Host: app.izge.dev' http://127.0.0.1/health >/dev/null
 
 if [[ "$RUN_EVAL" == "1" ]]; then
   log "Running isolated backend seed eval"
@@ -192,9 +216,9 @@ REMOTE
 
 if [[ "$SKIP_PUBLIC_SMOKE" -eq 0 ]]; then
   log "Public smoke checks"
-  curl -fsSI https://izge.dev >/dev/null
-  curl -fsSI https://app.izge.dev >/dev/null
-  curl -fsS https://app.izge.dev/health >/dev/null
+  curl -fsSI --retry 10 --retry-connrefused --retry-delay 2 https://izge.dev >/dev/null
+  curl -fsSI --retry 10 --retry-connrefused --retry-delay 2 https://app.izge.dev >/dev/null
+  curl -fsS --retry 10 --retry-connrefused --retry-delay 2 https://app.izge.dev/health >/dev/null
 else
   warn "Skipping public smoke checks"
 fi

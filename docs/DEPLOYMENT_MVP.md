@@ -187,32 +187,42 @@ Then in the browser:
 For normal project changes, use the checked-in redeploy script from your local machine:
 
 ```sh
-deploy/redeploy-ec2.sh -i /path/to/your-key.pem
+deploy/redeploy-ec2.sh --host EC2_PUBLIC_IP -i /path/to/your-key.pem
 ```
 
-The script defaults to:
+The script does not hardcode the EC2 address. Pass the host the same way you pass
+the SSH key, or set it through `IZGE_EC2_HOST`.
+
+Script defaults:
 
 ```txt
-host: EC2_PUBLIC_IP
 user: ubuntu
 ```
 
 It uploads the repo, refreshes backend dependencies, restarts `izge-backend`,
 publishes `website/`, builds and publishes `frontend/dist/`, reloads nginx,
-and runs smoke checks. Useful variants:
+and runs smoke checks. The backend health check waits for Uvicorn to bind
+`127.0.0.1:8000`; if it still fails, the script prints recent
+`izge-backend` systemd logs before exiting. The frontend build runs from inside
+`sudo -u izge bash -lc 'cd /srv/izge/current/frontend && ...'` so restrictive
+`/srv/izge` permissions do not block the deploy SSH user; if that build fails,
+the script falls back to a root `npm install && npm run build` and repairs
+ownership afterward.
+
+Useful variants:
 
 ```sh
 # If your key is already loaded into ssh-agent or ~/.ssh/config:
-deploy/redeploy-ec2.sh
+deploy/redeploy-ec2.sh --host EC2_PUBLIC_IP
 
 # Run the isolated backend demo eval after publishing:
-deploy/redeploy-ec2.sh -i /path/to/your-key.pem --run-eval
+deploy/redeploy-ec2.sh --host EC2_PUBLIC_IP -i /path/to/your-key.pem --run-eval
 
 # Override host/user:
 deploy/redeploy-ec2.sh --host EC2_PUBLIC_IP --user ubuntu -i /path/to/your-key.pem
 
 # Environment-variable form:
-IZGE_SSH_KEY=/path/to/your-key.pem deploy/redeploy-ec2.sh
+IZGE_EC2_HOST=EC2_PUBLIC_IP IZGE_SSH_KEY=/path/to/your-key.pem deploy/redeploy-ec2.sh
 ```
 
 The manual loop below is kept as a fallback/debug reference.

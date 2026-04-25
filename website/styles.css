@@ -29,8 +29,9 @@ body {
   margin: 0;
   color: var(--white);
   background:
-    radial-gradient(circle at 18% 12%, rgba(16, 33, 23, 0.72), transparent 34rem),
-    radial-gradient(circle at 82% 3%, rgba(14, 28, 43, 0.88), transparent 38rem),
+    radial-gradient(circle at 38% 12%, rgba(216, 220, 221, 0.075), transparent 24rem),
+    radial-gradient(circle at 18% 12%, rgba(95, 117, 99, 0.58), transparent 34rem),
+    radial-gradient(circle at 82% 3%, rgba(14, 28, 43, 0.98), transparent 38rem),
     linear-gradient(180deg, var(--black), var(--blue-950) 38%, var(--brown-950) 100%);
   font-family: var(--body);
   line-height: 1.55;
@@ -42,7 +43,7 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(circle at center, transparent 0 48%, rgba(0, 0, 0, 0.56) 100%);
+  background: radial-gradient(circle at center, transparent 0 58%, rgba(0, 0, 0, 0.42) 100%);
   z-index: -1;
 }
 
@@ -55,7 +56,7 @@ body::before {
 
 #memory-field {
   z-index: -3;
-  opacity: 0.72;
+  opacity: 0.84;
 }
 
 .grain {
@@ -232,6 +233,7 @@ body::before {
   align-items: center;
   min-height: 100vh;
   padding-top: 150px;
+  opacity: 1;
 }
 
 .kicker {
@@ -1048,6 +1050,13 @@ h3 {
   transform: translate3d(0, 42px, 0) scale(.985);
   filter: blur(10px);
   transition: opacity 900ms var(--ease), transform 900ms var(--ease), filter 900ms var(--ease);
+}
+
+.site-header[data-reveal],
+.scene-hero [data-reveal] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  filter: blur(0);
 }
 
 .scene-left [data-reveal] { transform: translate3d(-54px, 20px, 0) scale(.985); }
