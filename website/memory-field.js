@@ -84,12 +84,15 @@ function updateScroll() {
     const rect = scene.getBoundingClientRect();
     const rawProgress = (window.innerHeight - rect.top) / (window.innerHeight + rect.height);
     const sceneProgress = Math.min(1, Math.max(0, rawProgress));
-    const distanceFromCenter = Math.abs(sceneProgress - 0.52);
-    const presence = Math.min(1, Math.max(0.55, 1 - distanceFromCenter * 1.15));
+    const visibleTop = Math.max(rect.top, 0);
+    const visibleBottom = Math.min(rect.bottom, window.innerHeight);
+    const visiblePixels = Math.max(0, visibleBottom - visibleTop);
+    const visibility = Math.min(1, visiblePixels / Math.min(rect.height, window.innerHeight));
+    const presence = Math.min(1, Math.max(0.62, 0.62 + visibility * 0.38));
 
     scene.style.setProperty('--scene-progress', sceneProgress.toFixed(4));
     scene.style.setProperty('--scene-presence', presence.toFixed(4));
-    scene.classList.toggle('is-current-scene', sceneProgress > 0.18 && sceneProgress < 0.86);
+    scene.classList.toggle('is-current-scene', visibility > 0.48);
   });
 
   scenarioSections.forEach(section => {
@@ -128,9 +131,18 @@ const revealObserver = new IntersectionObserver(
   { threshold: 0.18, rootMargin: '0px 0px -10% 0px' },
 );
 
+function revealVisibleElements() {
+  document.querySelectorAll('[data-reveal]').forEach(element => {
+    const rect = element.getBoundingClientRect();
+    const isVisible = rect.top < window.innerHeight * 0.92 && rect.bottom > window.innerHeight * 0.04;
+    if (isVisible) element.classList.add('is-visible');
+  });
+}
+
 document.querySelectorAll('[data-reveal]').forEach(element => revealObserver.observe(element));
 window.addEventListener('resize', resizeCanvas, { passive: true });
 window.addEventListener('scroll', updateScroll, { passive: true });
 resizeCanvas();
 updateScroll();
+revealVisibleElements();
 draw();
