@@ -5,6 +5,10 @@ const canvas = document.querySelector('#memory-field');
 const context = canvas?.getContext('2d');
 const scenes = Array.from(document.querySelectorAll('.scene'));
 const scenarioSections = Array.from(document.querySelectorAll('[data-scenario-section]'));
+const navLinks = Array.from(document.querySelectorAll('.top-nav a[href^="#"]'));
+const navTargets = navLinks
+  .map(link => ({ link, target: document.querySelector(link.getAttribute('href')) }))
+  .filter(item => item.target);
 let width = 0;
 let height = 0;
 let nodes = [];
@@ -93,6 +97,30 @@ function updateScroll() {
     scene.style.setProperty('--scene-progress', sceneProgress.toFixed(4));
     scene.style.setProperty('--scene-presence', presence.toFixed(4));
     scene.classList.toggle('is-current-scene', visibility > 0.48);
+  });
+
+  let activeNav = null;
+  let activeNavScore = 0;
+  navTargets.forEach(({ link, target }) => {
+    const rect = target.getBoundingClientRect();
+    const visibleTop = Math.max(rect.top, 0);
+    const visibleBottom = Math.min(rect.bottom, window.innerHeight);
+    const visiblePixels = Math.max(0, visibleBottom - visibleTop);
+    const visibility = Math.min(1, visiblePixels / Math.min(rect.height, window.innerHeight));
+    const centerDistance = Math.abs(rect.top + rect.height * 0.5 - window.innerHeight * 0.5);
+    const centerScore = 1 - Math.min(1, centerDistance / window.innerHeight);
+    const score = visibility * 0.72 + centerScore * 0.28;
+
+    if (visibility > 0.08 && score > activeNavScore) {
+      activeNav = link;
+      activeNavScore = score;
+    }
+  });
+  navLinks.forEach(link => {
+    const isActive = link === activeNav;
+    link.classList.toggle('is-active', isActive);
+    if (isActive) link.setAttribute('aria-current', 'true');
+    else link.removeAttribute('aria-current');
   });
 
   scenarioSections.forEach(section => {

@@ -157,8 +157,35 @@ body::before {
   text-transform: uppercase;
 }
 
-.top-nav a { color: var(--mist); }
-.top-nav a:hover, .nav-cta:hover { color: var(--white); }
+.top-nav a {
+  position: relative;
+  color: var(--mist);
+  transition: color 220ms var(--ease), text-shadow 220ms var(--ease);
+}
+.top-nav a::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -8px;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--white), transparent);
+  opacity: 0;
+  transform: scaleX(.42);
+  transition: opacity 220ms var(--ease), transform 220ms var(--ease);
+}
+.top-nav a:hover,
+.top-nav a.is-active,
+.top-nav a[aria-current='true'],
+.nav-cta:hover {
+  color: var(--white);
+  text-shadow: 0 0 18px rgba(216, 220, 221, 0.26);
+}
+.top-nav a.is-active::after,
+.top-nav a[aria-current='true']::after {
+  opacity: .86;
+  transform: scaleX(1);
+}
 
 .nav-cta {
   padding: 9px 12px;
@@ -640,7 +667,7 @@ h3 {
   stroke-width: 1.35;
   stroke-dasharray: 520;
   stroke-dashoffset: 520;
-  transition: stroke-dashoffset 950ms var(--ease), stroke 500ms var(--ease), filter 500ms var(--ease);
+  transition: stroke-dashoffset 950ms var(--ease), stroke 500ms var(--ease), filter 500ms var(--ease), opacity 500ms var(--ease);
 }
 
 .graph-node {
@@ -669,6 +696,7 @@ h3 {
 .graph-assumption { top: 118px; left: 8%; }
 .graph-constraint { bottom: 120px; left: 7%; }
 .graph-conflict { top: 105px; right: 7%; border-color: rgba(125,109,80,.38); }
+.graph-dependency { right: 7%; bottom: 105px; border-color: rgba(95,117,99,.42); }
 
 .scenario-story[data-active-step='2'] .scenario-graph,
 .scenario-story[data-active-step='3'] .scenario-graph,
@@ -690,6 +718,16 @@ h3 {
   stroke-dashoffset: 0;
 }
 
+.scenario-story[data-active-step='2'] .line-contradiction {
+  opacity: 0;
+  stroke-dashoffset: 520;
+}
+
+.scenario-story[data-active-step='2'] .graph-conflict {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+}
+
 .scenario-story[data-active-step='3'] .line-contradiction,
 .scenario-story[data-active-step='4'] .line-contradiction {
   stroke: rgba(138, 91, 84, 0.92);
@@ -705,25 +743,37 @@ h3 {
 
 .scenario-action-card {
   z-index: 5;
-  inset: auto 34px 34px auto;
-  width: min(410px, calc(100% - 68px));
-  padding: 22px;
-  border: 1px solid rgba(95,117,99,.62);
-  background: rgba(6, 11, 18, 0.9);
-  box-shadow: 0 34px 120px rgba(0,0,0,.44);
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  width: min(500px, calc(100% - 68px));
+  padding: 28px;
+  border: 1px solid rgba(216, 220, 221, 0.5);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(216, 220, 221, 0.18), transparent 16rem),
+    linear-gradient(180deg, rgba(16, 33, 23, 0.94), rgba(6, 11, 18, 0.96) 58%, rgba(24, 20, 18, 0.9));
+  box-shadow:
+    0 0 0 1px rgba(95, 117, 99, 0.22) inset,
+    0 0 72px rgba(216, 220, 221, 0.13),
+    0 34px 120px rgba(0,0,0,.54);
   opacity: 0;
-  transform: translate3d(0, 24px, 0) scale(.98);
+  transform: translate3d(-50%, -42%, 0) scale(.96);
   filter: blur(8px);
   transition: opacity 820ms var(--ease), transform 820ms var(--ease), filter 820ms var(--ease);
+  text-align: center;
 }
 
-.scenario-action-card span { color: var(--green-dim); }
+.scenario-action-card span {
+  color: var(--white);
+  text-shadow: 0 0 18px rgba(216, 220, 221, 0.22);
+}
 .scenario-action-card strong {
   display: block;
   margin-top: 12px;
   color: var(--white);
   font-family: var(--display);
-  font-size: clamp(1.8rem, 3vw, 3.2rem);
+  font-size: clamp(2.15rem, 3.8vw, 4rem);
   font-weight: 400;
   letter-spacing: -0.045em;
   line-height: 0.94;
@@ -732,14 +782,22 @@ h3 {
 .scenario-action-card ul {
   display: grid;
   gap: 8px;
-  margin: 18px 0 0;
-  padding-left: 18px;
+  margin: 20px auto 0;
+  padding: 18px 0 0;
+  border-top: 1px solid rgba(216, 220, 221, 0.18);
   color: var(--paper);
+  list-style: none;
+  text-align: center;
+}
+
+.scenario-action-card li::before {
+  content: '— ';
+  color: var(--green-dim);
 }
 
 .scenario-story[data-active-step='4'] .scenario-action-card {
   opacity: 1;
-  transform: translate3d(0, 0, 0) scale(1);
+  transform: translate3d(-50%, -50%, 0) scale(1);
   filter: blur(0);
 }
 
@@ -983,6 +1041,7 @@ h3 {
   text-align: center;
 }
 .final-cta h2, .final-cta p { margin-inline: auto; }
+.final-cta .cta-row { justify-content: center; }
 
 [data-reveal] {
   opacity: 0;
@@ -1094,9 +1153,12 @@ h3 {
   .graph-assumption { top: 86px; left: 4%; }
   .graph-constraint { bottom: 266px; left: 4%; }
   .graph-conflict { top: 96px; right: 4%; }
+  .graph-dependency { right: 4%; bottom: 206px; }
   .scenario-action-card {
-    right: 14px;
-    bottom: 18px;
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
     width: calc(100% - 28px);
     padding: 18px;
   }
