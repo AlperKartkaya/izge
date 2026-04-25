@@ -40,58 +40,87 @@
     <main id="top">
       <section class="hero scene scene-hero" aria-labelledby="hero-title">
         <div class="hero-copy" data-reveal>
-          <p class="kicker">Local-first decision intelligence</p>
-          <h1 id="hero-title">Organizations do not lack information. They lack memory.</h1>
+          <p class="kicker">local-first decision intelligence</p>
+          <h1 id="hero-title">Izge reveals the hidden structure of organizational memory.</h1>
           <p class="hero-subhead">
-            Izge reconstructs what was decided, why it happened, which assumptions shaped it, what later contradicted it,
-            and what the team should do next.
+            Not chat over files. Not internal search. Izge reconstructs decisions, assumptions, contradictions, drift,
+            and next actions from the artifacts your team already leaves behind.
           </p>
           <div class="cta-row" aria-label="Primary actions">
-            <a class="button primary" href="#system">See the memory system</a>
-            <a class="button secondary" href="#manifesto">Read the belief system</a>
+            <a class="button primary" href="https://app.izge.dev">Open the app</a>
+            <a class="button secondary" href="#scenario">Watch a decision come back to life</a>
           </div>
         </div>
 
-        <div class="hero-stage" data-reveal aria-label="Izge decision intelligence preview">
-          <div class="stage-label">Live memory reconstruction</div>
-          <div class="lineage-map">
-            <article class="memory-node node-decision">
-              <span>Decision / Q2</span>
-              <strong>Prioritize onboarding redesign</strong>
-              <small>Evidence: roadmap.md · 84%</small>
-            </article>
-            <article class="memory-node node-assumption">
-              <span>Assumption</span>
-              <strong>Activation bottleneck is education</strong>
-              <small>Meeting note · 71%</small>
-            </article>
-            <article class="memory-node node-conflict">
-              <span>Contradiction detected</span>
-              <strong>New plan shifts effort to pricing</strong>
-              <small>Strategy PDF · conflict edge</small>
-            </article>
-            <article class="memory-node node-action">
-              <span>Next action</span>
-              <strong>Review rationale before reallocating sprint capacity</strong>
-              <small>Grounded in 3 evidence spans</small>
-            </article>
-            <svg class="connector-web" viewBox="0 0 620 420" preserveAspectRatio="none" aria-hidden="true">
-              <path d="M120 86 C260 110, 280 176, 365 185" />
-              <path d="M405 205 C430 260, 370 310, 302 335" />
-              <path d="M195 285 C250 245, 295 222, 365 202" />
-              <path class="hot" d="M440 190 C520 188, 535 88, 505 66" />
+        <div class="hero-stage memory-weave-stage" data-memory-weave data-active-state="0" data-reveal aria-label="Interactive memory weave: decision lineage, contradiction, and next action">
+          <div class="stage-label">Memory under tension</div>
+          <div class="weave-art" aria-hidden="true">
+            <img class="weave-image" src="./assets/hero-memory-weave.png" alt="" />
+            <div class="weave-veil"></div>
+            <div class="weave-light light-a"></div>
+            <div class="weave-light light-b"></div>
+            <div class="weave-light light-c"></div>
+            <svg class="memory-weave-svg" viewBox="0 0 900 620" preserveAspectRatio="none">
+              <path class="weave-thread thread-decision" d="M96 330 C220 270, 368 260, 472 312 C572 362, 662 330, 790 250" />
+              <path class="weave-thread thread-assumption" d="M210 114 C280 220, 334 270, 472 312 C548 336, 610 376, 734 512" />
+              <path class="weave-thread thread-constraint" d="M92 500 C190 430, 292 390, 472 312 C612 250, 720 154, 842 92" />
+              <path class="weave-thread thread-commitment" d="M250 520 C310 444, 372 360, 472 312 C556 272, 640 244, 792 300" />
+              <path class="weave-thread thread-contradiction" d="M472 312 C560 292, 650 216, 748 158" />
+              <path class="weave-thread thread-forward" d="M472 328 C544 390, 620 438, 770 486" />
             </svg>
           </div>
-          <div class="evidence-tape" aria-hidden="true">
-            <span>memory before magic</span>
-            <span>history before speculation</span>
-            <span>evidence before confidence</span>
+
+          <button class="weave-knot knot-decision" type="button" data-weave-trigger="1" style="--x: 52%; --y: 51%;" aria-label="Decision thread: delay self-serve launch to Q3"></button>
+          <button class="weave-knot knot-assumption" type="button" data-weave-trigger="2" style="--x: 36%; --y: 31%;" aria-label="Supporting structure: activation instrumentation and manual onboarding capacity"></button>
+          <button class="weave-knot knot-constraint" type="button" data-weave-trigger="2" style="--x: 27%; --y: 66%;" aria-label="Constraint boundary: manual onboarding capacity is limited"></button>
+          <button class="weave-knot knot-contradiction" type="button" data-weave-trigger="3" style="--x: 74%; --y: 27%;" aria-label="Contradiction tension: late Q2 launch conflicts with Q3 delay reasoning"></button>
+          <button class="weave-knot knot-forward" type="button" data-weave-trigger="4" style="--x: 78%; --y: 73%;" aria-label="Next-action path: schedule activation-readiness review"></button>
+
+          <div class="weave-panel" aria-live="polite">
+            <article data-weave-panel="0" class="is-active">
+              <span>Calm pattern</span>
+              <h2>Organizational memory has structure before it has answers.</h2>
+              <p>A woven field of decisions, assumptions, constraints, commitments, and outcomes waits to be made legible.</p>
+              <small>Evidence fiber: roadmap_notes.md · q2_planning.pdf · launch_review.txt · meeting excerpt</small>
+            </article>
+            <article data-weave-panel="1">
+              <span>Decision thread</span>
+              <h2>A decision is never alone.</h2>
+              <p><strong>Delay self-serve launch to Q3.</strong> Izge treats the decision as a thread with context, not a standalone note.</p>
+              <small>Memory object: Decision · source: roadmap_notes.md</small>
+            </article>
+            <article data-weave-panel="2">
+              <span>Supporting structure</span>
+              <h2>It is shaped by assumptions, constraints, commitments, and outcomes.</h2>
+              <p>Activation instrumentation is not ready. Manual onboarding capacity is limited. The weave shows why the decision held.</p>
+              <small>Memory objects: Assumption · Constraint · Commitment · Outcome</small>
+            </article>
+            <article data-weave-panel="3">
+              <span>Contradiction tension</span>
+              <h2>When history and current direction collide, Izge makes the tension visible.</h2>
+              <p>A later plan reopens launch scope in late Q2, conflicting with the prior capacity reasoning behind the Q3 delay.</p>
+              <small>Contradiction: prior decision vs. later plan · evidence-linked</small>
+            </article>
+            <article data-weave-panel="4">
+              <span>Next-action path</span>
+              <h2>Izge turns organizational memory into decision intelligence.</h2>
+              <p>Schedule activation-readiness review before reopening launch scope. Resolve security approval and revalidate capacity.</p>
+              <small>Guidance grounded in reconstructed evidence, not generic advice.</small>
+            </article>
           </div>
-          <div class="assumption-drift" aria-hidden="true">
-            <span>assumption drift</span>
-            <i></i>
-            <b></b>
-            <em></em>
+
+          <div class="weave-stepper" aria-label="Memory weave states">
+            <button type="button" data-weave-trigger="0" aria-label="Show calm pattern">01</button>
+            <button type="button" data-weave-trigger="1" aria-label="Show decision thread">02</button>
+            <button type="button" data-weave-trigger="2" aria-label="Show supporting structure">03</button>
+            <button type="button" data-weave-trigger="3" aria-label="Show contradiction tension">04</button>
+            <button type="button" data-weave-trigger="4" aria-label="Show next-action path">05</button>
+          </div>
+          <div class="weave-legend" aria-hidden="true">
+            <span class="legend-stable">stable memory</span>
+            <span class="legend-contradiction">contradiction</span>
+            <span class="legend-drift">assumption drift</span>
+            <span class="legend-next">next action</span>
           </div>
         </div>
       </section>
