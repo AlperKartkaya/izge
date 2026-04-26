@@ -168,6 +168,29 @@ function revealVisibleElements() {
   });
 }
 
+const WEAVE_LOOP_INTERVAL = 2600;
+
+function clearWeaveTimers(stage) {
+  stage._weaveTimers?.forEach(timer => window.clearTimeout(timer));
+  stage._weaveTimers = [];
+}
+
+function scheduleWeaveLoop(stage, delay = WEAVE_LOOP_INTERVAL) {
+  if (prefersReducedMotion || stage.dataset.pinned === 'true') return;
+
+  clearWeaveTimers(stage);
+  const timer = window.setTimeout(() => {
+    if (stage.dataset.pinned === 'true' || stage.dataset.hoverPaused === 'true') return;
+
+    const panels = Array.from(stage.querySelectorAll('[data-weave-panel]'));
+    const maxState = Math.max(0, panels.length - 1);
+    const currentState = Number.parseInt(stage.dataset.activeState || '0', 10) || 0;
+    setWeaveState(stage, (currentState + 1) % (maxState + 1));
+    scheduleWeaveLoop(stage);
+  }, delay);
+  stage._weaveTimers = [timer];
+}
+
 function setWeaveState(stage, nextState, options = {}) {
   const panels = Array.from(stage.querySelectorAll('[data-weave-panel]'));
   const triggers = Array.from(stage.querySelectorAll('[data-weave-trigger]'));
@@ -176,11 +199,11 @@ function setWeaveState(stage, nextState, options = {}) {
 
   if (options.userInitiated) {
     stage.dataset.userControlled = 'true';
-    stage._weaveTimers?.forEach(timer => window.clearTimeout(timer));
   }
 
   if (options.pin) {
     stage.dataset.pinned = 'true';
+    clearWeaveTimers(stage);
   }
 
   stage.dataset.activeState = String(activeState);
@@ -203,32 +226,45 @@ function initializeMemoryWeaves() {
 
     setWeaveState(stage, initialState);
 
+    const stepper = stage.querySelector('.weave-stepper');
+
+    if (supportsHover && stepper) {
+      stepper.addEventListener('pointerenter', () => {
+        stage.dataset.hoverPaused = 'true';
+        clearWeaveTimers(stage);
+      }, { passive: true });
+
+      stepper.addEventListener('pointerleave', () => {
+        stage.dataset.hoverPaused = 'false';
+        scheduleWeaveLoop(stage);
+      }, { passive: true });
+    }
+
     triggers.forEach(trigger => {
       const nextState = trigger.dataset.weaveTrigger || '0';
 
       if (supportsHover) {
-        trigger.addEventListener('pointerenter', () => setWeaveState(stage, nextState, { userInitiated: true }), { passive: true });
+        trigger.addEventListener('pointerenter', () => {
+          setWeaveState(stage, nextState, { userInitiated: true });
+        }, { passive: true });
       }
 
-      trigger.addEventListener('focus', () => setWeaveState(stage, nextState, { userInitiated: true }), { passive: true });
+      trigger.addEventListener('focus', () => {
+        stage.dataset.hoverPaused = 'true';
+        clearWeaveTimers(stage);
+        setWeaveState(stage, nextState, { userInitiated: true });
+      }, { passive: true });
+
+      trigger.addEventListener('blur', () => {
+        stage.dataset.hoverPaused = 'false';
+        scheduleWeaveLoop(stage);
+      }, { passive: true });
+
       trigger.addEventListener('click', () => setWeaveState(stage, nextState, { userInitiated: true, pin: true }));
     });
 
-    if (!prefersReducedMotion) {
-      [1, 2, 3, 4].forEach((state, index) => {
-        const timer = window.setTimeout(() => {
-          if (stage.dataset.userControlled !== 'true' && stage.dataset.pinned !== 'true') {
-            setWeaveState(stage, state);
-          }
-        }, 1400 + index * 2100);
-        timers.push(timer);
-      });
-    }
-
-    stage.addEventListener('pointerdown', () => {
-      timers.forEach(timer => window.clearTimeout(timer));
-      stage.dataset.userControlled = 'true';
-    }, { passive: true });
+    stage.dataset.hoverPaused = 'false';
+    scheduleWeaveLoop(stage);
   });
 }
 
