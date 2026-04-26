@@ -1,63 +1,61 @@
 # DECISION_GRAPH_SPEC.md
-## Institutional Memory Graph Design
+## Izge Institutional Memory Graph
 
 ## Purpose
-The decision graph is the core memory representation.
+The graph is the core memory representation.
 
 It represents:
 - decisions,
-- proposals,
 - assumptions,
 - constraints,
 - outcomes,
 - commitments,
-- conflicts,
+- contradictions,
+- drift signals,
+- supersession/reopening,
 - timelines,
-- organizational entities.
+- organizational topics and initiatives,
+- related artifacts and evidence.
 
 ## Why a graph
 Institutional memory is not linear.
-The same decision may be:
-- mentioned across many documents,
-- rooted in several assumptions,
-- constrained by older events,
-- contradicted by newer plans,
-- owned by multiple actors.
+A single decision may:
+- appear in many artifacts,
+- be grounded in several assumptions,
+- be constrained by older commitments,
+- be contradicted by later plans,
+- be reopened by a new update,
+- produce downstream outcomes and next-action implications.
 
-## Required node types
+## Core node types
 - Artifact
+- ArtifactChunk
 - Decision
-- Proposal
 - Assumption
 - Constraint
 - Outcome
 - Commitment
-- Question
-- Person
-- Team
-- Project
-- Initiative
-- Policy
-- Incident
-- Metric
+- Proposal (optional)
+- Question (optional)
+- Topic / Initiative
+- Signal (optional logical representation for surfaced contradiction/drift/action items)
 
-## Required edge types
-- MENTIONED_IN
-- DECIDED_BY
-- SUPPORTED_BY
-- CONSTRAINED_BY
-- BASED_ON
-- RESULTED_IN
-- CONTRADICTS
-- SUPERSEDES
-- REOPENS
-- OWNS
-- RELATES_TO
-- IMPACTS
-- DEPENDS_ON
-- ADDRESSES
-- LEAVES_OPEN
-- DERIVED_FROM
+## Core edge types
+- `MENTIONED_IN`
+- `BASED_ON`
+- `CONSTRAINED_BY`
+- `RESULTED_IN`
+- `RELATES_TO`
+- `CONTRADICTS`
+- `SUPERSEDES`
 
-## V1 rule
-Keep the graph semantically useful before making it visually fancy.
+## Graph requirements
+- every non-trivial reasoning output should be traceable to graph-linked evidence,
+- graph relations must remain permission-aware,
+- contradiction and drift should be modeled as explainable relational phenomena, not just text overlap,
+- newly ingested artifacts should be evaluable against existing graph state,
+- the graph should preserve continuity across recurring work such as intern handoffs, repeated initiatives, or reopened decisions.
+
+## Design rule
+The graph is not there to make the product look technical.
+It exists so the system can reconstruct memory, detect tension, and justify next actions.

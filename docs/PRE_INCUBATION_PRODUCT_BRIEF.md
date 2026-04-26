@@ -1,5 +1,5 @@
-# Izge
-## Institution Memory Engine for Organizational Decision Intelligence
+# PRE_INCUBATION_PRODUCT_BRIEF.md
+## Izge
 
 ### Product statement
 Izge is a local-first institutional memory and decision intelligence system. It reconstructs what an organization decided, why it decided it, what assumptions shaped those decisions, what later contradicted them, and what the team should do next.
@@ -14,82 +14,66 @@ It is a system for turning fragmented organizational history into usable decisio
 ### The problem
 Organizations rarely fail because information is missing. They fail because memory is broken.
 
-Critical context is scattered across roadmap notes, product strategy docs, meeting writeups, pasted text, and PDFs. Teams repeat old debates without realizing it. Assumptions that once made sense keep steering plans long after reality changed. New commitments quietly conflict with earlier decisions. Historical rationale disappears while current execution continues to depend on it.
+Critical context is scattered across roadmap notes, weekly reports, decision logs, retrospective writeups, presentations, and ad hoc updates. Teams re-litigate old questions, repeat work, reopen closed decisions, and keep acting on assumptions that no longer hold. New employees and interns inherit tasks without inheriting the reasoning that shaped them.
 
-Most tools store information or retrieve documents. They do not reconstruct institutional memory. They do not connect today’s proposal to the real history that produced it.
+Most tools store information or help users search for it. They do not reconstruct institutional memory, detect contradiction and drift, or guide the next move.
 
-### Our wedge
+### Why this matters now
+Organizations already have plenty of digital history. What they lack is a product that can turn that history into structured, inspectable reasoning without forcing sensitive data into hosted cloud AI.
+
+Local model runtimes and company-controlled infrastructure now make that possible.
+
+### The MVP wedge
 The MVP wedge is **product and roadmap history**.
 
-This is where memory failure is especially expensive. Product teams change direction quickly, accumulate many loosely documented decisions, and often lose the rationale behind them. When roadmap memory breaks, priorities drift, teams re-litigate old questions, and contradictory commitments multiply.
+The system ingests product strategy docs, roadmap notes, review notes, postmortems, weekly updates, logs, reports, and pasted text. It reconstructs structured memory objects, builds a relationship graph, detects contradiction and assumption drift, and supports evidence-backed next-action guidance.
 
-By starting here, Izge solves a sharp and demonstrable problem while preserving a broader long-term identity: this is a company about institutional memory and decision intelligence, not just product tooling.
+The MVP also supports a stronger demo moment:
+- a new conflicting artifact is submitted,
+- Izge immediately detects contradiction and/or assumption drift,
+- and returns grounded next-action guidance.
 
-### What the MVP does
-The MVP ingests **Markdown, plain text, PDF, and pasted text** and reconstructs structured memory from them. It extracts decisions, assumptions, constraints, commitments, and outcomes, stores them in a local-first graph-backed system, and supports four core forms of reasoning:
+### Why it is innovative
+Izge is not innovative because it adds AI to documents. It is innovative because it treats organizational history as a reconstructable memory layer.
 
-1. **Decision lineage** — what was decided, why, and based on what  
-2. **Contradiction analysis** — what current plans conflict with prior history  
-3. **Assumption drift detection** — which assumptions no longer seem valid  
-4. **Next-action guidance** — what the team should do now, grounded in evidence
-
-Users can type naturally, but the product remains structured internally. It classifies each question into one of these modes instead of drifting into vague open-ended chat.
-
-### Product trajectory
-Izge has a clear long-term product arc across three layers:
-
-1. **Institution Memory Engine**  
-   The foundation layer. This reconstructs organizational history into structured memory objects, evidence links, and explicit decision relationships. This is the center of the MVP.
-
-2. **Decision Guidance Layer**  
-   The next layer. This helps teams move from reconstructed history to better present-day choices. The MVP’s next-action guidance is the earliest visible slice of this layer, but the broader layer is not yet the scope of the MVP.
-
-3. **Bounded Scenario / Simulation Support**  
-   A future layer. Over time, Izge may support bounded, evidence-grounded scenario exploration around decisions and tradeoffs. This is explicitly future-facing and out of scope for the MVP.
-
-
-#### Turning Memory into Better Decisions—and Clear Futures
-
-Institution Memory Engine → **remembers how decisions were made** 
-Decision Guidance Layer → **helps teams choose better next actions**
-Simulation Support → **makes future paths easier to see**
-
-### Why this is innovative
-Izge is innovative because it does not treat internal knowledge as a bag of documents to search. It treats organizational history as a reconstructable memory layer.
-
-The core technical idea is a local-first system that combines:
-- structured memory extraction,
-- explicit graph relationships,
-- contradiction and drift analysis,
-- evidence-aware reasoning,
-- permission-aware outputs,
-- and auditability.
-
-That is a stronger technical and commercial position than generic RAG or chat-over-docs products.
-
-### Why now
-Three shifts make this timely:
-
-- Organizations already have large amounts of digital history, but still cannot reason over it well.
-- Local model runtimes make privacy-preserving reasoning on sensitive internal data newly practical.
-- Teams are tired of tool sprawl and need products that reduce confusion instead of adding more noise.
+The core idea is a local-first system that combines:
+- structured memory extraction
+- explicit relationship/graph modeling
+- contradiction and drift detection
+- ingestion-time intelligence against existing memory
+- signals surfaces for active tensions and next actions
+- evidence-aware reasoning
+- permission-aware outputs
+- trust and auditability
 
 ### Why it can win
-Izge is internationally competitive because it addresses a real, expensive, repeatable problem with a strong architectural point of view.
+Izge can win because it occupies a gap between:
+- enterprise search tools that index but do not reconstruct history,
+- AI assistants that answer but do not preserve inspectable memory,
+- and graph/memory infrastructure that is not opinionated enough to become a product.
 
 It is:
-- **innovation-oriented** because it introduces a new product category centered on institutional memory, not retrieval;
-- **high-tech** because it combines local inference, structured extraction, graph reasoning, and evidence-aware access control;
-- **commercially valuable** because poor decision memory creates repeated strategic and execution costs;
-- **marketable** because the pain is easy to explain and easy to demonstrate with real artifacts.
+- innovation-oriented, because it proposes institutional memory as a product category
+- high-tech, because it combines local inference, extraction, graph reasoning, proactive detection, and inspectable outputs
+- commercially relevant, because poor memory creates repeated strategic and execution cost
+- demoable, because the problem can be shown clearly with realistic artifacts and grounded answers
 
 ### Manifesto
-Organizations do not just need better access to documents. They need a system that remembers.
+Organizations do not just need better access to documents. They need a system that remembers how decisions were made, understands what changed, helps teams choose better next actions, and eventually makes future paths easier to see.
 
 Memory before magic.  
 History before speculation.  
 Evidence before confidence.  
 Structure before summary.  
+Guidance grounded in real organizational memory.  
 Local-first trust from day one.
 
-Izge is built on that belief.
+**Izge is built on that belief.**
+
+### Product trajectory
+Izge evolves across three layers:
+1. **Institution Memory Engine**
+2. **Decision Guidance Layer**
+3. **Later bounded Scenario Support**
+
+The MVP is centered on the first layer and the earliest practical slice of the second. Scenario support is future-facing and intentionally out of current implementation scope.

@@ -1,42 +1,102 @@
 # SYSTEM_ARCHITECTURE.md
-## Institution Memory Engine
+## Izge
 
 ## High-level architecture
 The system consists of these major layers:
 1. Interface Layer
 2. Application Layer
-3. Extraction & Memory Layer
-4. Decision Graph Layer
-5. Reasoning & Guidance Layer
-6. Governance Layer
-7. Infrastructure Layer
+3. Intake & Ingestion Layer
+4. Extraction & Memory Layer
+5. Institutional Graph Layer
+6. Reasoning & Guidance Layer
+7. Governance Layer
+8. Infrastructure Layer
 
 ## Layer responsibilities
-### Interface Layer
-Handles upload, queries, results, graph/timeline views, and admin controls.
 
-### Application Layer
-Handles API routing, session management, task lifecycle, ingestion jobs, and result delivery.
+### 1. Interface Layer
+Handles:
+- landing/product surfaces,
+- admin workspace surfaces,
+- member contribution and query surfaces,
+- result views,
+- signals views,
+- graph/timeline views,
+- admin controls.
 
-### Extraction & Memory Layer
-Parses artifacts and extracts decisions, assumptions, constraints, commitments, outcomes, and unresolved questions.
+### 2. Application Layer
+Handles:
+- API routing,
+- sessions,
+- user/role enforcement,
+- ingestion job lifecycle,
+- query lifecycle,
+- signal surfacing.
 
-### Decision Graph Layer
-Builds graph nodes and edges, links timelines, creates contradiction edges, and tracks assumption drift signals.
+### 3. Intake & Ingestion Layer
+Handles:
+- artifact upload,
+- pasted text submission,
+- member-submitted logs/reports/notes,
+- intake state,
+- parsing and chunking.
 
-### Reasoning & Guidance Layer
-Answers memory queries, generates contradiction summaries, detects stale assumptions, and recommends next actions.
+### 4. Extraction & Memory Layer
+Handles:
+- structured extraction of decisions, assumptions, constraints, outcomes, commitments,
+- topic normalization,
+- provenance capture,
+- confidence assignment.
 
-### Governance Layer
-Enforces workspace permissions, file access rules, and audit logging.
+### 5. Institutional Graph Layer
+Handles:
+- explicit graph persistence,
+- typed relationships,
+- continuity across time,
+- contradictions, drift-supporting linkages, supersession/reopening structures.
 
-### Infrastructure Layer
-Provides local model runtime, relational database, graph store or graph abstraction, vector store, file storage, and indexing jobs.
+### 6. Reasoning & Guidance Layer
+Handles:
+- query classification,
+- decision lineage,
+- contradiction analysis,
+- assumption drift detection,
+- next-action guidance,
+- proactive evaluation of newly ingested artifacts against existing memory,
+- signal generation.
 
-## Key architectural rules
-- do not bury the whole system in one giant LLM prompt,
-- preserve structured memory objects,
-- preserve graph structure explicitly,
-- keep retrieval distinct from reasoning,
-- keep evidence references attached,
-- keep traceability first-class.
+### 7. Governance Layer
+Handles:
+- role-based access,
+- permission-aware evidence,
+- audit logging,
+- trust surfaces.
+
+### 8. Infrastructure Layer
+Handles:
+- local filesystem storage,
+- SQLite persistence,
+- central company-controlled inference runtime,
+- future compatibility with optional edge-side model participation.
+
+## Architectural rules
+- memory before magic,
+- raw documents are not the primary reasoning substrate,
+- graph and memory are first-class, not decorative,
+- proactive ingestion-time intelligence is part of the product, not a bolt-on,
+- central local inference is the MVP default,
+- future edge participation is optional and non-blocking,
+- trust and inspectability are product requirements.
+
+## Complexity placement
+Complexity should live in:
+- extraction quality,
+- graph linkage,
+- contradiction/drift/guidance reasoning,
+- evidence and permission handling.
+
+Complexity should not live in:
+- unnecessary integrations,
+- speculative multi-agent theater,
+- premature distributed architecture,
+- visual gimmicks that weaken product clarity.

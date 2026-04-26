@@ -1,4 +1,5 @@
-# Izge MVP Contract
+# MVP_IMPLEMENTATION_CONTRACT.md
+## Izge MVP Contract
 
 ### 1. Contract purpose
 This document defines the exact MVP to be implemented. It is the source of truth for scope, architecture, behavior, storage, UI, API coverage, and non-goals. If a feature is not defined here, it is out of scope.
@@ -12,14 +13,15 @@ Its purpose is to reconstruct **product and roadmap history** from internal arti
 - assumption drift,
 - and next actions.
 
+It must also support a proactive path in which a newly submitted artifact can be evaluated against existing organizational memory and trigger contradiction, assumption-drift, supersession, and/or grounded next-action signals.
+
 The MVP must not behave or present itself as:
 - internal search,
 - chat over files,
 - a PM copilot,
 - a roadmap assistant,
-- a generic RAG app.
-
-**Trajectory note:** This MVP is the first stage of a broader product trajectory that may later include deeper decision guidance and bounded scenario support. That future trajectory introduces **no additional MVP scope, modules, schemas, APIs, or architectural obligations** in this contract.
+- a generic RAG app,
+- a generic agent-memory framework.
 
 ### 3. Locked scope
 
@@ -34,26 +36,30 @@ Included examples:
 - product review notes,
 - retrospectives,
 - postmortems related to product decisions,
-- pasted meeting excerpts.
+- weekly reports,
+- member-submitted daily/weekly logs,
+- member-submitted presentation summaries,
+- pasted meeting excerpts,
+- intern reports and continuity artifacts.
 
 #### 3.2 Supported input types
 The MVP supports exactly:
 - Markdown files
 - Plain text files
 - PDF files
-- Pasted text in the UI
+- Pasted text
 
 Constraints:
 - PDFs are **text-extractable only**
 - **No OCR**
-- No images
+- No images as source artifacts
 - No audio/video
 - No DOCX
-- No slide decks
+- No slide decks as native files unless converted into supported text form
 - No spreadsheets
-- No third-party integrations
+- No third-party integrations in the MVP
 
-### 4. Locked user/workspace model
+### 4. User/workspace model
 
 #### 4.1 Workspace model
 - Single workspace only
@@ -68,14 +74,17 @@ Exactly two roles:
 **Admin can:**
 - manage users in the single workspace,
 - upload artifacts,
+- review or inspect submitted artifacts,
 - run ingestion,
 - run queries,
+- view contradiction/drift/next-action signals,
 - view audit logs,
 - manage artifact visibility.
 
 **Member can:**
-- upload artifacts if permitted,
+- submit supported artifacts,
 - run queries,
+- view signals and results allowed by permissions,
 - view only permitted evidence and derived outputs.
 
 #### 4.3 Permission model
@@ -88,18 +97,25 @@ If a user lacks access to an artifact:
 
 If some evidence is hidden, the system may return a partial answer, but it must explicitly note that some relevant evidence may be unavailable due to permissions.
 
-### 5. Locked product capabilities
+### 5. Product capabilities
 
-#### 5.1 Ingestion
+#### 5.1 Local-first processing model
+The MVP uses company-controlled infrastructure as the primary storage and reasoning environment.
+- artifacts are stored locally,
+- heavy reasoning runs on a central company-controlled inference node,
+- external hosted AI is not required as the primary reasoning layer,
+- future optional edge-side small-model participation is not part of MVP acceptance.
+
+#### 5.2 Ingestion
 The system must:
 - accept supported inputs from local files and pasted text,
 - store original files on the local filesystem,
 - normalize extracted text,
 - split artifacts into ordered chunks,
 - run structured extraction,
-- persist artifacts, chunks, memory objects, graph relations, and audit events locally.
+- persist artifacts, chunks, memory objects, graph relations, signals, and audit events locally.
 
-#### 5.2 Required memory objects
+#### 5.3 Required memory objects
 The MVP must extract and persist at minimum:
 - **Decision**
 - **Assumption**
@@ -110,6 +126,7 @@ The MVP must extract and persist at minimum:
 Optional supporting objects allowed if useful:
 - Proposal
 - Question
+- Topic
 
 Each extracted object must include:
 - stable ID,
@@ -117,30 +134,32 @@ Each extracted object must include:
 - source artifact reference,
 - source chunk reference or quoted evidence span,
 - confidence score,
-- timestamp,
+- timestamp when explicit or reasonably inferable,
 - normalized text fields needed for reasoning and display.
+
+#### 5.4 Proactive detection on new artifacts
+When a newly ingested artifact materially interacts with existing memory, the system must be able to:
+- detect likely contradiction,
+- detect likely assumption drift,
+- detect likely supersession or reopening,
+- generate grounded next-action guidance,
+- link detections to supporting evidence and related memory objects.
 
 ### 6. Locked query classes
 The MVP supports exactly four first-class query classes:
 
 1. **Decision lineage**  
-   What was decided, when, why, by whom if available, and under which assumptions and constraints.
-
 2. **Contradiction analysis**  
-   Where current or later statements, commitments, assumptions, or plans conflict with prior history.
-
 3. **Assumption drift**  
-   Which assumptions appear stale, weakened, reversed, or unsupported by later evidence.
-
-4. **Next-action guidance**  
-   What the team should do now, grounded in historical evidence and unresolved tensions.
+4. **Next-action guidance**
 
 Users may type queries naturally, but the system must classify each query into one of these four modes before reasoning.
 
-### 7. Locked answer requirements
-Every answer must include:
+### 7. Answer and signal requirements
+Every query answer must include:
 - direct answer text,
 - query class,
+- why this answer,
 - supporting evidence references,
 - supporting memory objects,
 - contradictions section when relevant,
@@ -148,15 +167,23 @@ Every answer must include:
 - recommended next actions when relevant,
 - uncertainty or missing-context notes.
 
+Every surfaced signal (contradiction / drift / next action) must include:
+- title or summary,
+- supporting rationale,
+- linked evidence,
+- related memory objects,
+- urgency/priority signal if available,
+- uncertainty/confidence signal if available.
+
 Major historical claims without evidence are not allowed.
 
-### 8. Locked storage and graph architecture
+### 8. Storage and graph architecture
 
 #### 8.1 Persistence
 The MVP uses:
 - **SQLite** for application data and graph tables
 - **local filesystem** for original files
-- **local model runtime** for extraction and reasoning
+- **local model runtime / company-controlled inference** for extraction and reasoning
 
 #### 8.2 Graph rule
 The graph must be explicit, not implicit.
@@ -172,39 +199,18 @@ Required tables at minimum:
 - `outcomes`
 - `commitments`
 - `query_runs`
+- `signals`
 - `audit_events`
 - `graph_nodes`
 - `graph_edges`
 
-`graph_nodes` minimum fields:
-- `node_id`
-- `workspace_id`
-- `node_type`
-- `entity_id`
-- `title_or_label`
-- `visibility_scope`
-- `created_at`
-- `updated_at`
-
-`graph_edges` minimum fields:
-- `edge_id`
-- `workspace_id`
-- `from_node_id`
-- `to_node_id`
-- `edge_type`
-- `evidence_artifact_id`
-- `evidence_chunk_id` or `evidence_span`
-- `confidence_score`
-- `created_at`
-
-Required edge types for MVP:
+Required edge types for MVP include:
 - `MENTIONED_IN`
 - `BASED_ON`
 - `CONSTRAINED_BY`
 - `RESULTED_IN`
 - `CONTRADICTS`
 - `SUPERSEDES`
-- `OWNS`
 - `RELATES_TO`
 
 #### 8.3 Retrieval baseline
@@ -214,27 +220,19 @@ Baseline retrieval:
 - SQLite-backed structured filtering,
 - graph traversal,
 - evidence lookup,
-- and SQLite FTS for text retrieval.
+- SQLite FTS for text retrieval.
 
 Embeddings are optional later, but not required for MVP acceptance.
 
-#### 8.4 Portability rule
-The schema must be designed so it can migrate cleanly to Postgres later, but the MVP implementation remains SQLite.
-
-### 9. Locked reasoning design
-
-#### 9.1 Architecture rule
-The system must not rely on one giant prompt.
-
+### 9. Reasoning design
 Reasoning must be staged:
 1. extraction
 2. normalization
 3. graph linking
-4. query classification
-5. query-specific analysis
+4. query classification or signal classification
+5. query-/signal-specific analysis
 6. result composition
 
-#### 9.2 Reasoning inputs
 Reasoning must operate over:
 - structured memory objects,
 - graph state,
@@ -242,52 +240,33 @@ Reasoning must operate over:
 
 Raw concatenated documents are not an acceptable primary reasoning substrate.
 
-#### 9.3 Query-specific behavior
-- **Decision lineage** must traverse related decisions, assumptions, constraints, outcomes, commitments, and evidence in temporal order where possible.
-- **Contradiction analysis** must compare semantically related claims across time and show evidence on both sides.
-- **Assumption drift** must identify assumptions weakened or invalidated by later evidence.
-- **Next-action guidance** must be grounded in historical evidence and unresolved tensions, not generic advice.
-
-### 10. Locked system stack
+### 10. Locked stack
 The MVP stack is fixed:
 - **Backend:** FastAPI
 - **Frontend:** React + TypeScript
 - **Database:** SQLite
 - **File storage:** local filesystem
-- **Model runtime:** local model runtime
+- **Inference:** company-controlled local/on-prem model runtime
 
-Changing the stack is out of scope unless there is a hard implementation blocker.
-
-### 11. Locked UI surfaces
+### 11. Required UI surfaces
 The MVP UI must include:
 - sign in,
 - workspace dashboard,
-- artifact upload,
+- artifact upload / contribution view,
 - pasted text input,
 - ingestion status view,
 - query input,
 - query result view,
+- contradiction/drift/next-action signals view,
 - memory/decision detail view,
 - graph or timeline view,
 - admin user/permissions view,
 - audit log view.
 
-#### 11.1 Result view sections
-Every result view must display:
-- Direct Answer
-- Why This Answer
-- Supporting Evidence
-- Related Decisions and Memory Objects
-- Contradictions or Tensions
-- Assumption Drift
-- Recommended Next Actions
-- Uncertainty or Missing Context
-
-#### 11.2 UX rule
 The UI must present the system as institutional memory and decision intelligence. It must not feel like a chatbot.
 
-### 12. Locked API coverage
-The backend must expose routes covering:
+### 12. Required API/resource coverage
+The backend must expose resources covering:
 - authentication,
 - current user,
 - user management,
@@ -302,11 +281,10 @@ The backend must expose routes covering:
 - memory object detail,
 - contradiction list,
 - assumption drift list,
+- next-action signal list,
 - audit event retrieval.
 
-Exact route names may vary, but this resource coverage is mandatory.
-
-### 13. Locked audit requirements
+### 13. Audit requirements
 The system must log:
 - user sign in,
 - user creation and role changes,
@@ -314,20 +292,11 @@ The system must log:
 - pasted text submissions,
 - ingestion runs,
 - extraction persistence events,
+- proactive signal generation,
 - query submissions,
 - query result generation,
 - permission changes,
 - graph update events.
-
-Each audit event must include:
-- `event_id`
-- `workspace_id`
-- `actor_user_id` when applicable
-- `event_type`
-- `target_type`
-- `target_id`
-- `timestamp`
-- `event_metadata`
 
 ### 14. Non-goals
 The MVP must not include:
@@ -335,14 +304,11 @@ The MVP must not include:
 - OCR,
 - enterprise SSO,
 - multi-workspace support,
-- workflow automation,
-- outbound actions,
-- generic semantic search framing,
-- generic RAG positioning,
-- fake multi-agent theater,
+- workflow automation beyond current signal/guidance scope,
 - broad analytics dashboards,
 - cloud-first dependency,
-- autonomous task execution.
+- full scenario simulation,
+- mandatory edge inference on employee devices.
 
 ### 15. Acceptance criteria
 The MVP is complete only if all are true:
@@ -352,12 +318,13 @@ The MVP is complete only if all are true:
 3. Extracted memory objects are persisted in SQLite.  
 4. The graph is stored explicitly in `graph_nodes` and `graph_edges`.  
 5. All four query classes work from the UI.  
-6. Every answer includes evidence references and structured supporting objects.  
-7. Permission-restricted evidence is never exposed to unauthorized users.  
-8. Admins can manage users and permissions for the single workspace.  
-9. Audit logs exist and include required event types.  
-10. The product experience does not collapse into chat-over-files.  
-11. The implementation works without external SaaS integrations.  
+6. Newly submitted conflicting artifacts can trigger contradiction and/or drift detection with grounded next-action guidance.  
+7. Every answer includes evidence references and structured supporting objects.  
+8. Permission-restricted evidence is never exposed to unauthorized users.  
+9. Admins can manage users and permissions for the single workspace.  
+10. Audit logs exist and include required event types.  
+11. The product experience does not collapse into chat-over-files.  
+12. The implementation works without external SaaS AI dependency as the primary reasoning layer.
 
 ### 16. Final contract rule
 If an implementation choice makes the product feel like search, chat-over-files, or a generic assistant, that choice violates the MVP contract.

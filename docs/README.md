@@ -32,15 +32,11 @@ Keep these files at the root of `docs/` because project prompts and repo guidanc
 ### UX, evaluation, and implementation
 
 - `UI_UX_SPEC.md`
-- `MEMORY_WEAVE_METAPHOR_SPEC.md`
-- `MEMORY_WEAVE_HERO_IMPLEMENTATION_SPEC.md`
+- `../website/docs/MEMORY_WEAVE_METAPHOR_SPEC.md`
+- `../website/docs/MEMORY_WEAVE_HERO_IMPLEMENTATION_SPEC.md`
 - `IMPLEMENTATION_ROADMAP.md`
 - `TEST_PLAN.md`
 - `DEMO_SCRIPT.md`
-- `AGENT_REGISTRY.md`
-- `PROMPTING_AND_REASONING_SPEC.md`
-- `CODING_AGENT_MASTER_PROMPT.md`
-- `SKILL.md`
 
 ## Demo readiness docs
 
