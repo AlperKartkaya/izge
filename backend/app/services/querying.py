@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
 import re
 from typing import Any
 
@@ -470,6 +471,12 @@ def _safe_next_actions_from_payload(
                 f"Review the open commitment '{commitment['title_or_label']}' and confirm whether its due path is still realistic."
             )
     return actions[:3]
+
+
+def _stable_signal_id(prefix: str, *parts: str | None) -> str:
+    material = "|".join(part or "" for part in parts)
+    digest = hashlib.sha1(material.encode("utf-8")).hexdigest()[:16]
+    return f"{prefix}_{digest}"
 
 
 def _redacted_query_text(
@@ -1083,6 +1090,140 @@ def _next_actions_from_support(memories: list[MemoryRecord], contradictions: lis
     return actions[:3]
 
 
+def _signal_memory_payload(memories: list[MemoryRecord]) -> list[dict[str, Any]]:
+    return [_memory_reference(memory).model_dump(mode="json") for memory in _dedupe_memories(memories)[:8]]
+
+
+def _signal_evidence_payload(db: Session, memories: list[MemoryRecord]) -> list[dict[str, Any]]:
+    evidence = _merge_evidence(_evidence_from_memories(db, _primary_graph_evidence(_dedupe_memories(memories))), [])
+    return [item.model_dump(mode="json") for item in evidence[:6]]
+
+
+def _signal_uncertainty(memories: list[MemoryRecord], fallback_confidence: float = 0.55) -> float:
+    confidence_values = [memory.confidence_score for memory in memories] or [fallback_confidence]
+    average_confidence = sum(confidence_values) / len(confidence_values)
+    return round(max(0.05, min(0.95, 1 - average_confidence)), 2)
+
+
+def _related_commitment_support(memories: list[MemoryRecord], focus_text: str) -> list[MemoryRecord]:
+    commitments = [memory for memory in memories if memory.memory_type == "commitment"]
+    return _rank_open_commitments(commitments, focus_text=focus_text)[:1]
+
+
+def _next_action_signal_payload(
+    db: Session,
+    *,
+    signal_id: str,
+    title: str,
+    summary: str,
+    related_topic: str,
+    urgency_score: float,
+    recommended_action: str,
+    grounded_reasoning: str,
+    supporting_memories: list[MemoryRecord],
+    source_signal_types: list[str],
+    ranking_basis: list[str],
+) -> dict[str, Any]:
+    support = _dedupe_memories(supporting_memories)
+    return {
+        "signal_id": signal_id,
+        "signal_type": "next_action",
+        "title": title,
+        "summary": summary,
+        "related_topic": related_topic or "general",
+        "urgency_score": round(urgency_score, 2),
+        "uncertainty_score": _signal_uncertainty(support),
+        "grounded_reasoning": grounded_reasoning,
+        "recommended_action": recommended_action,
+        "supporting_memory_objects": _signal_memory_payload(support),
+        "supporting_evidence": _signal_evidence_payload(db, support),
+        "source_signal_types": source_signal_types,
+        "ranking_basis": ranking_basis,
+    }
+
+
+def _contradiction_next_action_signal(
+    db: Session,
+    user: User,
+    *,
+    item: dict[str, Any],
+    memories: list[MemoryRecord],
+) -> dict[str, Any] | None:
+    focus_text = f"{item['from_title']} {item['to_title']} {item.get('topic_key', '')}"
+    supporting = _dedupe_memories(_memories_for_contradictions(db, user, [item]) + _related_commitment_support(memories, focus_text))
+    actions = _next_actions_from_support(supporting, [item], [])
+    if not actions:
+        return None
+    has_commitment = any(memory.memory_type == "commitment" for memory in supporting)
+    return _next_action_signal_payload(
+        db,
+        signal_id=_stable_signal_id("sig_next", "contradiction", str(item.get("edge_id"))),
+        title=f"Resolve contradiction: {item['from_title']} ↔ {item['to_title']}",
+        summary="A later roadmap claim now collides with an earlier decision or commitment in the reconstructed memory graph.",
+        related_topic=str(item.get("topic_key") or item.get("claim_family_key") or "general"),
+        urgency_score=0.92 if has_commitment else 0.84,
+        recommended_action=actions[0],
+        grounded_reasoning=(
+            f"The graph contains a CONTRADICTS edge between the later claim '{item['from_title']}' and the earlier record "
+            f"'{item['to_title']}'. The paired evidence spans identify both sides before recommending a resolution step."
+        ),
+        supporting_memories=supporting,
+        source_signal_types=["contradiction"] + (["open_commitment"] if has_commitment else []),
+        ranking_basis=["active contradiction", *item.get("ranking_basis", []), "evidence-backed recommendation"],
+    )
+
+
+def _drift_next_action_signal(
+    db: Session,
+    user: User,
+    *,
+    item: dict[str, Any],
+    memories: list[MemoryRecord],
+) -> dict[str, Any] | None:
+    focus_text = f"{item['title_or_label']} {item.get('supporting_signal_title') or ''} {item.get('topic_key', '')}"
+    supporting = _dedupe_memories(_memories_for_assumptions(db, user, [item]) + _related_commitment_support(memories, focus_text))
+    actions = _next_actions_from_support(supporting, [], [item])
+    if not actions:
+        return None
+    has_commitment = any(memory.memory_type == "commitment" for memory in supporting)
+    return _next_action_signal_payload(
+        db,
+        signal_id=_stable_signal_id("sig_next", "drift", str(item.get("assumption_id")), str(item.get("supporting_signal_memory_id"))),
+        title=f"Revalidate drifted assumption: {item['title_or_label']}",
+        summary="A previously active assumption is now marked stale, weakening, or reversed by later evidence.",
+        related_topic=str(item.get("topic_key") or "general"),
+        urgency_score=0.86 if item.get("status") == "reversed" else 0.78,
+        recommended_action=actions[0],
+        grounded_reasoning=(
+            f"The assumption '{item['title_or_label']}' is currently {item.get('status')} and is linked to later evidence "
+            f"'{item.get('supporting_signal_title') or 'in the graph'}', so the next action is to revalidate the operating basis."
+        ),
+        supporting_memories=supporting,
+        source_signal_types=["assumption_drift"] + (["open_commitment"] if has_commitment else []),
+        ranking_basis=["active assumption drift", *item.get("ranking_basis", []), "evidence-backed recommendation"],
+    )
+
+
+def _commitment_next_action_signal(db: Session, *, commitment: MemoryRecord) -> dict[str, Any]:
+    overdue = bool(commitment.due_date and commitment.due_date < datetime.utcnow())
+    return _next_action_signal_payload(
+        db,
+        signal_id=_stable_signal_id("sig_next", "commitment", commitment.memory_id),
+        title=f"Review open commitment: {commitment.title_or_label}",
+        summary="An open commitment remains in the reconstructed memory and should be checked before the team moves.",
+        related_topic=commitment.topic_key,
+        urgency_score=0.74 if overdue else 0.62,
+        recommended_action=_commitment_action_text(commitment),
+        grounded_reasoning=(
+            "The commitment is still open in the memory graph"
+            + (f" and its due date was {commitment.due_date.strftime('%Y-%m-%d')}." if commitment.due_date else ".")
+        ),
+        supporting_memories=[commitment],
+        source_signal_types=["open_commitment"],
+        ranking_basis=["open commitment", "evidence-backed recommendation"] + (["overdue"] if overdue else []),
+    )
+
+
 def _persist_query_trace_steps(
     db: Session,
     *,
@@ -1207,6 +1348,53 @@ def list_ranked_contradictions(db: Session, user: User, limit: int = 12) -> list
 
 def list_ranked_assumption_drift(db: Session, user: User, limit: int = 12) -> list[dict]:
     return _stale_assumption_dicts(db, user, "", _load_memory_records(db, user), limit=limit)
+
+
+def list_ranked_next_actions(db: Session, user: User, limit: int = 12) -> list[dict]:
+    memories = _load_memory_records(db, user)
+    contradiction_items = _contradiction_dicts(db, user, "", memories, limit=limit)
+    drift_items = _stale_assumption_dicts(db, user, "", memories, limit=limit)
+    signals: list[dict[str, Any]] = []
+
+    for item in contradiction_items[:4]:
+        signal = _contradiction_next_action_signal(db, user, item=item, memories=memories)
+        if signal is not None:
+            signals.append(signal)
+
+    for item in drift_items[:4]:
+        signal = _drift_next_action_signal(db, user, item=item, memories=memories)
+        if signal is not None:
+            signals.append(signal)
+
+    focus_text = " ".join(
+        [
+            *(f"{item['from_title']} {item['to_title']}" for item in contradiction_items[:3]),
+            *(item["title_or_label"] for item in drift_items[:3]),
+        ]
+    )
+    commitments = [memory for memory in memories if memory.memory_type == "commitment"]
+    for commitment in _rank_open_commitments(commitments, focus_text=focus_text)[:4]:
+        signals.append(_commitment_next_action_signal(db, commitment=commitment))
+
+    deduped: list[dict[str, Any]] = []
+    seen_actions: set[str] = set()
+    for signal in signals:
+        action = signal["recommended_action"]
+        if action in seen_actions:
+            continue
+        seen_actions.add(action)
+        deduped.append(signal)
+
+    deduped.sort(
+        key=lambda item: (
+            item["urgency_score"],
+            len(item["supporting_evidence"]),
+            1 - item["uncertainty_score"],
+            item["title"],
+        ),
+        reverse=True,
+    )
+    return deduped[:limit]
 
 
 def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:

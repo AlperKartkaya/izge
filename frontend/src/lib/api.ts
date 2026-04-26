@@ -9,6 +9,7 @@ import type {
   GraphTimeline,
   IngestionJobRead,
   MemoryDetail,
+  NextActionSignalItem,
   QueryResult,
   QueryTraceRead,
   TokenResponse,
@@ -204,6 +205,10 @@ export const api = {
 
   listAssumptionDrift(token: string) {
     return request<AssumptionDriftItem[]>('/assumptions/stale', { token })
+  },
+
+  listNextActions(token: string) {
+    return request<NextActionSignalItem[]>('/next-actions', { token })
   },
 
   listAuditEvents(token: string) {

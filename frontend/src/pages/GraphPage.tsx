@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDate, formatDateTime, formatLabel, formatPercent } from '../lib/format'
-import type { AssumptionDriftItem, ContradictionItem, GraphNeighborhood, GraphSummary, GraphTimelineItem } from '../lib/types'
+import type { AssumptionDriftItem, ContradictionItem, GraphNeighborhood, GraphSummary, GraphTimelineItem, NextActionSignalItem } from '../lib/types'
 
 export function GraphPage() {
   const { session } = useAuth()
@@ -13,6 +13,7 @@ export function GraphPage() {
   const [neighborhood, setNeighborhood] = useState<GraphNeighborhood | null>(null)
   const [contradictions, setContradictions] = useState<ContradictionItem[]>([])
   const [assumptionDrift, setAssumptionDrift] = useState<AssumptionDriftItem[]>([])
+  const [nextActions, setNextActions] = useState<NextActionSignalItem[]>([])
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null)
   const [isNeighborhoodLoading, setIsNeighborhoodLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -26,11 +27,12 @@ export function GraphPage() {
       }
 
       try {
-        const [graphSummary, graphTimeline, contradictionList, assumptionList] = await Promise.all([
+        const [graphSummary, graphTimeline, contradictionList, assumptionList, actionList] = await Promise.all([
           api.getGraphSummary(session.token),
           api.getGraphTimeline(session.token),
           api.listContradictions(session.token),
           api.listAssumptionDrift(session.token),
+          api.listNextActions(session.token),
         ])
 
         if (!cancelled) {
@@ -38,6 +40,7 @@ export function GraphPage() {
           setTimelineItems(graphTimeline.items)
           setContradictions(contradictionList)
           setAssumptionDrift(assumptionList)
+          setNextActions(actionList)
           setSelectedMemoryId(graphTimeline.items[0]?.memory_id ?? null)
         }
       } catch (caughtError) {
@@ -111,6 +114,7 @@ export function GraphPage() {
         <MetricCard label="Timeline cards" value={timelineItems.length || '—'} />
         <MetricCard label="Relationship types" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} />
         <MetricCard label="Contradictions surfaced" value={contradictions.length} />
+        <MetricCard label="Next actions surfaced" value={nextActions.length} />
       </section>
 
       <div className="two-column-layout wide-right-column">
@@ -320,6 +324,45 @@ export function GraphPage() {
           )}
         </Panel>
       </div>
+
+      <Panel title="Recommended next actions" description="Guidance derived from active contradiction, drift, and open-commitment signals. This is the path forward layer, not a generic task list.">
+        {nextActions.length === 0 ? (
+          <EmptyState title="No next-action signals" description="No visible guidance can be grounded from the current memory graph yet." />
+        ) : (
+          <div className="stack-sm">
+            {nextActions.map((item) => (
+              <article key={item.signal_id} className="panel-subtle stack-sm action-card">
+                <div className="timeline-card-head">
+                  <div>
+                    <p className="section-label">Next action · topic {item.related_topic}</p>
+                    <p className="table-primary">{item.title}</p>
+                  </div>
+                  <p className="table-secondary">Urgency {formatPercent(item.urgency_score)} · uncertainty {formatPercent(item.uncertainty_score)}</p>
+                </div>
+                <p className="evidence-block">{item.recommended_action}</p>
+                <p className="muted-copy">{item.grounded_reasoning}</p>
+                {item.supporting_evidence.length > 0 ? (
+                  <div className="stack-sm">
+                    <p className="section-label">Evidence behind the action</p>
+                    {item.supporting_evidence.slice(0, 2).map((evidence) => (
+                      <article key={`${item.signal_id}-${evidence.artifact_id}-${evidence.chunk_id ?? 'root'}`} className="panel-subtle stack-sm">
+                        <p className="table-secondary">{evidence.artifact_title} · {evidence.evidence_kind}</p>
+                        <p className="muted-copy">{evidence.excerpt}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+                {item.supporting_memory_objects.length > 0 ? (
+                  <p className="table-secondary">
+                    Memory support: {item.supporting_memory_objects.map((memory) => `${formatLabel(memory.memory_type)}:${memory.title_or_label}`).join(' · ')}
+                  </p>
+                ) : null}
+                {item.ranking_basis.length > 0 ? <p className="table-secondary">Ranked for: {item.ranking_basis.join(', ')}</p> : null}
+              </article>
+            ))}
+          </div>
+        )}
+      </Panel>
     </div>
   )
 }

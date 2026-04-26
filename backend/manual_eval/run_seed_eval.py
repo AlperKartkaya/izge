@@ -202,6 +202,7 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         ),
         "member query trace",
     )
+    member_next_actions = expect_list(request("/api/next-actions", headers={"Authorization": f"Bearer {member_token}"}), "member next actions")
 
     visible_artifact_titles = {str(item.get("title")) for item in member_artifacts}
     forbidden_payloads = {
@@ -211,6 +212,7 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "contradictions": result.get("contradictions", []),
         "stale_assumptions": result.get("stale_assumptions", []),
         "trace": trace,
+        "next_actions": member_next_actions,
     }
     checks = {
         "restricted_artifact_detail_forbidden": artifact_detail_status == 403,
@@ -230,6 +232,9 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
             forbidden_payloads["stale_assumptions"], restricted_artifact_id=restricted_artifact_id
         ),
         "trace_redacted": not payload_contains_forbidden_value(forbidden_payloads["trace"], restricted_artifact_id=restricted_artifact_id),
+        "next_actions_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["next_actions"], restricted_artifact_id=restricted_artifact_id
+        ),
         "artifact_list_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["artifact_list"], restricted_artifact_id=restricted_artifact_id
         ),
@@ -274,6 +279,7 @@ def run_eval() -> dict[str, Any]:
     auth_headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     contradiction_list = expect_list(request("/api/contradictions", headers={"Authorization": f"Bearer {token}"}), "contradictions")
     drift_list = expect_list(request("/api/assumptions/stale", headers={"Authorization": f"Bearer {token}"}), "assumption drift")
+    next_action_list = expect_list(request("/api/next-actions", headers={"Authorization": f"Bearer {token}"}), "next actions")
     permission_regression = permission_regression_checks(token)
 
     results = []
@@ -362,6 +368,29 @@ def run_eval() -> dict[str, Any]:
                 "has_supporting_signal": bool(drift_list and drift_list[0].get("supporting_signal_title")),
                 "has_evidence_provenance": bool(drift_list and drift_list[0].get("evidence_provenance")),
                 "has_ranking_basis": bool(drift_list and drift_list[0].get("ranking_basis")),
+            },
+        },
+        "next_actions": {
+            "count": len(next_action_list),
+            "top_item": next_action_list[0].get("title") if next_action_list else None,
+            "checks": {
+                "non_empty": bool(next_action_list),
+                "has_recommended_action": bool(next_action_list and next_action_list[0].get("recommended_action")),
+                "has_grounded_reasoning": bool(next_action_list and next_action_list[0].get("grounded_reasoning")),
+                "has_supporting_memory": bool(next_action_list and next_action_list[0].get("supporting_memory_objects")),
+                "has_supporting_evidence": bool(next_action_list and next_action_list[0].get("supporting_evidence")),
+                "has_priority_and_uncertainty": bool(
+                    next_action_list
+                    and isinstance(next_action_list[0].get("urgency_score"), (int, float))
+                    and isinstance(next_action_list[0].get("uncertainty_score"), (int, float))
+                ),
+                "action_shape": bool(
+                    next_action_list
+                    and contains_any_fragment(
+                        str(next_action_list[0].get("recommended_action", "")),
+                        ["Resolve the conflict", "Revalidate the assumption", "Review the open commitment"],
+                    )
+                ),
             },
         },
     }

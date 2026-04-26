@@ -236,6 +236,22 @@ export interface AssumptionDriftItem {
   uncertainty_note: string | null
 }
 
+export interface NextActionSignalItem {
+  signal_id: string
+  signal_type: 'next_action'
+  title: string
+  summary: string
+  related_topic: string
+  urgency_score: number
+  uncertainty_score: number
+  grounded_reasoning: string
+  recommended_action: string
+  supporting_memory_objects: MemoryReference[]
+  supporting_evidence: EvidenceReference[]
+  source_signal_types: string[]
+  ranking_basis: string[]
+}
+
 export interface AuditEventRead {
   event_id: string
   workspace_id: string

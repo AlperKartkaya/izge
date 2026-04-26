@@ -302,6 +302,22 @@ class AssumptionDriftItem(BaseModel):
     uncertainty_note: str | None = None
 
 
+class NextActionSignalItem(BaseModel):
+    signal_id: str
+    signal_type: Literal["next_action"] = "next_action"
+    title: str
+    summary: str
+    related_topic: str
+    urgency_score: float
+    uncertainty_score: float
+    grounded_reasoning: str
+    recommended_action: str
+    supporting_memory_objects: list[MemoryReference] = Field(default_factory=list)
+    supporting_evidence: list[EvidenceReference] = Field(default_factory=list)
+    source_signal_types: list[str] = Field(default_factory=list)
+    ranking_basis: list[str] = Field(default_factory=list)
+
+
 class AuditEventRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
