@@ -119,6 +119,7 @@ export interface GraphSummary {
   artifact_count: number
   memory_counts: Record<string, number>
   edge_counts: Record<string, number>
+  signal_counts: Record<string, number>
 }
 
 export interface GraphTimelineItem {

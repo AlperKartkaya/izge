@@ -188,6 +188,24 @@ class QueryTraceStep(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class Signal(Base, TimestampMixin):
+    __tablename__ = "signals"
+
+    signal_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("sig"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    source_artifact_id: Mapped[str | None] = mapped_column(ForeignKey("artifacts.artifact_id"), index=True)
+    signal_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    related_topic: Mapped[str] = mapped_column(String(255), default="general", nullable=False, index=True)
+    urgency_score: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    uncertainty_score: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    grounded_reasoning: Mapped[str] = mapped_column(Text, nullable=False)
+    recommended_action: Mapped[str | None] = mapped_column(Text)
+    payload_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="active", nullable=False, index=True)
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 

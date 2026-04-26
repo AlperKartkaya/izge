@@ -12,12 +12,13 @@ router = APIRouter(prefix="/graph", tags=["graph"])
 
 @router.get("/summary", response_model=GraphSummary)
 def get_graph_summary(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> GraphSummary:
-    memory_counts, edge_counts, artifact_count = graph_summary(db, current_user)
+    memory_counts, edge_counts, artifact_count, signal_counts = graph_summary(db, current_user)
     return GraphSummary(
         workspace_id=current_user.workspace_id,
         artifact_count=artifact_count,
         memory_counts=memory_counts,
         edge_counts=edge_counts,
+        signal_counts=signal_counts,
     )
 
 

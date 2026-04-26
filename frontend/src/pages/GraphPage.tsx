@@ -270,6 +270,21 @@ export function GraphPage() {
         </Panel>
       </div>
 
+      <Panel title="Persisted signal composition" description="Durable proactive signal records created by ingestion-time intelligence. Counts remain permission-aware through source artifact visibility.">
+        {summary && Object.keys(summary.signal_counts).length > 0 ? (
+          <div className="stack-sm">
+            {Object.entries(summary.signal_counts).map(([label, count]) => (
+              <div key={label} className="stat-row">
+                <span>{formatLabel(label)}</span>
+                <strong>{count}</strong>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No persisted signals yet" description="Run ingestion on artifacts that interact with existing memory to persist contradiction, drift, supersession, and next-action signals." />
+        )}
+      </Panel>
+
       <div className="two-column-layout">
         <Panel title="Contradictions" description="Visible contradiction relationships surfaced from the explicit memory graph. These conflicts are first-class product events.">
           {contradictions.length === 0 ? (

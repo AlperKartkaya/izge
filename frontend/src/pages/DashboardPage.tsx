@@ -66,6 +66,10 @@ export function DashboardPage() {
     () => Object.values(summary?.memory_counts ?? {}).reduce((total, count) => total + count, 0),
     [summary],
   )
+  const persistedSignalCount = useMemo(
+    () => Object.values(summary?.signal_counts ?? {}).reduce((total, count) => total + count, 0),
+    [summary],
+  )
 
   return (
     <div className="stack-xl">
@@ -91,7 +95,7 @@ export function DashboardPage() {
         <MetricCard label="Visible sources" value={summary?.artifact_count ?? '—'} detail="Artifacts currently available in your permitted scope." />
         <MetricCard label="Memory objects" value={totalMemoryObjects || '—'} detail="Structured decisions, assumptions, constraints, outcomes, and commitments." />
         <MetricCard label="Active tensions" value={contradictions.length + assumptionDrift.length} detail="Contradictions and assumption drift visible in your permitted scope." />
-        <MetricCard label="Next actions" value={nextActions.length} detail="Grounded guidance derived from the current memory graph." />
+        <MetricCard label="Persisted signals" value={persistedSignalCount || nextActions.length} detail="Durable proactive signals generated from ingested artifact impact." />
       </section>
 
       <div className="two-column-layout">

@@ -288,6 +288,8 @@ def run_eval() -> dict[str, Any]:
     contradiction_list = expect_list(request("/api/contradictions", headers={"Authorization": f"Bearer {token}"}), "contradictions")
     drift_list = expect_list(request("/api/assumptions/stale", headers={"Authorization": f"Bearer {token}"}), "assumption drift")
     next_action_list = expect_list(request("/api/next-actions", headers={"Authorization": f"Bearer {token}"}), "next actions")
+    graph_summary = expect_object(request("/api/graph/summary", headers={"Authorization": f"Bearer {token}"}), "graph summary")
+    audit_events = expect_list(request("/api/audit/events", headers={"Authorization": f"Bearer {token}"}), "audit events")
     reversal_artifact = next(artifact for filename, artifact in uploaded_artifacts.items() if filename.startswith("03_"))
     checkpoint_artifact = next(artifact for filename, artifact in uploaded_artifacts.items() if filename.startswith("04_"))
     reversal_signals = expect_object(
@@ -440,6 +442,26 @@ def run_eval() -> dict[str, Any]:
                 "next_action_has_memory": bool(
                     checkpoint_signals.get("recommended_next_actions")
                     and checkpoint_signals["recommended_next_actions"][0].get("supporting_memory_objects")
+                ),
+            },
+        },
+        "persisted_signals": {
+            "signal_counts": graph_summary.get("signal_counts"),
+            "checks": {
+                "graph_summary_has_signal_counts": bool(graph_summary.get("signal_counts")),
+                "has_persisted_next_actions": int(graph_summary.get("signal_counts", {}).get("next_action", 0)) > 0,
+                "has_persisted_contradiction_or_drift": (
+                    int(graph_summary.get("signal_counts", {}).get("contradiction", 0))
+                    + int(graph_summary.get("signal_counts", {}).get("assumption_drift", 0))
+                )
+                > 0,
+                "audit_has_proactive_signal_generation": any(
+                    event.get("event_type") == "PROACTIVE_SIGNALS_GENERATED" for event in audit_events
+                ),
+                "audit_records_persisted_signal_count": any(
+                    event.get("event_type") == "PROACTIVE_SIGNALS_GENERATED"
+                    and int(event.get("event_metadata", {}).get("persisted_signal_count", 0)) > 0
+                    for event in audit_events
                 ),
             },
         },

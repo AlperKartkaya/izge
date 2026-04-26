@@ -1002,9 +1002,9 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
             target_id=artifact.artifact_id,
             event_metadata={"job_id": job.job_id, "counts": extracted_counts},
         )
-        from app.services.querying import artifact_proactive_signals
+        from app.services.querying import persist_artifact_proactive_signals
 
-        proactive_summary = artifact_proactive_signals(db, actor, artifact)
+        proactive_summary = persist_artifact_proactive_signals(db, actor, artifact)
         log_event(
             db,
             workspace_id=artifact.workspace_id,
@@ -1012,7 +1012,11 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
             event_type="PROACTIVE_SIGNALS_GENERATED",
             target_type="artifact",
             target_id=artifact.artifact_id,
-            event_metadata={"job_id": job.job_id, "signal_counts": proactive_summary["signal_counts"]},
+            event_metadata={
+                "job_id": job.job_id,
+                "signal_counts": proactive_summary["signal_counts"],
+                "persisted_signal_count": sum(proactive_summary["signal_counts"].values()),
+            },
         )
         db.refresh(job)
         return job

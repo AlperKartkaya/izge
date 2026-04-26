@@ -6,7 +6,7 @@ import hashlib
 import re
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -21,6 +21,7 @@ from app.models import (
     Outcome,
     QueryRun,
     QueryTraceStep,
+    Signal,
     User,
 )
 from app.schemas.api import (
@@ -1334,6 +1335,121 @@ def artifact_proactive_signals(db: Session, user: User, artifact: Artifact) -> d
     }
 
 
+def _persist_signal_row(
+    db: Session,
+    *,
+    signal_id: str,
+    workspace_id: str,
+    source_artifact_id: str,
+    signal_type: str,
+    title: str,
+    summary: str,
+    related_topic: str,
+    urgency_score: float,
+    uncertainty_score: float,
+    grounded_reasoning: str,
+    recommended_action: str | None,
+    payload_json: dict[str, Any],
+) -> None:
+    db.add(
+        Signal(
+            signal_id=signal_id,
+            workspace_id=workspace_id,
+            source_artifact_id=source_artifact_id,
+            signal_type=signal_type,
+            title=title[:255],
+            summary=summary,
+            related_topic=related_topic or "general",
+            urgency_score=round(urgency_score, 2),
+            uncertainty_score=round(max(0.05, min(0.95, uncertainty_score)), 2),
+            grounded_reasoning=grounded_reasoning,
+            recommended_action=recommended_action,
+            payload_json=payload_json,
+            status="active",
+        )
+    )
+
+
+def persist_artifact_proactive_signals(db: Session, user: User, artifact: Artifact) -> dict[str, Any]:
+    payload = artifact_proactive_signals(db, user, artifact)
+    db.execute(delete(Signal).where(Signal.workspace_id == artifact.workspace_id, Signal.source_artifact_id == artifact.artifact_id))
+
+    for item in payload["introduced_contradictions"]:
+        confidence_score = float(item.get("confidence_score", 0.55))
+        _persist_signal_row(
+            db,
+            signal_id=_stable_signal_id("sig_con", artifact.artifact_id, str(item.get("edge_id"))),
+            workspace_id=artifact.workspace_id,
+            source_artifact_id=artifact.artifact_id,
+            signal_type="contradiction",
+            title=f"Contradiction: {item['from_title']} ↔ {item['to_title']}",
+            summary="A newly ingested artifact introduced a contradiction against prior memory.",
+            related_topic=str(item.get("topic_key") or "general"),
+            urgency_score=0.9,
+            uncertainty_score=1 - confidence_score,
+            grounded_reasoning=str(item.get("evidence_provenance") or item.get("evidence_span") or "Graph contradiction edge with linked evidence."),
+            recommended_action=None,
+            payload_json=item,
+        )
+
+    for item in payload["revealed_assumption_drift"]:
+        confidence_score = float(item.get("confidence_score", 0.55))
+        status = str(item.get("status") or "stale")
+        _persist_signal_row(
+            db,
+            signal_id=_stable_signal_id("sig_drift", artifact.artifact_id, str(item.get("assumption_id")), str(item.get("supporting_signal_memory_id"))),
+            workspace_id=artifact.workspace_id,
+            source_artifact_id=artifact.artifact_id,
+            signal_type="assumption_drift",
+            title=f"Assumption drift: {item['title_or_label']}",
+            summary=f"A newly ingested artifact marked this assumption {status}.",
+            related_topic=str(item.get("topic_key") or "general"),
+            urgency_score=0.84 if status == "reversed" else 0.76,
+            uncertainty_score=1 - confidence_score,
+            grounded_reasoning=str(item.get("evidence_provenance") or item.get("validity_notes") or "Later evidence changed the assumption status."),
+            recommended_action=None,
+            payload_json=item,
+        )
+
+    for item in payload["superseded_memory"]:
+        confidence_score = float(item.get("confidence_score", 0.55))
+        _persist_signal_row(
+            db,
+            signal_id=_stable_signal_id("sig_super", artifact.artifact_id, str(item.get("edge_id"))),
+            workspace_id=artifact.workspace_id,
+            source_artifact_id=artifact.artifact_id,
+            signal_type="supersession",
+            title=f"Supersession: {item['from_title']} supersedes {item['to_title']}",
+            summary="A newly ingested artifact reopened or superseded earlier memory.",
+            related_topic=str(item.get("topic_key") or "general"),
+            urgency_score=0.72,
+            uncertainty_score=1 - confidence_score,
+            grounded_reasoning=str(item.get("evidence_provenance") or item.get("evidence_span") or "Graph supersession edge with linked evidence."),
+            recommended_action=None,
+            payload_json=item,
+        )
+
+    for item in payload["recommended_next_actions"]:
+        _persist_signal_row(
+            db,
+            signal_id=_stable_signal_id("sig_action", artifact.artifact_id, str(item.get("signal_id")), str(item.get("recommended_action"))),
+            workspace_id=artifact.workspace_id,
+            source_artifact_id=artifact.artifact_id,
+            signal_type="next_action",
+            title=str(item["title"]),
+            summary=str(item.get("summary") or "Grounded next action derived from newly changed memory."),
+            related_topic=str(item.get("related_topic") or "general"),
+            urgency_score=float(item.get("urgency_score", 0.6)),
+            uncertainty_score=float(item.get("uncertainty_score", 0.4)),
+            grounded_reasoning=str(item.get("grounded_reasoning") or "Next action was derived from artifact-scoped memory signals."),
+            recommended_action=str(item.get("recommended_action") or ""),
+            payload_json=item,
+        )
+
+    db.flush()
+    return payload
+
+
 def _persist_query_trace_steps(
     db: Session,
     *,
@@ -1677,7 +1793,7 @@ def build_query_trace_for_reader(db: Session, query_run: QueryRun, reader: User)
     )
 
 
-def graph_summary(db: Session, user: User) -> tuple[dict[str, int], dict[str, int], int]:
+def graph_summary(db: Session, user: User) -> tuple[dict[str, int], dict[str, int], int, dict[str, int]]:
     visible_artifact_ids = _visible_artifact_ids(db, user)
     memory_counts = {
         "decisions": db.query(Decision).filter(Decision.workspace_id == user.workspace_id, Decision.source_artifact_id.in_(visible_artifact_ids)).count(),
@@ -1692,8 +1808,18 @@ def graph_summary(db: Session, user: User) -> tuple[dict[str, int], dict[str, in
         .group_by(GraphEdge.edge_type)
     ).all()
     edge_counts = {edge_type: count for edge_type, count in rows}
+    signal_rows = db.execute(
+        select(Signal.signal_type, func.count(Signal.signal_id))
+        .where(
+            Signal.workspace_id == user.workspace_id,
+            Signal.status == "active",
+            Signal.source_artifact_id.in_(visible_artifact_ids),
+        )
+        .group_by(Signal.signal_type)
+    ).all()
+    signal_counts = {signal_type: count for signal_type, count in signal_rows}
     artifact_count = len(visible_artifact_ids)
-    return memory_counts, edge_counts, artifact_count
+    return memory_counts, edge_counts, artifact_count, signal_counts
 
 
 def _timeline_status(memory: MemoryRecord, *, node_id: str, edges: list[GraphEdge]) -> str:

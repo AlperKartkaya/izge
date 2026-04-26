@@ -185,6 +185,7 @@ class GraphSummary(BaseModel):
     artifact_count: int
     memory_counts: dict[str, int]
     edge_counts: dict[str, int]
+    signal_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class GraphTimelineItem(BaseModel):
