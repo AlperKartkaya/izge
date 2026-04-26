@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
@@ -230,6 +230,23 @@ export function IngestionPage() {
                 <p className="table-primary">{artifactSignals.signal_counts.next_actions ?? 0}</p>
               </article>
             </div>
+
+            {artifactSignals.persisted_signals.length > 0 ? (
+              <div className="stack-sm">
+                <p className="section-label">Durable signals created from this artifact</p>
+                {artifactSignals.persisted_signals.slice(0, 5).map((signal) => (
+                  <Link key={signal.signal_id} className="record-link panel-subtle" to={`/signals/${signal.signal_id}`}>
+                    <div>
+                      <p className="table-primary">{signal.title}</p>
+                      <p className="table-secondary">
+                        {formatLabel(signal.signal_type)} · urgency {formatPercent(signal.urgency_score)}
+                      </p>
+                    </div>
+                    <span className="table-secondary">Open intelligence path</span>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
 
             {artifactSignals.introduced_contradictions.length === 0 &&
             artifactSignals.revealed_assumption_drift.length === 0 &&

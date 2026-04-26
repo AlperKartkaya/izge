@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDate, formatDateTime, formatLabel, formatPercent } from '../lib/format'
-import type { AssumptionDriftItem, ContradictionItem, GraphNeighborhood, GraphSummary, GraphTimelineItem, NextActionSignalItem } from '../lib/types'
+import type { AssumptionDriftItem, ContradictionItem, GraphNeighborhood, GraphSummary, GraphTimelineItem, NextActionSignalItem, SignalRead } from '../lib/types'
 
 export function GraphPage() {
   const { session } = useAuth()
@@ -14,6 +14,7 @@ export function GraphPage() {
   const [contradictions, setContradictions] = useState<ContradictionItem[]>([])
   const [assumptionDrift, setAssumptionDrift] = useState<AssumptionDriftItem[]>([])
   const [nextActions, setNextActions] = useState<NextActionSignalItem[]>([])
+  const [persistedSignals, setPersistedSignals] = useState<SignalRead[]>([])
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null)
   const [isNeighborhoodLoading, setIsNeighborhoodLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -27,12 +28,13 @@ export function GraphPage() {
       }
 
       try {
-        const [graphSummary, graphTimeline, contradictionList, assumptionList, actionList] = await Promise.all([
+        const [graphSummary, graphTimeline, contradictionList, assumptionList, actionList, signalList] = await Promise.all([
           api.getGraphSummary(session.token),
           api.getGraphTimeline(session.token),
           api.listContradictions(session.token),
           api.listAssumptionDrift(session.token),
           api.listNextActions(session.token),
+          api.listSignals(session.token),
         ])
 
         if (!cancelled) {
@@ -41,6 +43,7 @@ export function GraphPage() {
           setContradictions(contradictionList)
           setAssumptionDrift(assumptionList)
           setNextActions(actionList)
+          setPersistedSignals(signalList)
           setSelectedMemoryId(graphTimeline.items[0]?.memory_id ?? null)
         }
       } catch (caughtError) {
@@ -114,7 +117,7 @@ export function GraphPage() {
         <MetricCard label="Timeline cards" value={timelineItems.length || '—'} />
         <MetricCard label="Relationship types" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} />
         <MetricCard label="Contradictions surfaced" value={contradictions.length} />
-        <MetricCard label="Next actions surfaced" value={nextActions.length} />
+        <MetricCard label="Persisted signals" value={persistedSignals.length || nextActions.length} />
       </section>
 
       <div className="two-column-layout wide-right-column">
@@ -272,13 +275,29 @@ export function GraphPage() {
 
       <Panel title="Persisted signal composition" description="Durable proactive signal records created by ingestion-time intelligence. Counts remain permission-aware through source artifact visibility.">
         {summary && Object.keys(summary.signal_counts).length > 0 ? (
-          <div className="stack-sm">
-            {Object.entries(summary.signal_counts).map(([label, count]) => (
-              <div key={label} className="stat-row">
-                <span>{formatLabel(label)}</span>
-                <strong>{count}</strong>
-              </div>
-            ))}
+          <div className="two-column-layout">
+            <div className="stack-sm">
+              {Object.entries(summary.signal_counts).map(([label, count]) => (
+                <div key={label} className="stat-row">
+                  <span>{formatLabel(label)}</span>
+                  <strong>{count}</strong>
+                </div>
+              ))}
+            </div>
+            <div className="stack-sm">
+              {persistedSignals.slice(0, 5).map((signal) => (
+                <Link key={signal.signal_id} className="record-link panel-subtle" to={`/signals/${signal.signal_id}`}>
+                  <div>
+                    <p className="table-primary">{signal.title}</p>
+                    <p className="table-secondary">
+                      {formatLabel(signal.signal_type)} · {signal.source_artifact_title ?? signal.source_artifact_id ?? 'unknown source'}
+                    </p>
+                  </div>
+                  <span className="table-secondary">Urgency {formatPercent(signal.urgency_score)}</span>
+                </Link>
+              ))}
+              {persistedSignals.length === 0 ? <p className="muted-copy">Counts exist, but no signal rows are visible in this permission scope.</p> : null}
+            </div>
           </div>
         ) : (
           <EmptyState title="No persisted signals yet" description="Run ingestion on artifacts that interact with existing memory to persist contradiction, drift, supersession, and next-action signals." />

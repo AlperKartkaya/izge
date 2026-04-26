@@ -145,6 +145,7 @@ class QueryResult(BaseModel):
     contradictions: list[dict[str, Any]]
     stale_assumptions: list[dict[str, Any]]
     recommended_next_actions: list[str]
+    related_signals: list["SignalRead"] = Field(default_factory=list)
     uncertainty_notes: list[str]
     permissions_limited: bool
     created_at: datetime
@@ -348,6 +349,40 @@ class ArtifactProactiveSignals(BaseModel):
     revealed_assumption_drift: list[AssumptionDriftItem] = Field(default_factory=list)
     superseded_memory: list[SupersessionItem] = Field(default_factory=list)
     recommended_next_actions: list[NextActionSignalItem] = Field(default_factory=list)
+    persisted_signals: list["SignalRead"] = Field(default_factory=list)
+
+
+class SignalRead(BaseModel):
+    signal_id: str
+    workspace_id: str
+    source_artifact_id: str | None = None
+    source_artifact_title: str | None = None
+    signal_type: str
+    title: str
+    summary: str
+    related_topic: str
+    urgency_score: float
+    uncertainty_score: float
+    grounded_reasoning: str
+    recommended_action: str | None = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SignalIntelligenceStep(BaseModel):
+    step_kind: str
+    title: str
+    description: str
+    supporting_evidence: list[EvidenceReference] = Field(default_factory=list)
+    supporting_memory_objects: list[MemoryReference] = Field(default_factory=list)
+
+
+class SignalDetail(SignalRead):
+    payload_json: dict[str, Any] = Field(default_factory=dict)
+    supporting_memory_objects: list[MemoryReference] = Field(default_factory=list)
+    supporting_evidence: list[EvidenceReference] = Field(default_factory=list)
+    intelligence_path: list[SignalIntelligenceStep] = Field(default_factory=list)
 
 
 class AuditEventRead(BaseModel):
@@ -365,3 +400,5 @@ class AuditEventRead(BaseModel):
 
 TokenResponse.model_rebuild()
 ArtifactDetail.model_rebuild()
+QueryResult.model_rebuild()
+ArtifactProactiveSignals.model_rebuild()

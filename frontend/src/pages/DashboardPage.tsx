@@ -4,7 +4,20 @@ import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
-import type { ArtifactRead, AssumptionDriftItem, ContradictionItem, GraphSummary, NextActionSignalItem } from '../lib/types'
+import type { ArtifactRead, AssumptionDriftItem, ContradictionItem, GraphSummary, NextActionSignalItem, SignalRead } from '../lib/types'
+
+function signalCardClass(signalType: string): string {
+  if (signalType === 'contradiction') {
+    return 'record-link signal-card panel-subtle critical-card'
+  }
+  if (signalType === 'assumption_drift') {
+    return 'record-link signal-card panel-subtle drift-card'
+  }
+  if (signalType === 'next_action') {
+    return 'record-link signal-card panel-subtle action-card'
+  }
+  return 'record-link signal-card panel-subtle'
+}
 
 export function DashboardPage() {
   const { session, refreshUser } = useAuth()
@@ -13,6 +26,7 @@ export function DashboardPage() {
   const [contradictions, setContradictions] = useState<ContradictionItem[]>([])
   const [assumptionDrift, setAssumptionDrift] = useState<AssumptionDriftItem[]>([])
   const [nextActions, setNextActions] = useState<NextActionSignalItem[]>([])
+  const [persistedSignals, setPersistedSignals] = useState<SignalRead[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -28,12 +42,13 @@ export function DashboardPage() {
       setError(null)
 
       try {
-        const [graphSummary, artifactList, contradictionList, driftList, actionList] = await Promise.all([
+        const [graphSummary, artifactList, contradictionList, driftList, actionList, signalList] = await Promise.all([
           api.getGraphSummary(session.token),
           api.listArtifacts(session.token),
           api.listContradictions(session.token),
           api.listAssumptionDrift(session.token),
           api.listNextActions(session.token),
+          api.listSignals(session.token),
           refreshUser(),
         ])
 
@@ -43,6 +58,7 @@ export function DashboardPage() {
           setContradictions(contradictionList)
           setAssumptionDrift(driftList)
           setNextActions(actionList)
+          setPersistedSignals(signalList)
         }
       } catch (caughtError) {
         if (!cancelled) {
@@ -146,10 +162,20 @@ export function DashboardPage() {
           </Link>
         }
       >
-        {contradictions.length === 0 && assumptionDrift.length === 0 && nextActions.length === 0 ? (
+        {contradictions.length === 0 && assumptionDrift.length === 0 && nextActions.length === 0 && persistedSignals.length === 0 ? (
           <EmptyState title="No active signals yet" description="Run ingestion on demo artifacts to surface contradictions, drift, and grounded guidance." />
         ) : (
           <div className="signal-grid">
+            {persistedSignals.slice(0, 3).map((signal) => (
+              <Link key={signal.signal_id} className={signalCardClass(signal.signal_type)} to={`/signals/${signal.signal_id}`}>
+                <p className="section-label">Persisted {formatLabel(signal.signal_type)}</p>
+                <p className="signal-title">{signal.title}</p>
+                <p className="muted-copy">{signal.summary}</p>
+                <p className="table-secondary">
+                  {signal.source_artifact_title ?? signal.source_artifact_id ?? 'Unknown source'} · urgency {formatPercent(signal.urgency_score)} · {formatDateTime(signal.created_at)}
+                </p>
+              </Link>
+            ))}
             {contradictions.slice(0, 2).map((item) => (
               <article key={item.edge_id} className="signal-card panel-subtle critical-card">
                 <p className="section-label">Contradiction</p>

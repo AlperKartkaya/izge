@@ -13,6 +13,8 @@ import type {
   NextActionSignalItem,
   QueryResult,
   QueryTraceRead,
+  SignalDetail,
+  SignalRead,
   TokenResponse,
   UserRead,
   UserRole,
@@ -214,6 +216,14 @@ export const api = {
 
   listNextActions(token: string) {
     return request<NextActionSignalItem[]>('/next-actions', { token })
+  },
+
+  listSignals(token: string) {
+    return request<SignalRead[]>('/signals', { token })
+  },
+
+  getSignal(token: string, signalId: string) {
+    return request<SignalDetail>(`/signals/${signalId}`, { token })
   },
 
   listAuditEvents(token: string) {

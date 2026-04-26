@@ -95,6 +95,7 @@ export interface QueryResult {
   contradictions: Array<Record<string, unknown>>
   stale_assumptions: Array<Record<string, unknown>>
   recommended_next_actions: string[]
+  related_signals: SignalRead[]
   uncertainty_notes: string[]
   permissions_limited: boolean
   created_at: string
@@ -282,6 +283,40 @@ export interface ArtifactProactiveSignals {
   revealed_assumption_drift: AssumptionDriftItem[]
   superseded_memory: SupersessionItem[]
   recommended_next_actions: NextActionSignalItem[]
+  persisted_signals: SignalRead[]
+}
+
+export interface SignalRead {
+  signal_id: string
+  workspace_id: string
+  source_artifact_id: string | null
+  source_artifact_title: string | null
+  signal_type: string
+  title: string
+  summary: string
+  related_topic: string
+  urgency_score: number
+  uncertainty_score: number
+  grounded_reasoning: string
+  recommended_action: string | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SignalIntelligenceStep {
+  step_kind: string
+  title: string
+  description: string
+  supporting_evidence: EvidenceReference[]
+  supporting_memory_objects: MemoryReference[]
+}
+
+export interface SignalDetail extends SignalRead {
+  payload_json: Record<string, unknown>
+  supporting_memory_objects: MemoryReference[]
+  supporting_evidence: EvidenceReference[]
+  intelligence_path: SignalIntelligenceStep[]
 }
 
 export interface AuditEventRead {

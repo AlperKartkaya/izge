@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEventHandler } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
@@ -388,6 +389,21 @@ export function ArtifactsPage() {
                         <p className="table-primary">{selectedArtifactSignals.signal_counts.next_actions ?? 0}</p>
                       </article>
                     </div>
+
+                    {selectedArtifactSignals.persisted_signals.length > 0 ? (
+                      <div className="stack-sm">
+                        <p className="section-label">Persisted signal records</p>
+                        {selectedArtifactSignals.persisted_signals.slice(0, 4).map((signal) => (
+                          <Link key={signal.signal_id} className="record-link panel-subtle" to={`/signals/${signal.signal_id}`}>
+                            <div>
+                              <p className="table-primary">{signal.title}</p>
+                              <p className="table-secondary">{formatLabel(signal.signal_type)} · topic {signal.related_topic}</p>
+                            </div>
+                            <span className="table-secondary">Inspect path</span>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : null}
 
                     {selectedArtifactSignals.introduced_contradictions.slice(0, 2).map((item) => (
                       <article key={item.edge_id} className="panel-subtle stack-sm critical-card">

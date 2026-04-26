@@ -10,6 +10,7 @@ import { IngestionPage } from './pages/IngestionPage'
 import { MemoryDetailPage } from './pages/MemoryDetailPage'
 import { QueryPage } from './pages/QueryPage'
 import { QueryResultPage } from './pages/QueryResultPage'
+import { SignalDetailPage } from './pages/SignalDetailPage'
 import { SignInPage } from './pages/SignInPage'
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
         <Route path="ingestion" element={<IngestionPage />} />
         <Route path="query" element={<QueryPage />} />
         <Route path="query/:queryRunId" element={<QueryResultPage />} />
+        <Route path="signals/:signalId" element={<SignalDetailPage />} />
         <Route path="memory/:memoryType/:memoryId" element={<MemoryDetailPage />} />
         <Route path="graph" element={<GraphPage />} />
         <Route path="admin/users" element={<AdminPage />} />

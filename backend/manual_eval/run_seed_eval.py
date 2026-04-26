@@ -210,16 +210,27 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "member query trace",
     )
     member_next_actions = expect_list(request("/api/next-actions", headers={"Authorization": f"Bearer {member_token}"}), "member next actions")
+    member_signals = expect_list(request("/api/signals", headers={"Authorization": f"Bearer {member_token}"}), "member persisted signals")
+    admin_signals = expect_list(request("/api/signals", headers={"Authorization": f"Bearer {admin_token}"}), "admin persisted signals")
+    restricted_signal = next((signal for signal in admin_signals if signal.get("source_artifact_id") == restricted_artifact_id), None)
+    restricted_signal_detail_status = None
+    if restricted_signal is not None:
+        restricted_signal_detail_status, _restricted_signal_detail_body = request_status(
+            f"/api/signals/{restricted_signal['signal_id']}",
+            headers={"Authorization": f"Bearer {member_token}"},
+        )
 
     visible_artifact_titles = {str(item.get("title")) for item in member_artifacts}
     forbidden_payloads = {
         "artifact_list": member_artifacts,
         "supporting_evidence": result.get("supporting_evidence", []),
         "supporting_nodes": result.get("supporting_nodes", []),
+        "related_signals": result.get("related_signals", []),
         "contradictions": result.get("contradictions", []),
         "stale_assumptions": result.get("stale_assumptions", []),
         "trace": trace,
         "next_actions": member_next_actions,
+        "signals": member_signals,
     }
     checks = {
         "restricted_artifact_detail_forbidden": artifact_detail_status == 403,
@@ -233,6 +244,9 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "supporting_nodes_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["supporting_nodes"], restricted_artifact_id=restricted_artifact_id
         ),
+        "related_signals_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["related_signals"], restricted_artifact_id=restricted_artifact_id
+        ),
         "contradictions_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["contradictions"], restricted_artifact_id=restricted_artifact_id
         ),
@@ -243,6 +257,10 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "next_actions_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["next_actions"], restricted_artifact_id=restricted_artifact_id
         ),
+        "signals_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["signals"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "restricted_signal_detail_hidden": restricted_signal_detail_status in (None, 404),
         "artifact_list_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["artifact_list"], restricted_artifact_id=restricted_artifact_id
         ),
@@ -288,6 +306,17 @@ def run_eval() -> dict[str, Any]:
     contradiction_list = expect_list(request("/api/contradictions", headers={"Authorization": f"Bearer {token}"}), "contradictions")
     drift_list = expect_list(request("/api/assumptions/stale", headers={"Authorization": f"Bearer {token}"}), "assumption drift")
     next_action_list = expect_list(request("/api/next-actions", headers={"Authorization": f"Bearer {token}"}), "next actions")
+    persisted_signal_list = expect_list(request("/api/signals", headers={"Authorization": f"Bearer {token}"}), "persisted signals")
+    preferred_signal = next((signal for signal in persisted_signal_list if signal.get("signal_type") == "next_action"), None)
+    signal_for_detail = preferred_signal or (persisted_signal_list[0] if persisted_signal_list else None)
+    signal_detail = (
+        expect_object(
+            request(f"/api/signals/{signal_for_detail['signal_id']}", headers={"Authorization": f"Bearer {token}"}),
+            "persisted signal detail",
+        )
+        if signal_for_detail is not None
+        else {}
+    )
     graph_summary = expect_object(request("/api/graph/summary", headers={"Authorization": f"Bearer {token}"}), "graph summary")
     audit_events = expect_list(request("/api/audit/events", headers={"Authorization": f"Bearer {token}"}), "audit events")
     reversal_artifact = next(artifact for filename, artifact in uploaded_artifacts.items() if filename.startswith("03_"))
@@ -353,6 +382,7 @@ def run_eval() -> dict[str, Any]:
                 and contains_any_fragment(str(node.get("due_date", "")), cast(list[str], spec["expected_supporting_commitment_due_dates"]))
                 for node in result.get("supporting_nodes", [])
             ),
+            "has_related_persisted_signals": bool(result.get("related_signals")),
         }
         results.append(
             {
@@ -427,6 +457,7 @@ def run_eval() -> dict[str, Any]:
                     reversal_signals.get("recommended_next_actions")
                     and reversal_signals["recommended_next_actions"][0].get("supporting_evidence")
                 ),
+                "has_persisted_signal_links": bool(reversal_signals.get("persisted_signals")),
             },
         },
         "artifact_checkpoint_proactive": {
@@ -443,18 +474,32 @@ def run_eval() -> dict[str, Any]:
                     checkpoint_signals.get("recommended_next_actions")
                     and checkpoint_signals["recommended_next_actions"][0].get("supporting_memory_objects")
                 ),
+                "has_persisted_signal_links": bool(checkpoint_signals.get("persisted_signals")),
             },
         },
         "persisted_signals": {
             "signal_counts": graph_summary.get("signal_counts"),
+            "list_count": len(persisted_signal_list),
+            "detail_id": signal_detail.get("signal_id"),
             "checks": {
                 "graph_summary_has_signal_counts": bool(graph_summary.get("signal_counts")),
+                "signals_list_non_empty": bool(persisted_signal_list),
                 "has_persisted_next_actions": int(graph_summary.get("signal_counts", {}).get("next_action", 0)) > 0,
                 "has_persisted_contradiction_or_drift": (
                     int(graph_summary.get("signal_counts", {}).get("contradiction", 0))
                     + int(graph_summary.get("signal_counts", {}).get("assumption_drift", 0))
                 )
                 > 0,
+                "detail_has_source_artifact": bool(signal_detail.get("source_artifact_id") and signal_detail.get("source_artifact_title")),
+                "detail_has_grounded_reasoning": bool(signal_detail.get("grounded_reasoning")),
+                "detail_has_supporting_context": bool(
+                    signal_detail.get("supporting_evidence") or signal_detail.get("supporting_memory_objects")
+                ),
+                "detail_has_intelligence_path": bool(signal_detail.get("intelligence_path")),
+                "detail_names_inference_boundary": contains_any_fragment(
+                    json.dumps(signal_detail.get("intelligence_path", []), sort_keys=True, default=str),
+                    ["central company-controlled", "deterministic graph", "Signal was classified"],
+                ),
                 "audit_has_proactive_signal_generation": any(
                     event.get("event_type") == "PROACTIVE_SIGNALS_GENERATED" for event in audit_events
                 ),

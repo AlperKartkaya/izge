@@ -249,6 +249,26 @@ export function QueryResultPage() {
               )}
             </Panel>
 
+            <Panel title="Related persisted signals" description="Query answers link back to durable contradiction, drift, supersession, or next-action records created during ingestion.">
+              {activeResult.related_signals.length === 0 ? (
+                <EmptyState title="No persisted signal links" description="This query result did not overlap with persisted proactive signals in the current permission scope." />
+              ) : (
+                <div className="stack-sm">
+                  {activeResult.related_signals.map((signal) => (
+                    <Link key={signal.signal_id} className="record-link panel-subtle" to={`/signals/${signal.signal_id}`}>
+                      <div>
+                        <p className="table-primary">{signal.title}</p>
+                        <p className="table-secondary">
+                          {formatLabel(signal.signal_type)} · {signal.source_artifact_title ?? signal.source_artifact_id ?? 'unknown source'}
+                        </p>
+                      </div>
+                      <span className="table-secondary">Urgency {formatPercent(signal.urgency_score)}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </Panel>
+
             <Panel title="Uncertainty or Missing Context" description="Required caveats and limits surfaced alongside the answer.">
               <ul className="bullet-list">
                 {activeResult.uncertainty_notes.map((item) => (

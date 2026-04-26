@@ -33,6 +33,9 @@ from app.schemas.api import (
     QueryResult,
     QueryTraceRead,
     QueryTraceStepRead,
+    SignalDetail,
+    SignalIntelligenceStep,
+    SignalRead,
 )
 from app.services.audit import log_event
 from app.services.permissions import artifact_is_visible_to_user
@@ -1286,7 +1289,7 @@ def _signal_supports_artifact(signal: dict[str, Any], artifact_id: str) -> bool:
     )
 
 
-def artifact_proactive_signals(db: Session, user: User, artifact: Artifact) -> dict[str, Any]:
+def artifact_proactive_signals(db: Session, user: User, artifact: Artifact, *, include_persisted: bool = True) -> dict[str, Any]:
     memories = _load_memory_records(db, user)
     contradiction_items = [
         item
@@ -1332,6 +1335,7 @@ def artifact_proactive_signals(db: Session, user: User, artifact: Artifact) -> d
         "revealed_assumption_drift": drift_items,
         "superseded_memory": supersession_items,
         "recommended_next_actions": next_actions,
+        "persisted_signals": _persisted_signals_for_artifact(db, user, artifact.artifact_id) if include_persisted else [],
     }
 
 
@@ -1371,7 +1375,7 @@ def _persist_signal_row(
 
 
 def persist_artifact_proactive_signals(db: Session, user: User, artifact: Artifact) -> dict[str, Any]:
-    payload = artifact_proactive_signals(db, user, artifact)
+    payload = artifact_proactive_signals(db, user, artifact, include_persisted=False)
     db.execute(delete(Signal).where(Signal.workspace_id == artifact.workspace_id, Signal.source_artifact_id == artifact.artifact_id))
 
     for item in payload["introduced_contradictions"]:
@@ -1448,6 +1452,369 @@ def persist_artifact_proactive_signals(db: Session, user: User, artifact: Artifa
 
     db.flush()
     return payload
+
+
+def _signal_read_model(signal: Signal, artifact_titles: dict[str, str]) -> SignalRead:
+    return SignalRead(
+        signal_id=signal.signal_id,
+        workspace_id=signal.workspace_id,
+        source_artifact_id=signal.source_artifact_id,
+        source_artifact_title=_artifact_title_for_id(artifact_titles, signal.source_artifact_id) if signal.source_artifact_id else None,
+        signal_type=signal.signal_type,
+        title=signal.title,
+        summary=signal.summary,
+        related_topic=signal.related_topic,
+        urgency_score=signal.urgency_score,
+        uncertainty_score=signal.uncertainty_score,
+        grounded_reasoning=signal.grounded_reasoning,
+        recommended_action=signal.recommended_action,
+        status=signal.status,
+        created_at=signal.created_at,
+        updated_at=signal.updated_at,
+    )
+
+
+def _signal_visible_rows(db: Session, user: User, *, limit: int = 50) -> list[Signal]:
+    visible_artifact_ids = _visible_artifact_ids(db, user)
+    if not visible_artifact_ids:
+        return []
+    return db.scalars(
+        select(Signal)
+        .where(
+            Signal.workspace_id == user.workspace_id,
+            Signal.status == "active",
+            Signal.source_artifact_id.in_(visible_artifact_ids),
+        )
+        .order_by(Signal.urgency_score.desc(), Signal.created_at.desc())
+        .limit(limit)
+    ).all()
+
+
+def list_persisted_signals(db: Session, user: User, *, limit: int = 50) -> list[SignalRead]:
+    signals = _signal_visible_rows(db, user, limit=limit)
+    artifact_titles = _artifact_title_map(db, {signal.source_artifact_id for signal in signals if signal.source_artifact_id})
+    return [_signal_read_model(signal, artifact_titles) for signal in signals]
+
+
+def _persisted_signals_for_artifact(db: Session, user: User, artifact_id: str, *, limit: int = 12) -> list[SignalRead]:
+    if artifact_id not in _visible_artifact_ids(db, user):
+        return []
+    signals = db.scalars(
+        select(Signal)
+        .where(
+            Signal.workspace_id == user.workspace_id,
+            Signal.status == "active",
+            Signal.source_artifact_id == artifact_id,
+        )
+        .order_by(Signal.urgency_score.desc(), Signal.created_at.desc())
+        .limit(limit)
+    ).all()
+    artifact_titles = _artifact_title_map(db, {artifact_id})
+    return [_signal_read_model(signal, artifact_titles) for signal in signals]
+
+
+def _value_from_item(item: Any, key: str) -> Any:
+    if isinstance(item, dict):
+        return item.get(key)
+    return getattr(item, key, None)
+
+
+def _query_payload_artifact_ids(payload: dict[str, Any], visible_artifact_ids: set[str]) -> set[str]:
+    artifact_ids: set[str] = set()
+
+    for node in payload.get("supporting_nodes", []):
+        artifact_id = _value_from_item(node, "source_artifact_id")
+        if isinstance(artifact_id, str) and artifact_id in visible_artifact_ids:
+            artifact_ids.add(artifact_id)
+
+    for evidence in payload.get("supporting_evidence", []):
+        artifact_id = _value_from_item(evidence, "artifact_id")
+        if isinstance(artifact_id, str) and artifact_id in visible_artifact_ids:
+            artifact_ids.add(artifact_id)
+
+    for contradiction in [item for item in payload.get("contradictions", []) if isinstance(item, dict)]:
+        for key in ("evidence_artifact_id", "from_source_artifact_id", "to_source_artifact_id"):
+            artifact_id = contradiction.get(key)
+            if isinstance(artifact_id, str) and artifact_id in visible_artifact_ids:
+                artifact_ids.add(artifact_id)
+
+    for stale_assumption in [item for item in payload.get("stale_assumptions", []) if isinstance(item, dict)]:
+        for key in ("source_artifact_id", "supporting_signal_source_artifact_id"):
+            artifact_id = stale_assumption.get(key)
+            if isinstance(artifact_id, str) and artifact_id in visible_artifact_ids:
+                artifact_ids.add(artifact_id)
+
+    return artifact_ids
+
+
+def related_signals_for_query_payload(db: Session, user: User, payload: dict[str, Any], *, limit: int = 6) -> list[SignalRead]:
+    visible_artifact_ids = _visible_artifact_ids(db, user)
+    artifact_ids = _query_payload_artifact_ids(payload, visible_artifact_ids)
+    if not artifact_ids:
+        return []
+    signals = db.scalars(
+        select(Signal)
+        .where(
+            Signal.workspace_id == user.workspace_id,
+            Signal.status == "active",
+            Signal.source_artifact_id.in_(artifact_ids),
+        )
+        .order_by(Signal.urgency_score.desc(), Signal.created_at.desc())
+        .limit(limit)
+    ).all()
+    artifact_titles = _artifact_title_map(db, {signal.source_artifact_id for signal in signals if signal.source_artifact_id})
+    return [_signal_read_model(signal, artifact_titles) for signal in signals]
+
+
+def _dedupe_memory_references(references: list[MemoryReference]) -> list[MemoryReference]:
+    seen: set[tuple[str, str]] = set()
+    deduped: list[MemoryReference] = []
+    for reference in references:
+        key = (reference.memory_type, reference.memory_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(reference)
+    return deduped
+
+
+def _dedupe_evidence_references(references: list[EvidenceReference]) -> list[EvidenceReference]:
+    seen: set[tuple[str, str | None, str]] = set()
+    deduped: list[EvidenceReference] = []
+    for reference in references:
+        key = (reference.artifact_id, reference.chunk_id, reference.excerpt)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(reference)
+    return deduped
+
+
+def _memory_reference_from_payload(item: dict[str, Any], visible_artifact_ids: set[str]) -> MemoryReference | None:
+    if item.get("source_artifact_id") not in visible_artifact_ids:
+        return None
+    try:
+        return MemoryReference.model_validate(item)
+    except Exception:
+        return None
+
+
+def _evidence_reference_from_payload(item: dict[str, Any], visible_artifact_ids: set[str]) -> EvidenceReference | None:
+    if item.get("artifact_id") not in visible_artifact_ids:
+        return None
+    try:
+        return EvidenceReference.model_validate(item)
+    except Exception:
+        return None
+
+
+def _evidence_reference_from_side_evidence(item: dict[str, Any], visible_artifact_ids: set[str]) -> EvidenceReference | None:
+    artifact_id = item.get("artifact_id")
+    if not isinstance(artifact_id, str) or artifact_id not in visible_artifact_ids:
+        return None
+    artifact_title = item.get("artifact_title")
+    excerpt = item.get("excerpt")
+    return EvidenceReference(
+        artifact_id=artifact_id,
+        artifact_title=str(artifact_title or artifact_id),
+        chunk_id=item.get("chunk_id") if isinstance(item.get("chunk_id"), str) else None,
+        excerpt=str(excerpt or ""),
+        evidence_kind="graph",
+    )
+
+
+def _memory_for_node_id(node_id: str | None, nodes: dict[str, NodeRecord], memories_by_id: dict[str, MemoryRecord]) -> MemoryRecord | None:
+    if node_id is None:
+        return None
+    node = nodes.get(node_id)
+    if node is None:
+        return None
+    return memories_by_id.get(node.entity_id)
+
+
+def _memory_refs_for_signal_payload(
+    db: Session,
+    user: User,
+    payload: dict[str, Any],
+    visible_artifact_ids: set[str],
+) -> list[MemoryReference]:
+    references: list[MemoryReference] = []
+
+    if isinstance(payload.get("supporting_memory_objects"), list):
+        for item in payload["supporting_memory_objects"]:
+            if not isinstance(item, dict):
+                continue
+            reference = _memory_reference_from_payload(item, visible_artifact_ids)
+            if reference is not None:
+                references.append(reference)
+
+    memories = _load_memory_records(db, user)
+    memories_by_id = {memory.memory_id: memory for memory in memories}
+    nodes = _load_nodes_by_id(db, user)
+
+    for node_key in ("from_node_id", "to_node_id"):
+        memory = _memory_for_node_id(payload.get(node_key) if isinstance(payload.get(node_key), str) else None, nodes, memories_by_id)
+        if memory is not None:
+            references.append(_memory_reference(memory))
+
+    for memory_key in ("assumption_id", "supporting_signal_memory_id"):
+        memory_id = payload.get(memory_key)
+        memory = memories_by_id.get(memory_id) if isinstance(memory_id, str) else None
+        if memory is not None:
+            references.append(_memory_reference(memory))
+
+    return _dedupe_memory_references(references)[:8]
+
+
+def _evidence_refs_for_signal_payload(
+    db: Session,
+    payload: dict[str, Any],
+    visible_artifact_ids: set[str],
+    artifact_titles: dict[str, str],
+) -> list[EvidenceReference]:
+    references: list[EvidenceReference] = []
+
+    if isinstance(payload.get("supporting_evidence"), list):
+        for item in payload["supporting_evidence"]:
+            if not isinstance(item, dict):
+                continue
+            reference = _evidence_reference_from_payload(item, visible_artifact_ids)
+            if reference is not None:
+                references.append(reference)
+
+    for side_key in ("from_evidence", "to_evidence"):
+        side_payload = payload.get(side_key)
+        if isinstance(side_payload, dict):
+            reference = _evidence_reference_from_side_evidence(side_payload, visible_artifact_ids)
+            if reference is not None:
+                references.append(reference)
+
+    direct_artifact_id = payload.get("evidence_artifact_id")
+    if isinstance(direct_artifact_id, str) and direct_artifact_id in visible_artifact_ids:
+        evidence_chunk_id = payload.get("evidence_chunk_id") if isinstance(payload.get("evidence_chunk_id"), str) else None
+        evidence_span = payload.get("evidence_span")
+        references.append(
+            EvidenceReference(
+                artifact_id=direct_artifact_id,
+                artifact_title=_artifact_title_for_id(artifact_titles, direct_artifact_id),
+                chunk_id=evidence_chunk_id,
+                excerpt=_evidence_excerpt(
+                    db,
+                    chunk_id=evidence_chunk_id,
+                    fallback=str(evidence_span or payload.get("evidence_provenance") or ""),
+                ),
+                evidence_kind="graph",
+            )
+        )
+
+    for artifact_key in ("source_artifact_id", "supporting_signal_source_artifact_id"):
+        artifact_id = payload.get(artifact_key)
+        if not isinstance(artifact_id, str) or artifact_id not in visible_artifact_ids:
+            continue
+        evidence_span = payload.get("evidence_span") or payload.get("validity_notes") or payload.get("evidence_provenance")
+        references.append(
+            EvidenceReference(
+                artifact_id=artifact_id,
+                artifact_title=_artifact_title_for_id(artifact_titles, artifact_id),
+                chunk_id=None,
+                excerpt=str(evidence_span or "Visible source artifact contributed to this persisted signal."),
+                evidence_kind="graph",
+            )
+        )
+
+    return _dedupe_evidence_references([reference for reference in references if reference.excerpt])[:8]
+
+
+def _signal_type_label(signal_type: str) -> str:
+    labels = {
+        "contradiction": "contradiction",
+        "assumption_drift": "assumption drift",
+        "supersession": "supersession",
+        "next_action": "next-action guidance",
+    }
+    return labels.get(signal_type, signal_type.replace("_", " "))
+
+
+def _signal_intelligence_path(
+    signal: Signal,
+    *,
+    supporting_memory_objects: list[MemoryReference],
+    supporting_evidence: list[EvidenceReference],
+) -> list[SignalIntelligenceStep]:
+    source_step_evidence = [item for item in supporting_evidence if item.artifact_id == signal.source_artifact_id][:2]
+    source_description = (
+        "A visible artifact entered the workspace memory boundary. Extraction may use the central company-controlled "
+        "LLM adapter when configured, with deterministic heuristic fallback preserving local-first operation."
+    )
+    graph_description = (
+        "The backend normalized extracted claims into structured memory objects and graph edges, then filtered support "
+        "through the reader's artifact permissions."
+    )
+    classification_description = (
+        f"Deterministic graph analysis classified the persisted object as {_signal_type_label(signal.signal_type)} on topic "
+        f"{signal.related_topic}; urgency and uncertainty are stored with the signal instead of recomputed in the browser."
+    )
+    guidance_description = (
+        signal.recommended_action
+        or "No automatic task was promoted; the signal remains inspectable so an operator can resolve the memory tension before acting."
+    )
+    return [
+        SignalIntelligenceStep(
+            step_kind="source_artifact",
+            title="Source artifact entered memory",
+            description=source_description,
+            supporting_evidence=source_step_evidence,
+            supporting_memory_objects=[],
+        ),
+        SignalIntelligenceStep(
+            step_kind="memory_reconstruction",
+            title="Structured memory was reconstructed",
+            description=graph_description,
+            supporting_evidence=supporting_evidence[:3],
+            supporting_memory_objects=supporting_memory_objects[:4],
+        ),
+        SignalIntelligenceStep(
+            step_kind="signal_classification",
+            title="Signal was classified and persisted",
+            description=classification_description,
+            supporting_evidence=supporting_evidence[:3],
+            supporting_memory_objects=supporting_memory_objects[:4],
+        ),
+        SignalIntelligenceStep(
+            step_kind="guidance_composition",
+            title="Guidance boundary was made explicit",
+            description=guidance_description,
+            supporting_evidence=supporting_evidence[:2],
+            supporting_memory_objects=supporting_memory_objects[:3],
+        ),
+    ]
+
+
+def get_persisted_signal_detail(db: Session, user: User, signal_id: str) -> SignalDetail | None:
+    signal = db.scalar(select(Signal).where(Signal.signal_id == signal_id, Signal.workspace_id == user.workspace_id))
+    if signal is None:
+        return None
+
+    visible_artifact_ids = _visible_artifact_ids(db, user)
+    if signal.source_artifact_id not in visible_artifact_ids:
+        return None
+
+    artifact_titles = _artifact_title_map(db, {artifact_id for artifact_id in visible_artifact_ids if artifact_id})
+    payload = signal.payload_json if isinstance(signal.payload_json, dict) else {}
+    supporting_memory_objects = _memory_refs_for_signal_payload(db, user, payload, visible_artifact_ids)
+    supporting_evidence = _evidence_refs_for_signal_payload(db, payload, visible_artifact_ids, artifact_titles)
+    intelligence_path = _signal_intelligence_path(
+        signal,
+        supporting_memory_objects=supporting_memory_objects,
+        supporting_evidence=supporting_evidence,
+    )
+    return SignalDetail(
+        **_signal_read_model(signal, artifact_titles).model_dump(),
+        payload_json=payload,
+        supporting_memory_objects=supporting_memory_objects,
+        supporting_evidence=supporting_evidence,
+        intelligence_path=intelligence_path,
+    )
 
 
 def _persist_query_trace_steps(
@@ -1666,6 +2033,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         contradictions=result_data["contradictions"],
         stale_assumptions=result_data["stale_assumptions"],
         recommended_next_actions=result_data["recommended_next_actions"],
+        related_signals=related_signals_for_query_payload(db, actor, result_data),
         uncertainty_notes=result_data["uncertainty_notes"],
         permissions_limited=permissions_limited,
         created_at=query_run.created_at,
@@ -1762,6 +2130,16 @@ def build_query_result_for_reader(db: Session, query_run: QueryRun, reader: User
         contradictions=contradictions,
         stale_assumptions=stale_assumptions,
         recommended_next_actions=recommended_next_actions,
+        related_signals=related_signals_for_query_payload(
+            db,
+            reader,
+            {
+                "supporting_nodes": supporting_nodes,
+                "supporting_evidence": supporting_evidence,
+                "contradictions": contradictions,
+                "stale_assumptions": stale_assumptions,
+            },
+        ),
         uncertainty_notes=uncertainty_notes,
         permissions_limited=permissions_limited,
         created_at=query_run.created_at,
