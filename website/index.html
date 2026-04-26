@@ -24,7 +24,7 @@
 
     <header class="site-header" data-reveal>
       <a class="brand-mark" href="#top" aria-label="Izge home">
-        <span class="brand-glyph">İ</span>
+        <img class="brand-logo" src="./assets/logo.png" alt="" />
         <span>Izge</span>
       </a>
       <nav class="top-nav" aria-label="Site navigation">
@@ -333,7 +333,7 @@
         </div>
       </section>
 
-      <section class="architecture scene scene-stack" aria-labelledby="architecture-title">
+      <section id="trajectory" class="architecture scene scene-stack" aria-labelledby="architecture-title">
         <div class="section-heading" data-reveal>
           <p class="kicker">Product trajectory</p>
           <h2 id="architecture-title">A layered system for organizational judgment.</h2>
@@ -357,7 +357,7 @@
         </div>
       </section>
 
-      <section class="why-now scene scene-left" aria-labelledby="why-title">
+      <section id="trust" class="why-now scene scene-left" aria-labelledby="why-title">
         <div class="section-heading split-heading" data-reveal>
           <p class="kicker">Why it can win</p>
           <h2 id="why-title">Trust is not a feature added later. It is the architecture.</h2>
@@ -392,9 +392,57 @@
             <a class="button primary" href="https://app.izge.dev">Open the app</a>
             <a class="button secondary" href="#top">Return to the opening claim</a>
           </div>
+          <nav class="closing-nav" aria-label="Lower page navigation">
+            <a href="#scenario">Scenario</a>
+            <a href="#system">Memory engine</a>
+            <a href="#modes">Reasoning modes</a>
+            <a href="#trust">Trust architecture</a>
+            <a href="#manifesto">Manifesto</a>
+          </nav>
         </div>
       </section>
     </main>
+
+    <footer class="site-footer" aria-labelledby="footer-title">
+      <div class="footer-claim">
+        <p class="kicker" id="footer-title">Izge</p>
+        <h2>Institutional memory, kept inspectable.</h2>
+        <p>Local-first decision intelligence for teams that need lineage, contradiction, drift, and next-action clarity without turning their record into a black box.</p>
+      </div>
+      <nav class="footer-grid" aria-label="Footer navigation">
+        <section>
+          <h3>Product</h3>
+          <a href="#scenario">Use case scenario</a>
+          <a href="#system">Memory engine</a>
+          <a href="#modes">Reasoning modes</a>
+          <a href="#trajectory">Product trajectory</a>
+        </section>
+        <section>
+          <h3>Access</h3>
+          <a href="https://app.izge.dev">Open app</a>
+          <a href="mailto:hello@izge.dev?subject=Izge%20MVP%20brief">Request MVP brief</a>
+          <a href="mailto:hello@izge.dev?subject=Izge%20demo%20scenario">Share demo scenario</a>
+        </section>
+        <section>
+          <h3>Trust</h3>
+          <a href="#trust">Local-first posture</a>
+          <a href="mailto:security@izge.dev?subject=Izge%20security%20question">Security contact</a>
+          <span>Evidence-linked outputs</span>
+          <span>Auditability by design</span>
+        </section>
+        <section>
+          <h3>Operating posture</h3>
+          <span>Local-first memory</span>
+          <span>Evidence-linked reasoning</span>
+          <span>Decision lineage first</span>
+        </section>
+      </nav>
+      <div class="footer-bottom">
+        <span>© 2026 Izge</span>
+        <span>Memory before magic.</span>
+        <a href="#top">Back to top</a>
+      </div>
+    </footer>
 
     <script src="./memory-field.js" defer></script>
   </body>
