@@ -252,6 +252,37 @@ export interface NextActionSignalItem {
   ranking_basis: string[]
 }
 
+export interface SupersessionItem {
+  edge_id: string
+  from_node_id: string
+  to_node_id: string
+  from_type: string
+  to_type: string
+  from_title: string
+  to_title: string
+  relation_label: string
+  confidence_score: number
+  evidence_artifact_id: string | null
+  evidence_artifact_title: string | null
+  evidence_chunk_id: string | null
+  evidence_span: string | null
+  evidence_provenance: string | null
+  topic_key: string
+  ranking_basis: string[]
+}
+
+export interface ArtifactProactiveSignals {
+  artifact_id: string
+  artifact_title: string
+  ingestion_status: string
+  summary: string
+  signal_counts: Record<string, number>
+  introduced_contradictions: ContradictionItem[]
+  revealed_assumption_drift: AssumptionDriftItem[]
+  superseded_memory: SupersessionItem[]
+  recommended_next_actions: NextActionSignalItem[]
+}
+
 export interface AuditEventRead {
   event_id: string
   workspace_id: string

@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState, type FormEventHandler } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import { formatDateTime } from '../lib/format'
-import type { ArtifactDetail, ArtifactRead, UserRead } from '../lib/types'
+import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
+import type { ArtifactDetail, ArtifactProactiveSignals, ArtifactRead, UserRead } from '../lib/types'
 
 type VisibilityScope = 'workspace' | 'restricted'
 
@@ -26,6 +26,7 @@ export function ArtifactsPage() {
   const [users, setUsers] = useState<UserRead[]>([])
   const [selectedArtifactId, setSelectedArtifactId] = useState<string>('')
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail | null>(null)
+  const [selectedArtifactSignals, setSelectedArtifactSignals] = useState<ArtifactProactiveSignals | null>(null)
   const [uploadState, setUploadState] = useState(defaultUploadState)
   const [pasteState, setPasteState] = useState(defaultPasteState)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -46,10 +47,15 @@ export function ArtifactsPage() {
     setSelectedArtifactId(nextSelected)
 
     if (nextSelected) {
-      const detail = await api.getArtifact(session.token, nextSelected)
+      const [detail, signals] = await Promise.all([
+        api.getArtifact(session.token, nextSelected),
+        api.getArtifactSignals(session.token, nextSelected),
+      ])
       setSelectedArtifact(detail)
+      setSelectedArtifactSignals(signals)
     } else {
       setSelectedArtifact(null)
+      setSelectedArtifactSignals(null)
     }
   }
 
@@ -150,7 +156,12 @@ export function ArtifactsPage() {
 
     setSelectedArtifactId(artifactId)
     try {
-      setSelectedArtifact(await api.getArtifact(session.token, artifactId))
+      const [detail, signals] = await Promise.all([
+        api.getArtifact(session.token, artifactId),
+        api.getArtifactSignals(session.token, artifactId),
+      ])
+      setSelectedArtifact(detail)
+      setSelectedArtifactSignals(signals)
     } catch (caughtError) {
       setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load artifact detail.')
     }
@@ -351,6 +362,70 @@ export function ArtifactsPage() {
               <div className="panel-subtle">
                 <p className="section-label">Extracted text preview</p>
                 <p className="evidence-block">{selectedArtifact.extracted_text_preview || 'No extracted text available yet.'}</p>
+              </div>
+              <div className="panel-subtle stack-sm">
+                <p className="section-label">What this artifact changed</p>
+                {!selectedArtifactSignals ? (
+                  <p className="muted-copy">Proactive signal summary is not loaded yet.</p>
+                ) : (
+                  <>
+                    <p className="muted-copy">{selectedArtifactSignals.summary}</p>
+                    <div className="detail-grid">
+                      <article className="panel-subtle detail-card">
+                        <p className="section-label">Contradictions</p>
+                        <p className="table-primary">{selectedArtifactSignals.signal_counts.contradictions ?? 0}</p>
+                      </article>
+                      <article className="panel-subtle detail-card">
+                        <p className="section-label">Drift</p>
+                        <p className="table-primary">{selectedArtifactSignals.signal_counts.assumption_drift ?? 0}</p>
+                      </article>
+                      <article className="panel-subtle detail-card">
+                        <p className="section-label">Supersessions</p>
+                        <p className="table-primary">{selectedArtifactSignals.signal_counts.supersessions ?? 0}</p>
+                      </article>
+                      <article className="panel-subtle detail-card">
+                        <p className="section-label">Next actions</p>
+                        <p className="table-primary">{selectedArtifactSignals.signal_counts.next_actions ?? 0}</p>
+                      </article>
+                    </div>
+
+                    {selectedArtifactSignals.introduced_contradictions.slice(0, 2).map((item) => (
+                      <article key={item.edge_id} className="panel-subtle stack-sm critical-card">
+                        <p className="section-label">Introduced contradiction</p>
+                        <p className="table-primary">{item.from_title} ↔ {item.to_title}</p>
+                        <p className="table-secondary">Topic {item.topic_key} · confidence {formatPercent(item.confidence_score)}</p>
+                        <p className="muted-copy">{item.evidence_provenance}</p>
+                      </article>
+                    ))}
+
+                    {selectedArtifactSignals.revealed_assumption_drift.slice(0, 2).map((item) => (
+                      <article key={item.assumption_id} className="panel-subtle stack-sm drift-card">
+                        <p className="section-label">Revealed drift</p>
+                        <p className="table-primary">{item.title_or_label}</p>
+                        <p className="table-secondary">Status {formatLabel(item.status)} · topic {item.topic_key}</p>
+                        <p className="muted-copy">{item.evidence_provenance || item.validity_notes}</p>
+                      </article>
+                    ))}
+
+                    {selectedArtifactSignals.superseded_memory.slice(0, 2).map((item) => (
+                      <article key={item.edge_id} className="panel-subtle stack-sm">
+                        <p className="section-label">Supersession / reopening</p>
+                        <p className="table-primary">{item.from_title} supersedes {item.to_title}</p>
+                        <p className="table-secondary">Topic {item.topic_key} · confidence {formatPercent(item.confidence_score)}</p>
+                        <p className="muted-copy">{item.evidence_provenance}</p>
+                      </article>
+                    ))}
+
+                    {selectedArtifactSignals.recommended_next_actions.slice(0, 2).map((item) => (
+                      <article key={item.signal_id} className="panel-subtle stack-sm action-card">
+                        <p className="section-label">Grounded next action</p>
+                        <p className="table-primary">{item.title}</p>
+                        <p className="evidence-block">{item.recommended_action}</p>
+                        <p className="table-secondary">Urgency {formatPercent(item.urgency_score)} · uncertainty {formatPercent(item.uncertainty_score)}</p>
+                      </article>
+                    ))}
+                  </>
+                )}
               </div>
               <div className="panel-subtle stack-sm">
                 <p className="section-label">Chunk extraction provenance</p>

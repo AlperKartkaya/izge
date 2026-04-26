@@ -1002,6 +1002,18 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
             target_id=artifact.artifact_id,
             event_metadata={"job_id": job.job_id, "counts": extracted_counts},
         )
+        from app.services.querying import artifact_proactive_signals
+
+        proactive_summary = artifact_proactive_signals(db, actor, artifact)
+        log_event(
+            db,
+            workspace_id=artifact.workspace_id,
+            actor_user_id=actor.user_id,
+            event_type="PROACTIVE_SIGNALS_GENERATED",
+            target_type="artifact",
+            target_id=artifact.artifact_id,
+            event_metadata={"job_id": job.job_id, "signal_counts": proactive_summary["signal_counts"]},
+        )
         db.refresh(job)
         return job
     except Exception as exc:

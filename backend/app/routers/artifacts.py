@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import Artifact, ArtifactChunk, User
-from app.schemas.api import ArtifactChunkProvenance, ArtifactDetail, ArtifactPermissionUpdate, ArtifactRead, PastedTextCreate
+from app.schemas.api import ArtifactChunkProvenance, ArtifactDetail, ArtifactPermissionUpdate, ArtifactProactiveSignals, ArtifactRead, PastedTextCreate
 from app.config import get_settings
 from app.services.audit import log_event
 from app.services.permissions import list_permitted_user_ids, require_admin, require_artifact_access, set_artifact_permissions
+from app.services.querying import artifact_proactive_signals
 from app.services.storage import ensure_supported_upload, persist_pasted_text, persist_upload_bytes
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
@@ -139,6 +140,15 @@ def get_artifact(artifact_id: str, current_user: User = Depends(get_current_user
             for chunk in chunks
         ],
     )
+
+
+@router.get("/{artifact_id}/signals", response_model=ArtifactProactiveSignals)
+def get_artifact_signals(artifact_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ArtifactProactiveSignals:
+    artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
+    if artifact is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+    require_artifact_access(db, artifact, current_user)
+    return ArtifactProactiveSignals(**artifact_proactive_signals(db, current_user, artifact))
 
 
 @router.patch("/{artifact_id}/permissions", response_model=ArtifactDetail)

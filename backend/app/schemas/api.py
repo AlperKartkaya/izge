@@ -318,6 +318,37 @@ class NextActionSignalItem(BaseModel):
     ranking_basis: list[str] = Field(default_factory=list)
 
 
+class SupersessionItem(BaseModel):
+    edge_id: str
+    from_node_id: str
+    to_node_id: str
+    from_type: str
+    to_type: str
+    from_title: str
+    to_title: str
+    relation_label: str
+    confidence_score: float
+    evidence_artifact_id: str | None
+    evidence_artifact_title: str | None = None
+    evidence_chunk_id: str | None
+    evidence_span: str | None = None
+    evidence_provenance: str | None = None
+    topic_key: str
+    ranking_basis: list[str] = Field(default_factory=list)
+
+
+class ArtifactProactiveSignals(BaseModel):
+    artifact_id: str
+    artifact_title: str
+    ingestion_status: str
+    summary: str
+    signal_counts: dict[str, int]
+    introduced_contradictions: list[ContradictionItem] = Field(default_factory=list)
+    revealed_assumption_drift: list[AssumptionDriftItem] = Field(default_factory=list)
+    superseded_memory: list[SupersessionItem] = Field(default_factory=list)
+    recommended_next_actions: list[NextActionSignalItem] = Field(default_factory=list)
+
+
 class AuditEventRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

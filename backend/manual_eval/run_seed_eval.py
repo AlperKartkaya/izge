@@ -59,8 +59,9 @@ def contains_any_fragment(value: str, fragments: list[str]) -> bool:
     return any(fragment.lower() in lowered for fragment in fragments)
 
 
-def upload_seed(token: str) -> None:
+def upload_seed(token: str) -> dict[str, dict[str, Any]]:
     headers = {"Authorization": f"Bearer {token}"}
+    uploaded: dict[str, dict[str, Any]] = {}
     for path in sorted(SEED_DIR.glob("0*.md")):
         boundary = "----IzgeBoundary"
         content = path.read_bytes()
@@ -99,6 +100,8 @@ def upload_seed(token: str) -> None:
             data=json.dumps({"artifact_id": artifact["artifact_id"]}).encode(),
             headers={**headers, "Content-Type": "application/json"},
         )
+        uploaded[path.name] = artifact
+    return uploaded
 
 
 def create_permission_regression_fixture(token: str) -> dict[str, Any]:
@@ -185,6 +188,10 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         f"/api/artifacts/{restricted_artifact_id}",
         headers={"Authorization": f"Bearer {member_token}"},
     )
+    artifact_signals_status, _artifact_signals_body = request_status(
+        f"/api/artifacts/{restricted_artifact_id}/signals",
+        headers={"Authorization": f"Bearer {member_token}"},
+    )
     member_artifacts = expect_list(request("/api/artifacts", headers={"Authorization": f"Bearer {member_token}"}), "member artifact list")
     result = expect_object(
         request(
@@ -216,6 +223,7 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
     }
     checks = {
         "restricted_artifact_detail_forbidden": artifact_detail_status == 403,
+        "restricted_artifact_signals_forbidden": artifact_signals_status == 403,
         "restricted_artifact_hidden_from_list": RESTRICTED_TITLE not in visible_artifact_titles,
         "member_result_permission_limited": result.get("permissions_limited") is True,
         "member_result_has_permission_caveat": any("permission" in str(note).lower() for note in result.get("uncertainty_notes", [])),
@@ -275,11 +283,21 @@ def run_eval() -> dict[str, Any]:
         "sign-in response",
     )
     token = signin["access_token"]
-    upload_seed(token)
+    uploaded_artifacts = upload_seed(token)
     auth_headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     contradiction_list = expect_list(request("/api/contradictions", headers={"Authorization": f"Bearer {token}"}), "contradictions")
     drift_list = expect_list(request("/api/assumptions/stale", headers={"Authorization": f"Bearer {token}"}), "assumption drift")
     next_action_list = expect_list(request("/api/next-actions", headers={"Authorization": f"Bearer {token}"}), "next actions")
+    reversal_artifact = next(artifact for filename, artifact in uploaded_artifacts.items() if filename.startswith("03_"))
+    checkpoint_artifact = next(artifact for filename, artifact in uploaded_artifacts.items() if filename.startswith("04_"))
+    reversal_signals = expect_object(
+        request(f"/api/artifacts/{reversal_artifact['artifact_id']}/signals", headers={"Authorization": f"Bearer {token}"}),
+        "reversal artifact signals",
+    )
+    checkpoint_signals = expect_object(
+        request(f"/api/artifacts/{checkpoint_artifact['artifact_id']}/signals", headers={"Authorization": f"Bearer {token}"}),
+        "checkpoint artifact signals",
+    )
     permission_regression = permission_regression_checks(token)
 
     results = []
@@ -390,6 +408,38 @@ def run_eval() -> dict[str, Any]:
                         str(next_action_list[0].get("recommended_action", "")),
                         ["Resolve the conflict", "Revalidate the assumption", "Review the open commitment"],
                     )
+                ),
+            },
+        },
+        "artifact_reversal_proactive": {
+            "artifact_id": reversal_artifact["artifact_id"],
+            "summary": reversal_signals.get("summary"),
+            "checks": {
+                "summary_mentions_artifact_impact": contains_any_fragment(
+                    str(reversal_signals.get("summary", "")),
+                    ["contradiction signal", "supersession", "next-action"],
+                ),
+                "has_introduced_contradiction": bool(reversal_signals.get("introduced_contradictions")),
+                "has_artifact_scoped_next_action": bool(reversal_signals.get("recommended_next_actions")),
+                "next_action_has_evidence": bool(
+                    reversal_signals.get("recommended_next_actions")
+                    and reversal_signals["recommended_next_actions"][0].get("supporting_evidence")
+                ),
+            },
+        },
+        "artifact_checkpoint_proactive": {
+            "artifact_id": checkpoint_artifact["artifact_id"],
+            "summary": checkpoint_signals.get("summary"),
+            "checks": {
+                "summary_mentions_artifact_impact": contains_any_fragment(
+                    str(checkpoint_signals.get("summary", "")),
+                    ["assumption-drift signal", "next-action"],
+                ),
+                "has_revealed_drift": bool(checkpoint_signals.get("revealed_assumption_drift")),
+                "has_artifact_scoped_next_action": bool(checkpoint_signals.get("recommended_next_actions")),
+                "next_action_has_memory": bool(
+                    checkpoint_signals.get("recommended_next_actions")
+                    and checkpoint_signals["recommended_next_actions"][0].get("supporting_memory_objects")
                 ),
             },
         },

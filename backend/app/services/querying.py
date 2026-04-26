@@ -1224,6 +1224,116 @@ def _commitment_next_action_signal(db: Session, *, commitment: MemoryRecord) -> 
     )
 
 
+def _supersession_dicts_for_artifact(db: Session, user: User, artifact_id: str, limit: int = 6) -> list[dict[str, Any]]:
+    nodes = _load_nodes_by_id(db, user)
+    memory_by_id = {memory.memory_id: memory for memory in _load_memory_records(db, user)}
+    artifact_titles = _artifact_title_map(db, _visible_artifact_ids(db, user))
+    items: list[dict[str, Any]] = []
+
+    for edge in _visible_edges(db, user):
+        if edge.edge_type != "SUPERSEDES" or edge.evidence_artifact_id != artifact_id:
+            continue
+        from_node = nodes.get(edge.from_node_id)
+        to_node = nodes.get(edge.to_node_id)
+        if from_node is None or to_node is None:
+            continue
+        from_memory = memory_by_id.get(from_node.entity_id)
+        to_memory = memory_by_id.get(to_node.entity_id)
+        if from_memory is None or to_memory is None:
+            continue
+        topic_key = from_memory.topic_key if from_memory.topic_key != "general" else to_memory.topic_key
+        evidence_artifact_title = _artifact_title_for_id(artifact_titles, edge.evidence_artifact_id)
+        items.append(
+            {
+                "edge_id": edge.edge_id,
+                "from_node_id": edge.from_node_id,
+                "to_node_id": edge.to_node_id,
+                "from_type": from_node.node_type,
+                "to_type": to_node.node_type,
+                "from_title": from_node.title_or_label,
+                "to_title": to_node.title_or_label,
+                "from_source_artifact_id": from_memory.source_artifact_id,
+                "to_source_artifact_id": to_memory.source_artifact_id,
+                "relation_label": "Supersedes",
+                "confidence_score": edge.confidence_score,
+                "evidence_artifact_id": edge.evidence_artifact_id,
+                "evidence_artifact_title": evidence_artifact_title,
+                "evidence_chunk_id": edge.evidence_chunk_id,
+                "evidence_span": _evidence_excerpt(
+                    db,
+                    chunk_id=edge.evidence_chunk_id,
+                    fallback=edge.evidence_span or f"{from_node.title_or_label} supersedes {to_node.title_or_label}",
+                ),
+                "evidence_provenance": (
+                    f"Supersession/reopening edge recorded in {evidence_artifact_title}, linking the later claim "
+                    f"'{from_node.title_or_label}' to earlier memory '{to_node.title_or_label}'."
+                ),
+                "topic_key": topic_key,
+                "ranking_basis": ["supersession/reopening", f"topic:{topic_key}", "later-over-earlier timeline", "graph evidence"],
+            }
+        )
+
+    items.sort(key=lambda item: (item["confidence_score"], item["from_title"]), reverse=True)
+    return items[:limit]
+
+
+def _signal_supports_artifact(signal: dict[str, Any], artifact_id: str) -> bool:
+    supporting_evidence = [item for item in signal.get("supporting_evidence", []) if isinstance(item, dict)]
+    supporting_memory = [item for item in signal.get("supporting_memory_objects", []) if isinstance(item, dict)]
+    return any(item.get("artifact_id") == artifact_id for item in supporting_evidence) or any(
+        item.get("source_artifact_id") == artifact_id for item in supporting_memory
+    )
+
+
+def artifact_proactive_signals(db: Session, user: User, artifact: Artifact) -> dict[str, Any]:
+    memories = _load_memory_records(db, user)
+    contradiction_items = [
+        item
+        for item in _contradiction_dicts(db, user, "", memories, limit=24)
+        if item.get("evidence_artifact_id") == artifact.artifact_id or item.get("from_source_artifact_id") == artifact.artifact_id
+    ]
+    drift_items = [
+        item
+        for item in _stale_assumption_dicts(db, user, "", memories, limit=24)
+        if item.get("supporting_signal_source_artifact_id") == artifact.artifact_id
+    ]
+    supersession_items = _supersession_dicts_for_artifact(db, user, artifact.artifact_id, limit=8)
+    next_actions = [
+        signal
+        for signal in list_ranked_next_actions(db, user, limit=24)
+        if _signal_supports_artifact(signal, artifact.artifact_id)
+    ][:8]
+    signal_counts = {
+        "contradictions": len(contradiction_items),
+        "assumption_drift": len(drift_items),
+        "supersessions": len(supersession_items),
+        "next_actions": len(next_actions),
+    }
+    total_signal_count = sum(signal_counts.values())
+    if artifact.ingestion_status != "completed":
+        summary = "This artifact has not completed ingestion, so proactive memory effects are not available yet."
+    elif total_signal_count:
+        summary = (
+            f"This artifact produced {signal_counts['contradictions']} contradiction signal(s), "
+            f"{signal_counts['assumption_drift']} assumption-drift signal(s), "
+            f"{signal_counts['supersessions']} supersession/reopening link(s), and "
+            f"{signal_counts['next_actions']} grounded next-action recommendation(s)."
+        )
+    else:
+        summary = "No contradiction, drift, supersession, or next-action signal could be grounded from this artifact in the current visible memory."
+    return {
+        "artifact_id": artifact.artifact_id,
+        "artifact_title": artifact.title,
+        "ingestion_status": artifact.ingestion_status,
+        "summary": summary,
+        "signal_counts": signal_counts,
+        "introduced_contradictions": contradiction_items,
+        "revealed_assumption_drift": drift_items,
+        "superseded_memory": supersession_items,
+        "recommended_next_actions": next_actions,
+    }
+
+
 def _persist_query_trace_steps(
     db: Session,
     *,

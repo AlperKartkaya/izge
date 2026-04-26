@@ -1,5 +1,6 @@
 import type {
   ArtifactDetail,
+  ArtifactProactiveSignals,
   ArtifactRead,
   AssumptionDriftItem,
   AuditEventRead,
@@ -107,6 +108,10 @@ export const api = {
 
   getArtifact(token: string, artifactId: string) {
     return request<ArtifactDetail>(`/artifacts/${artifactId}`, { token })
+  },
+
+  getArtifactSignals(token: string, artifactId: string) {
+    return request<ArtifactProactiveSignals>(`/artifacts/${artifactId}/signals`, { token })
   },
 
   uploadArtifact(
