@@ -19,6 +19,8 @@ function signalCardClass(signalType: string): string {
   return 'record-link signal-card panel-subtle'
 }
 
+const canonicalDemoPrompt = 'What changed about the self-serve onboarding launch, does it conflict with prior history, and what should the team do next?'
+
 export function DashboardPage() {
   const { session, refreshUser } = useAuth()
   const [summary, setSummary] = useState<GraphSummary | null>(null)
@@ -86,6 +88,8 @@ export function DashboardPage() {
     () => Object.values(summary?.signal_counts ?? {}).reduce((total, count) => total + count, 0),
     [summary],
   )
+  const topPersistedSignal = persistedSignals[0] ?? null
+  const latestCompletedArtifact = artifacts.find((artifact) => artifact.ingestion_status === 'completed') ?? artifacts[0] ?? null
 
   return (
     <div className="stack-xl">
@@ -113,6 +117,51 @@ export function DashboardPage() {
         <MetricCard label="Active tensions" value={contradictions.length + assumptionDrift.length} detail="Contradictions and assumption drift visible in your permitted scope." />
         <MetricCard label="Persisted signals" value={persistedSignalCount || nextActions.length} detail="Durable proactive signals generated from ingested artifact impact." />
       </section>
+
+      <Panel
+        title="Canonical demo path"
+        description="One clean path for jury review: show source material, show memory construction, inspect a durable signal, ask the question, then drill into evidence."
+        aside={
+          <Link className="primary-button" to={`/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`}>
+            Ask demo question
+          </Link>
+        }
+      >
+        <div className="signal-grid">
+          <Link className="record-link signal-card panel-subtle" to="/artifacts">
+            <p className="section-label">1 / Source state</p>
+            <p className="signal-title">{latestCompletedArtifact?.title ?? 'Load the demo artifacts'}</p>
+            <p className="muted-copy">
+              {latestCompletedArtifact
+                ? `Visible source ${latestCompletedArtifact.artifact_id} is ready for evidence inspection.`
+                : 'Add or seed source artifacts before demonstrating institutional memory.'}
+            </p>
+          </Link>
+          <Link className="record-link signal-card panel-subtle" to="/ingestion">
+            <p className="section-label">2 / Memory build</p>
+            <p className="signal-title">{totalMemoryObjects || 0} reconstructed memory objects</p>
+            <p className="muted-copy">Ingestion turns artifacts into decisions, assumptions, constraints, outcomes, commitments, and graph links.</p>
+          </Link>
+          {topPersistedSignal ? (
+            <Link className={signalCardClass(topPersistedSignal.signal_type)} to={`/signals/${topPersistedSignal.signal_id}`}>
+              <p className="section-label">3 / Durable signal</p>
+              <p className="signal-title">{topPersistedSignal.title}</p>
+              <p className="muted-copy">Open the persisted signal to inspect evidence, memory objects, and the intelligence path.</p>
+            </Link>
+          ) : (
+            <Link className="record-link signal-card panel-subtle" to="/graph">
+              <p className="section-label">3 / Durable signal</p>
+              <p className="signal-title">No persisted signal yet</p>
+              <p className="muted-copy">Run ingestion on conflicting or drifting evidence to create contradiction, drift, supersession, or next-action signals.</p>
+            </Link>
+          )}
+          <Link className="record-link signal-card panel-subtle action-card" to={`/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`}>
+            <p className="section-label">4 / Question</p>
+            <p className="signal-title">Ask what changed and what to do next</p>
+            <p className="muted-copy">{canonicalDemoPrompt}</p>
+          </Link>
+        </div>
+      </Panel>
 
       <div className="two-column-layout">
         <Panel title="Reasoning modes, not chat modes" description="Each block is a fixed institutional-memory operation designed to expose why a recommendation is justified.">

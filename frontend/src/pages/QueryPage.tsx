@@ -1,5 +1,5 @@
 import { useState, type FormEventHandler } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, PageIntro, Panel } from '../components/ui'
 import { api, ApiError } from '../lib/api'
@@ -13,8 +13,10 @@ const starterPrompts = [
 
 export function QueryPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { session } = useAuth()
-  const [queryText, setQueryText] = useState(starterPrompts[0])
+  const initialPrompt = searchParams.get('prompt') || starterPrompts[0]
+  const [queryText, setQueryText] = useState(initialPrompt)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
