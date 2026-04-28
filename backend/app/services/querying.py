@@ -1267,6 +1267,100 @@ def _signal_evidence_payload(db: Session, memories: list[MemoryRecord]) -> list[
     return [item.model_dump(mode="json") for item in evidence[:6]]
 
 
+def _memory_overlap_score(left: MemoryRecord, right: MemoryRecord) -> tuple[float, list[str]]:
+    left_text = f"{left.topic_key} {left.title_or_label} {left.normalized_text}"
+    right_text = f"{right.topic_key} {right.title_or_label} {right.normalized_text}"
+    overlap = _text_overlap(left_text, right_text)
+    basis: list[str] = []
+    score = float(overlap)
+    if overlap >= 2:
+        basis.append(f"shared terms:{overlap}")
+    if left.topic_key != "general" and left.topic_key == right.topic_key:
+        score += 4.0
+        basis.append(f"same topic:{left.topic_key}")
+    elif left.topic_key != "general" and right.topic_key != "general" and _text_overlap(left.topic_key, right.topic_key) >= 1:
+        score += 2.0
+        basis.append("related topic")
+    if left.memory_type == right.memory_type:
+        score += 1.5
+        basis.append(f"same memory type:{left.memory_type}")
+    if left.memory_type in {"decision", "outcome", "commitment"} or right.memory_type in {"decision", "outcome", "commitment"}:
+        score += 0.5
+        basis.append("decision/outcome/commitment continuity")
+    return score, basis
+
+
+def _prior_relevant_work_items(db: Session, user: User, artifact: Artifact, memories: list[MemoryRecord], *, limit: int = 6) -> list[dict[str, Any]]:
+    introduced = [memory for memory in memories if memory.source_artifact_id == artifact.artifact_id]
+    prior = [memory for memory in memories if memory.source_artifact_id != artifact.artifact_id]
+    if not introduced or not prior:
+        return []
+
+    grouped: dict[str, dict[str, Any]] = {}
+    for new_memory in introduced:
+        for prior_memory in prior:
+            pair_score, pair_basis = _memory_overlap_score(new_memory, prior_memory)
+            if pair_score < 4.0:
+                continue
+            bucket = grouped.setdefault(
+                prior_memory.source_artifact_id,
+                {
+                    "score": 0.0,
+                    "basis": set(),
+                    "introduced": [],
+                    "prior": [],
+                    "topics": {},
+                },
+            )
+            bucket["score"] += pair_score
+            bucket["basis"].update(pair_basis)
+            bucket["introduced"].append(new_memory)
+            bucket["prior"].append(prior_memory)
+            topic_key = prior_memory.topic_key if prior_memory.topic_key != "general" else new_memory.topic_key
+            if topic_key:
+                bucket["topics"][topic_key] = bucket["topics"].get(topic_key, 0) + 1
+
+    if not grouped:
+        return []
+
+    artifact_titles = _artifact_title_map(db, set(grouped) | {artifact.artifact_id})
+    items: list[dict[str, Any]] = []
+    for prior_artifact_id, bucket in grouped.items():
+        introduced_support = _dedupe_memories(bucket["introduced"])[:4]
+        prior_support = _dedupe_memories(bucket["prior"])[:4]
+        if not introduced_support or not prior_support:
+            continue
+        related_topic = max(bucket["topics"].items(), key=lambda item: item[1])[0] if bucket["topics"] else "general"
+        prior_artifact_title = _artifact_title_for_id(artifact_titles, prior_artifact_id)
+        new_titles = ", ".join(memory.title_or_label for memory in introduced_support[:2])
+        prior_titles = ", ".join(memory.title_or_label for memory in prior_support[:2])
+        overlap_score = round(min(0.98, bucket["score"] / 18), 2)
+        items.append(
+            {
+                "prior_artifact_id": prior_artifact_id,
+                "prior_artifact_title": prior_artifact_title,
+                "related_topic": related_topic or "general",
+                "overlap_score": overlap_score,
+                "continuity_reason": (
+                    f"This artifact overlaps with prior work in {prior_artifact_title}: new memory '{new_titles}' "
+                    f"matches earlier memory '{prior_titles}'."
+                ),
+                "recommended_action": (
+                    f"Review '{prior_artifact_title}' before repeating the analysis; reuse or explicitly update the prior memory "
+                    f"on {related_topic or 'this topic'}."
+                ),
+                "introduced_memory_objects": _signal_memory_payload(introduced_support),
+                "prior_memory_objects": _signal_memory_payload(prior_support),
+                "supporting_memory_objects": _signal_memory_payload(introduced_support + prior_support),
+                "supporting_evidence": _signal_evidence_payload(db, introduced_support + prior_support),
+                "ranking_basis": sorted(bucket["basis"])[:8],
+            }
+        )
+
+    items.sort(key=lambda item: (item["overlap_score"], len(item["prior_memory_objects"]), item["prior_artifact_title"]), reverse=True)
+    return items[:limit]
+
+
 def _signal_uncertainty(memories: list[MemoryRecord], fallback_confidence: float = 0.55) -> float:
     confidence_values = [memory.confidence_score for memory in memories] or [fallback_confidence]
     average_confidence = sum(confidence_values) / len(confidence_values)
@@ -1466,6 +1560,7 @@ def artifact_proactive_signals(db: Session, user: User, artifact: Artifact, *, i
         if item.get("supporting_signal_source_artifact_id") == artifact.artifact_id
     ]
     supersession_items = _supersession_dicts_for_artifact(db, user, artifact.artifact_id, limit=8)
+    prior_relevant_work = _prior_relevant_work_items(db, user, artifact, memories, limit=6)
     next_actions = [
         signal
         for signal in list_ranked_next_actions(db, user, limit=24)
@@ -1475,6 +1570,7 @@ def artifact_proactive_signals(db: Session, user: User, artifact: Artifact, *, i
         "contradictions": len(contradiction_items),
         "assumption_drift": len(drift_items),
         "supersessions": len(supersession_items),
+        "prior_relevant_work": len(prior_relevant_work),
         "next_actions": len(next_actions),
     }
     total_signal_count = sum(signal_counts.values())
@@ -1485,10 +1581,11 @@ def artifact_proactive_signals(db: Session, user: User, artifact: Artifact, *, i
             f"This artifact produced {signal_counts['contradictions']} contradiction signal(s), "
             f"{signal_counts['assumption_drift']} assumption-drift signal(s), "
             f"{signal_counts['supersessions']} supersession/reopening link(s), and "
+            f"{signal_counts['prior_relevant_work']} prior-work continuity signal(s), plus "
             f"{signal_counts['next_actions']} grounded next-action recommendation(s)."
         )
     else:
-        summary = "No contradiction, drift, supersession, or next-action signal could be grounded from this artifact in the current visible memory."
+        summary = "No contradiction, drift, supersession, continuity, or next-action signal could be grounded from this artifact in the current visible memory."
     return {
         "artifact_id": artifact.artifact_id,
         "artifact_title": artifact.title,
@@ -1498,6 +1595,7 @@ def artifact_proactive_signals(db: Session, user: User, artifact: Artifact, *, i
         "introduced_contradictions": contradiction_items,
         "revealed_assumption_drift": drift_items,
         "superseded_memory": supersession_items,
+        "prior_relevant_work": prior_relevant_work,
         "recommended_next_actions": next_actions,
         "persisted_signals": _persisted_signals_for_artifact(db, user, artifact.artifact_id) if include_persisted else [],
     }
@@ -1635,6 +1733,24 @@ def persist_artifact_proactive_signals(db: Session, user: User, artifact: Artifa
             uncertainty_score=1 - confidence_score,
             grounded_reasoning=str(item.get("evidence_provenance") or item.get("evidence_span") or "Graph supersession edge with linked evidence."),
             recommended_action=None,
+            payload_json=item,
+        )
+
+    for item in payload["prior_relevant_work"]:
+        overlap_score = float(item.get("overlap_score", 0.55))
+        _persist_signal_row(
+            db,
+            signal_id=_stable_signal_id("sig_continuity", artifact.artifact_id, str(item.get("prior_artifact_id")), str(item.get("related_topic"))),
+            workspace_id=artifact.workspace_id,
+            source_artifact_id=artifact.artifact_id,
+            signal_type="continuity_overlap",
+            title=f"Prior relevant work: {item['prior_artifact_title']}",
+            summary="A newly ingested artifact substantially overlaps with prior organizational work.",
+            related_topic=str(item.get("related_topic") or "general"),
+            urgency_score=0.64,
+            uncertainty_score=1 - overlap_score,
+            grounded_reasoning=str(item.get("continuity_reason") or "Prior related memory objects overlap with this artifact."),
+            recommended_action=str(item.get("recommended_action") or ""),
             payload_json=item,
         )
 
@@ -1828,6 +1944,39 @@ def _evidence_reference_from_side_evidence(item: dict[str, Any], visible_artifac
     )
 
 
+SIGNAL_PAYLOAD_ARTIFACT_KEYS = {
+    "artifact_id",
+    "source_artifact_id",
+    "evidence_artifact_id",
+    "from_source_artifact_id",
+    "to_source_artifact_id",
+    "supporting_signal_source_artifact_id",
+    "prior_artifact_id",
+}
+
+
+def _filter_signal_payload_for_reader(value: Any, visible_artifact_ids: set[str], key_hint: str = "") -> Any:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if key in SIGNAL_PAYLOAD_ARTIFACT_KEYS and isinstance(nested, str) and nested not in visible_artifact_ids:
+                return None
+        filtered: dict[str, Any] = {}
+        for key, nested in value.items():
+            if key.endswith("artifact_ids") and isinstance(nested, list):
+                filtered[key] = [item for item in nested if isinstance(item, str) and item in visible_artifact_ids]
+                continue
+            nested_value = _filter_signal_payload_for_reader(nested, visible_artifact_ids, key)
+            if nested_value is not None:
+                filtered[key] = nested_value
+        return filtered
+    if isinstance(value, list):
+        filtered_items = [_filter_signal_payload_for_reader(item, visible_artifact_ids, key_hint) for item in value]
+        return [item for item in filtered_items if item is not None]
+    if key_hint in SIGNAL_PAYLOAD_ARTIFACT_KEYS and isinstance(value, str) and value not in visible_artifact_ids:
+        return None
+    return value
+
+
 def _memory_for_node_id(node_id: str | None, nodes: dict[str, NodeRecord], memories_by_id: dict[str, MemoryRecord]) -> MemoryRecord | None:
     if node_id is None:
         return None
@@ -1935,6 +2084,7 @@ def _signal_type_label(signal_type: str) -> str:
         "contradiction": "contradiction",
         "assumption_drift": "assumption drift",
         "supersession": "supersession",
+        "continuity_overlap": "prior-work continuity",
         "next_action": "next-action guidance",
     }
     return labels.get(signal_type, signal_type.replace("_", " "))
@@ -2020,7 +2170,10 @@ def get_persisted_signal_detail(db: Session, user: User, signal_id: str) -> Sign
         return None
 
     artifact_titles = _artifact_title_map(db, {artifact_id for artifact_id in visible_artifact_ids if artifact_id})
-    payload = signal.payload_json if isinstance(signal.payload_json, dict) else {}
+    raw_payload = signal.payload_json if isinstance(signal.payload_json, dict) else {}
+    payload = _filter_signal_payload_for_reader(raw_payload, visible_artifact_ids)
+    if not isinstance(payload, dict):
+        payload = {}
     supporting_memory_objects = _memory_refs_for_signal_payload(db, user, payload, visible_artifact_ids)
     supporting_evidence = _evidence_refs_for_signal_payload(db, payload, visible_artifact_ids, artifact_titles)
     intelligence_path = _signal_intelligence_path(

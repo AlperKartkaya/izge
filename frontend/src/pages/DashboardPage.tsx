@@ -17,6 +17,9 @@ function signalCardClass(signalType: string): string {
   if (signalType === 'next_action') {
     return 'record-link signal-card panel-subtle action-card'
   }
+  if (signalType === 'continuity_overlap') {
+    return 'record-link signal-card panel-subtle action-card'
+  }
   return 'record-link signal-card panel-subtle'
 }
 

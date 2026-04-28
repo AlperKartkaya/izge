@@ -385,6 +385,10 @@ export function ArtifactsPage() {
                         <p className="table-primary">{selectedArtifactSignals.signal_counts.supersessions ?? 0}</p>
                       </article>
                       <article className="panel-subtle detail-card">
+                        <p className="section-label">Prior work</p>
+                        <p className="table-primary">{selectedArtifactSignals.signal_counts.prior_relevant_work ?? 0}</p>
+                      </article>
+                      <article className="panel-subtle detail-card">
                         <p className="section-label">Next actions</p>
                         <p className="table-primary">{selectedArtifactSignals.signal_counts.next_actions ?? 0}</p>
                       </article>
@@ -429,6 +433,15 @@ export function ArtifactsPage() {
                         <p className="table-primary">{item.from_title} supersedes {item.to_title}</p>
                         <p className="table-secondary">Topic {item.topic_key} · confidence {formatPercent(item.confidence_score)}</p>
                         <p className="muted-copy">{item.evidence_provenance}</p>
+                      </article>
+                    ))}
+
+                    {selectedArtifactSignals.prior_relevant_work.slice(0, 2).map((item) => (
+                      <article key={`${item.prior_artifact_id}-${item.related_topic}`} className="panel-subtle stack-sm">
+                        <p className="section-label">Prior relevant work · overlap {formatPercent(item.overlap_score)}</p>
+                        <p className="table-primary">{item.prior_artifact_title}</p>
+                        <p className="muted-copy">{item.continuity_reason}</p>
+                        <p className="evidence-block">{item.recommended_action}</p>
                       </article>
                     ))}
 

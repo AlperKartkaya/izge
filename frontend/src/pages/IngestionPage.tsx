@@ -226,6 +226,10 @@ export function IngestionPage() {
                 <p className="table-primary">{artifactSignals.signal_counts.supersessions ?? 0}</p>
               </article>
               <article className="panel-subtle detail-card">
+                <p className="section-label">Prior work</p>
+                <p className="table-primary">{artifactSignals.signal_counts.prior_relevant_work ?? 0}</p>
+              </article>
+              <article className="panel-subtle detail-card">
                 <p className="section-label">Next actions</p>
                 <p className="table-primary">{artifactSignals.signal_counts.next_actions ?? 0}</p>
               </article>
@@ -251,8 +255,9 @@ export function IngestionPage() {
             {artifactSignals.introduced_contradictions.length === 0 &&
             artifactSignals.revealed_assumption_drift.length === 0 &&
             artifactSignals.superseded_memory.length === 0 &&
+            artifactSignals.prior_relevant_work.length === 0 &&
             artifactSignals.recommended_next_actions.length === 0 ? (
-              <EmptyState title="No grounded proactive signals" description="This artifact was ingested, but no contradiction, drift, supersession, or next action could be justified from visible evidence." />
+              <EmptyState title="No grounded proactive signals" description="This artifact was ingested, but no contradiction, drift, continuity, supersession, or next action could be justified from visible evidence." />
             ) : (
               <div className="stack-md">
                 {artifactSignals.introduced_contradictions.slice(0, 2).map((item) => (
@@ -275,6 +280,14 @@ export function IngestionPage() {
                     <p className="section-label">Supersession / reopening</p>
                     <p className="table-primary">{item.from_title} supersedes {item.to_title}</p>
                     <p className="muted-copy">{item.evidence_provenance}</p>
+                  </article>
+                ))}
+                {artifactSignals.prior_relevant_work.slice(0, 3).map((item) => (
+                  <article key={`${item.prior_artifact_id}-${item.related_topic}`} className="panel-subtle stack-sm">
+                    <p className="section-label">Prior relevant work · overlap {formatPercent(item.overlap_score)}</p>
+                    <p className="table-primary">{item.prior_artifact_title}</p>
+                    <p className="muted-copy">{item.continuity_reason}</p>
+                    <p className="evidence-block">{item.recommended_action}</p>
                   </article>
                 ))}
                 {artifactSignals.recommended_next_actions.slice(0, 3).map((item) => (

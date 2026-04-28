@@ -273,6 +273,19 @@ export interface SupersessionItem {
   ranking_basis: string[]
 }
 
+export interface PriorRelevantWorkItem {
+  prior_artifact_id: string
+  prior_artifact_title: string
+  related_topic: string
+  overlap_score: number
+  continuity_reason: string
+  recommended_action: string
+  introduced_memory_objects: MemoryReference[]
+  prior_memory_objects: MemoryReference[]
+  supporting_evidence: EvidenceReference[]
+  ranking_basis: string[]
+}
+
 export interface ArtifactProactiveSignals {
   artifact_id: string
   artifact_title: string
@@ -282,6 +295,7 @@ export interface ArtifactProactiveSignals {
   introduced_contradictions: ContradictionItem[]
   revealed_assumption_drift: AssumptionDriftItem[]
   superseded_memory: SupersessionItem[]
+  prior_relevant_work: PriorRelevantWorkItem[]
   recommended_next_actions: NextActionSignalItem[]
   persisted_signals: SignalRead[]
 }

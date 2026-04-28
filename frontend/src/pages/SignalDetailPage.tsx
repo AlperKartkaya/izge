@@ -16,6 +16,9 @@ function signalCardClass(signalType: string): string {
   if (signalType === 'next_action') {
     return 'panel-subtle stack-sm action-card'
   }
+  if (signalType === 'continuity_overlap') {
+    return 'panel-subtle stack-sm action-card'
+  }
   return 'panel-subtle stack-sm'
 }
 

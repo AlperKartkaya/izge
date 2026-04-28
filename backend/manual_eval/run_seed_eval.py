@@ -453,6 +453,7 @@ def run_eval() -> dict[str, Any]:
                 ),
                 "has_introduced_contradiction": bool(reversal_signals.get("introduced_contradictions")),
                 "has_artifact_scoped_next_action": bool(reversal_signals.get("recommended_next_actions")),
+                "has_prior_relevant_work": bool(reversal_signals.get("prior_relevant_work")),
                 "next_action_has_evidence": bool(
                     reversal_signals.get("recommended_next_actions")
                     and reversal_signals["recommended_next_actions"][0].get("supporting_evidence")
@@ -469,6 +470,7 @@ def run_eval() -> dict[str, Any]:
                     ["assumption-drift signal", "next-action"],
                 ),
                 "has_revealed_drift": bool(checkpoint_signals.get("revealed_assumption_drift")),
+                "has_prior_relevant_work": bool(checkpoint_signals.get("prior_relevant_work")),
                 "has_artifact_scoped_next_action": bool(checkpoint_signals.get("recommended_next_actions")),
                 "next_action_has_memory": bool(
                     checkpoint_signals.get("recommended_next_actions")
@@ -485,6 +487,7 @@ def run_eval() -> dict[str, Any]:
                 "graph_summary_has_signal_counts": bool(graph_summary.get("signal_counts")),
                 "signals_list_non_empty": bool(persisted_signal_list),
                 "has_persisted_next_actions": int(graph_summary.get("signal_counts", {}).get("next_action", 0)) > 0,
+                "has_persisted_continuity_overlap": int(graph_summary.get("signal_counts", {}).get("continuity_overlap", 0)) > 0,
                 "has_persisted_contradiction_or_drift": (
                     int(graph_summary.get("signal_counts", {}).get("contradiction", 0))
                     + int(graph_summary.get("signal_counts", {}).get("assumption_drift", 0))

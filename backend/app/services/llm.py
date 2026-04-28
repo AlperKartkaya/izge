@@ -17,7 +17,8 @@ def run_structured_local_prompt(*, system_prompt: str, user_prompt: str, schema:
         "model": settings.local_llm_model,
         "stream": False,
         "format": schema,
-        "options": {"temperature": 0},
+        "options": {"temperature": 0, "num_ctx": 4096},
+        "think": False,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},

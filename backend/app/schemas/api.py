@@ -339,6 +339,19 @@ class SupersessionItem(BaseModel):
     ranking_basis: list[str] = Field(default_factory=list)
 
 
+class PriorRelevantWorkItem(BaseModel):
+    prior_artifact_id: str
+    prior_artifact_title: str
+    related_topic: str
+    overlap_score: float
+    continuity_reason: str
+    recommended_action: str
+    introduced_memory_objects: list[MemoryReference] = Field(default_factory=list)
+    prior_memory_objects: list[MemoryReference] = Field(default_factory=list)
+    supporting_evidence: list[EvidenceReference] = Field(default_factory=list)
+    ranking_basis: list[str] = Field(default_factory=list)
+
+
 class ArtifactProactiveSignals(BaseModel):
     artifact_id: str
     artifact_title: str
@@ -348,6 +361,7 @@ class ArtifactProactiveSignals(BaseModel):
     introduced_contradictions: list[ContradictionItem] = Field(default_factory=list)
     revealed_assumption_drift: list[AssumptionDriftItem] = Field(default_factory=list)
     superseded_memory: list[SupersessionItem] = Field(default_factory=list)
+    prior_relevant_work: list[PriorRelevantWorkItem] = Field(default_factory=list)
     recommended_next_actions: list[NextActionSignalItem] = Field(default_factory=list)
     persisted_signals: list["SignalRead"] = Field(default_factory=list)
 
