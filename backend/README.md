@@ -54,6 +54,9 @@ use is opt-in and scoped to bounded assistance:
   natural-language question into one of the four fixed MVP reasoning modes
   before deterministic graph execution. It does not answer the query or retrieve
   evidence.
+- `IZGE_LLM_ANSWER_SYNTHESIS_ENABLED=true` lets the local gateway rewrite the
+  final answer from the deterministic result packet. Returned citations are
+  filtered to the already-selected evidence and memory IDs.
 
 Default local gateway settings:
 

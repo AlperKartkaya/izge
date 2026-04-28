@@ -61,6 +61,36 @@ class LLMQueryIntent(BaseModel):
         return cleaned[:8]
 
 
+class LLMQueryAnswerSynthesis(BaseModel):
+    """LLM-authored final wording for a deterministic query result packet."""
+
+    answer_text: str = Field(min_length=24, max_length=1600)
+    why_this_answer: str = Field(min_length=24, max_length=900)
+    recommended_next_actions: list[str] = Field(default_factory=list, max_length=4)
+    cited_evidence_ids: list[str] = Field(default_factory=list, max_length=8)
+    cited_memory_ids: list[str] = Field(default_factory=list, max_length=8)
+    confidence_rationale: str | None = Field(default=None, max_length=420)
+
+    @field_validator("answer_text", "why_this_answer", "confidence_rationale", mode="before")
+    @classmethod
+    def strip_answer_text(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+    @field_validator("recommended_next_actions", "cited_evidence_ids", "cited_memory_ids")
+    @classmethod
+    def clean_answer_lists(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                normalized = " ".join(item.strip().split())
+                if normalized and normalized not in cleaned:
+                    cleaned.append(normalized)
+        return cleaned[:8]
+
+
 class LLMSignalExplanation(BaseModel):
     """LLM-authored wording for a deterministic proactive signal."""
 
@@ -197,6 +227,50 @@ def classify_query_intent_with_local_llm(*, query_text: str, deterministic_route
         return LLMQueryIntent.model_validate(parsed)
     except ValidationError as exc:
         raise LocalLLMError("Local LLM query intent did not match the expected schema") from exc
+
+
+def _query_answer_system_prompt() -> str:
+    return (
+        "You are Izge's local, company-controlled answer synthesis helper. Rewrite a final answer only from the "
+        "deterministic evidence packet. Do not retrieve, infer hidden facts, invent citations, or alter the selected "
+        "query class. If evidence is thin, say so. Return strict JSON matching the schema."
+    )
+
+
+def synthesize_query_answer_with_local_llm(
+    *,
+    query_text: str,
+    query_class: str,
+    deterministic_result: dict[str, Any],
+) -> LLMQueryAnswerSynthesis:
+    """Use the local LLM to improve answer wording from deterministic query evidence.
+
+    The LLM may only rewrite final prose/actions from the provided result packet. Callers must validate returned
+    citation IDs against the supplied evidence and memory object IDs before applying the synthesis.
+    """
+
+    schema = LLMQueryAnswerSynthesis.model_json_schema()
+    context = {
+        "synthesis_boundary": {
+            "llm_role": "rewrite_answer_from_selected_evidence_only",
+            "deterministic_execution_remains_authority": True,
+            "must_not_introduce_new_facts": True,
+        },
+        "query_text": query_text,
+        "query_class": query_class,
+        "deterministic_result": _compact_for_prompt(deterministic_result),
+    }
+    user_prompt = (
+        "Rewrite this Izge query result into a sharper, evidence-first answer. Preserve the conclusion if the "
+        "deterministic result is already specific. Use cited_evidence_ids and cited_memory_ids only from the provided "
+        "packet. Keep recommendations concrete but do not add actions unsupported by the packet.\n\n"
+        f"Context JSON:\n{json.dumps(context, sort_keys=True, default=str)}"
+    )
+    try:
+        parsed = run_structured_local_prompt(system_prompt=_query_answer_system_prompt(), user_prompt=user_prompt, schema=schema)
+        return LLMQueryAnswerSynthesis.model_validate(parsed)
+    except ValidationError as exc:
+        raise LocalLLMError("Local LLM query answer synthesis did not match the expected schema") from exc
 
 
 def explain_signal_with_local_llm(

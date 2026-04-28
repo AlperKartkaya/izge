@@ -39,7 +39,11 @@ from app.schemas.api import (
     SignalRead,
 )
 from app.services.audit import log_event
-from app.services.llm_reasoning import classify_query_intent_with_local_llm, explain_signal_with_local_llm
+from app.services.llm_reasoning import (
+    classify_query_intent_with_local_llm,
+    explain_signal_with_local_llm,
+    synthesize_query_answer_with_local_llm,
+)
 from app.services.permissions import artifact_is_visible_to_user
 
 STOPWORDS = {
@@ -239,6 +243,92 @@ def _route_decision_trace_payload(route_decision: QueryRouteDecision) -> dict[st
     if route_decision.llm_intent is not None:
         payload["llm_intent"] = route_decision.llm_intent
     return payload
+
+
+def _evidence_reference_id(evidence: EvidenceReference) -> str:
+    return f"{evidence.artifact_id}:{evidence.chunk_id or 'artifact'}:{evidence.evidence_kind or 'evidence'}"
+
+
+def _answer_synthesis_context(result_data: dict[str, Any]) -> dict[str, Any]:
+    supporting_nodes = [node for node in result_data.get("supporting_nodes", []) if isinstance(node, MemoryReference)]
+    supporting_evidence = [item for item in result_data.get("supporting_evidence", []) if isinstance(item, EvidenceReference)]
+    return {
+        "answer_text": result_data.get("answer_text"),
+        "why_this_answer": result_data.get("why_this_answer"),
+        "supporting_nodes": [
+            {
+                "memory_id": node.memory_id,
+                "memory_type": node.memory_type,
+                "title_or_label": node.title_or_label,
+                "source_artifact_id": node.source_artifact_id,
+                "status": node.status,
+                "due_date": node.due_date,
+            }
+            for node in supporting_nodes[:8]
+        ],
+        "supporting_evidence": [
+            {
+                "evidence_id": _evidence_reference_id(evidence),
+                "artifact_id": evidence.artifact_id,
+                "artifact_title": evidence.artifact_title,
+                "chunk_id": evidence.chunk_id,
+                "evidence_kind": evidence.evidence_kind,
+                "excerpt": evidence.excerpt,
+            }
+            for evidence in supporting_evidence[:8]
+        ],
+        "contradictions": result_data.get("contradictions", [])[:4],
+        "stale_assumptions": result_data.get("stale_assumptions", [])[:4],
+        "recommended_next_actions": result_data.get("recommended_next_actions", [])[:4],
+        "uncertainty_notes": result_data.get("uncertainty_notes", []),
+    }
+
+
+def _apply_optional_llm_answer_synthesis(*, query_text: str, query_class: str, result_data: dict[str, Any]) -> dict[str, Any]:
+    settings = get_settings()
+    synthesis_boundary = {
+        "status": "disabled",
+        "role": "rewrite_answer_from_selected_evidence_only",
+        "model": settings.local_llm_model,
+    }
+    result_data["answer_synthesis"] = synthesis_boundary
+    if not settings.llm_answer_synthesis_enabled:
+        return result_data
+
+    context = _answer_synthesis_context(result_data)
+    allowed_evidence_ids = {
+        item["evidence_id"] for item in context["supporting_evidence"] if isinstance(item.get("evidence_id"), str)
+    }
+    allowed_memory_ids = {item["memory_id"] for item in context["supporting_nodes"] if isinstance(item.get("memory_id"), str)}
+    try:
+        synthesis = synthesize_query_answer_with_local_llm(
+            query_text=query_text,
+            query_class=query_class,
+            deterministic_result=context,
+        )
+    except Exception as exc:
+        result_data["answer_synthesis"] = {
+            **synthesis_boundary,
+            "status": "fallback",
+            "fallback_reason": str(exc),
+        }
+        return result_data
+
+    cited_evidence_ids = [item for item in synthesis.cited_evidence_ids if item in allowed_evidence_ids]
+    cited_memory_ids = [item for item in synthesis.cited_memory_ids if item in allowed_memory_ids]
+    result_data["answer_text"] = synthesis.answer_text
+    result_data["why_this_answer"] = synthesis.why_this_answer
+    if synthesis.recommended_next_actions:
+        result_data["recommended_next_actions"] = synthesis.recommended_next_actions
+    result_data["answer_synthesis"] = {
+        **synthesis_boundary,
+        "status": "applied",
+        "cited_evidence_ids": cited_evidence_ids,
+        "cited_memory_ids": cited_memory_ids,
+        "confidence_rationale": synthesis.confidence_rationale,
+        "deterministic_answer_preserved_as_source": context["answer_text"],
+    }
+    return result_data
 
 
 def classify_query_with_trace(query_text: str) -> QueryRouteDecision:
@@ -1989,6 +2079,7 @@ def _persist_query_trace_steps(
             {
                 "direct_answer": result_data["answer_text"],
                 "why_this_answer": result_data["why_this_answer"],
+                "answer_synthesis": result_data.get("answer_synthesis"),
                 "section_counts": {
                     "supporting_nodes": len(supporting_nodes),
                     "supporting_evidence": len(supporting_evidence),
@@ -2131,6 +2222,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         result_data = _next_action_result(db, actor, query_text)
     else:
         result_data = _lineage_result(db, actor, query_text)
+    result_data = _apply_optional_llm_answer_synthesis(query_text=query_text, query_class=query_class, result_data=result_data)
 
     query_run = QueryRun(
         workspace_id=actor.workspace_id,
