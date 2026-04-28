@@ -38,6 +38,25 @@ function stepTitle(stepKind: string): string {
   }
 }
 
+function modePlainEnglish(queryClass: string): string {
+  switch (queryClass) {
+    case 'Decision lineage':
+      return 'Reconstruct the decision timeline before making any recommendation.'
+    case 'Contradiction analysis':
+      return 'Compare later claims against earlier commitments and surface the collision.'
+    case 'Assumption drift':
+      return 'Find assumptions whose operating basis weakened, reversed, or went stale.'
+    case 'Next-action guidance':
+      return 'Promote an action only after conflict, drift, commitments, and evidence are visible.'
+    default:
+      return 'Route the question into a bounded institutional-memory operation.'
+  }
+}
+
+function firstAvailable(...values: string[]): string {
+  return values.find((value) => value && value !== 'Unavailable') ?? 'No explicit signal returned.'
+}
+
 export function QueryResultPage() {
   const { queryRunId = '' } = useParams()
   const location = useLocation()
@@ -87,6 +106,10 @@ export function QueryResultPage() {
   }, [queryRunId, routedResult, session?.token])
 
   const activeResult = routedResult?.query_run_id === queryRunId ? routedResult : result
+  const topContradiction = activeResult?.contradictions[0]
+  const topDrift = activeResult?.stale_assumptions[0]
+  const topAction = activeResult?.recommended_next_actions[0]
+  const graphEvidenceCount = activeResult?.supporting_evidence.filter((item) => item.evidence_kind === 'graph').length ?? 0
 
   return (
     <div className="stack-xl">
@@ -131,16 +154,69 @@ export function QueryResultPage() {
             </div>
           </Panel>
 
+          <Panel
+            title="Decision intelligence packet"
+            description="Read this as the product's core output: answer, tension, drift, evidence strength, and next move in one inspectable packet."
+          >
+            <div className="stack-lg">
+              <article className="panel-subtle stack-sm action-card">
+                <div className="timeline-card-head">
+                  <p className="section-label">Direct reading</p>
+                  <p className="table-secondary">{modePlainEnglish(activeResult.query_class)}</p>
+                </div>
+                <p className="evidence-block">{activeResult.answer_text}</p>
+                <p className="muted-copy">{activeResult.why_this_answer}</p>
+              </article>
+
+              <div className="detail-grid">
+                <article className={topContradiction ? 'panel-subtle detail-card critical-card' : 'panel-subtle detail-card'}>
+                  <p className="section-label">Contradiction state</p>
+                  <p className="table-primary">
+                    {topContradiction
+                      ? `${readRecordField(topContradiction, 'from_title')} ↔ ${readRecordField(topContradiction, 'to_title')}`
+                      : 'No visible contradiction returned'}
+                  </p>
+                  <p className="muted-copy">
+                    {topContradiction
+                      ? firstAvailable(readRecordField(topContradiction, 'evidence_provenance'), readRecordField(topContradiction, 'evidence_span'))
+                      : 'The answer did not need a conflict edge in the current permitted scope.'}
+                  </p>
+                </article>
+                <article className={topDrift ? 'panel-subtle detail-card drift-card' : 'panel-subtle detail-card'}>
+                  <p className="section-label">Assumption drift</p>
+                  <p className="table-primary">
+                    {topDrift ? `${readRecordField(topDrift, 'title_or_label')} · ${formatLabel(readRecordField(topDrift, 'status'))}` : 'No visible drift returned'}
+                  </p>
+                  <p className="muted-copy">
+                    {topDrift
+                      ? firstAvailable(readRecordField(topDrift, 'evidence_provenance'), readRecordField(topDrift, 'validity_notes'))
+                      : 'No stale, weakening, or reversed assumption was attached to this answer.'}
+                  </p>
+                </article>
+                <article className="panel-subtle detail-card">
+                  <p className="section-label">Evidence strength</p>
+                  <p className="table-primary">
+                    {activeResult.supporting_evidence.length} evidence excerpts · {graphEvidenceCount} graph-linked
+                  </p>
+                  <p className="muted-copy">
+                    {activeResult.supporting_nodes.length} structured memory objects and {activeResult.related_signals.length} persisted signal links support this packet.
+                  </p>
+                </article>
+                <article className={topAction ? 'panel-subtle detail-card action-card' : 'panel-subtle detail-card'}>
+                  <p className="section-label">Next justified move</p>
+                  <p className="table-primary">{topAction ?? 'No next action promoted'}</p>
+                  <p className="muted-copy">
+                    {topAction
+                      ? 'Recommendation is downstream of the visible memory objects, conflict/drift checks, and evidence excerpts.'
+                      : 'Izge did not promote a recommendation without enough visible support.'}
+                  </p>
+                </article>
+              </div>
+            </div>
+          </Panel>
+
           <div className="result-grid">
-            <Panel title="Direct Answer" description="Primary response text returned by the backend.">
-              <p className="evidence-block">{activeResult.answer_text}</p>
-            </Panel>
-
-            <Panel title="Why This Answer" description="How the system justified the answer structure.">
-              <p className="muted-copy">{activeResult.why_this_answer}</p>
-            </Panel>
-
-            <Panel title="Key Historical Evidence" description="Permitted evidence excerpts surfaced in the response.">
+            <Panel title="Evidence chain" description="Permitted evidence excerpts surfaced in the response. This is the proof surface, not background citation decoration.">
               {activeResult.supporting_evidence.length === 0 ? (
                 <EmptyState title="No evidence references" description="The backend did not return any visible evidence excerpts for this query." />
               ) : (

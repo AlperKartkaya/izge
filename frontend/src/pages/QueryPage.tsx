@@ -3,22 +3,17 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, PageIntro, Panel } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-
-const starterPrompts = [
-  'What was decided about onboarding prioritization and why?',
-  'Which recent roadmap notes contradict earlier commitments?',
-  'Which assumptions about activation now look stale?',
-  'What should the team do next based on unresolved commitments?',
-]
+import { starterPrompts } from '../lib/demo'
 
 export function QueryPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { session } = useAuth()
-  const initialPrompt = searchParams.get('prompt') || starterPrompts[0]
-  const [queryText, setQueryText] = useState(initialPrompt)
+  const promptFromUrl = searchParams.get('prompt') || starterPrompts[0]
+  const [queryDraft, setQueryDraft] = useState({ sourcePrompt: promptFromUrl, text: promptFromUrl })
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const queryText = queryDraft.sourcePrompt === promptFromUrl ? queryDraft.text : promptFromUrl
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault()
@@ -54,7 +49,13 @@ export function QueryPage() {
           <form className="form-grid" onSubmit={handleSubmit}>
             <label className="field field-block">
               <span className="field-label">Question</span>
-              <textarea value={queryText} onChange={(event) => setQueryText(event.target.value)} rows={10} minLength={3} required />
+              <textarea
+                value={queryText}
+                onChange={(event) => setQueryDraft({ sourcePrompt: promptFromUrl, text: event.target.value })}
+                rows={10}
+                minLength={3}
+                required
+              />
             </label>
             <button type="submit" className="primary-button" disabled={isSubmitting}>
               {isSubmitting ? 'Submitting…' : 'Reconstruct answer'}
@@ -62,10 +63,10 @@ export function QueryPage() {
           </form>
         </Panel>
 
-        <Panel title="Memory-analysis modes" description="Starter questions stay anchored to the locked MVP modes: lineage, contradiction, drift, and next action.">
+        <Panel title="Memory-analysis modes" description="Starter questions stay anchored to the locked MVP modes: canonical demo, lineage, contradiction, drift, and next action.">
           <div className="signal-grid">
             {starterPrompts.map((prompt) => (
-              <button key={prompt} type="button" className="prompt-card" onClick={() => setQueryText(prompt)}>
+              <button key={prompt} type="button" className="prompt-card" onClick={() => setQueryDraft({ sourcePrompt: promptFromUrl, text: prompt })}>
                 {prompt}
               </button>
             ))}

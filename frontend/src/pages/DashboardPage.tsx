@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
+import { canonicalDemoPrompt } from '../lib/demo'
 import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { ArtifactRead, AssumptionDriftItem, ContradictionItem, GraphSummary, NextActionSignalItem, SignalRead } from '../lib/types'
 
@@ -18,8 +19,6 @@ function signalCardClass(signalType: string): string {
   }
   return 'record-link signal-card panel-subtle'
 }
-
-const canonicalDemoPrompt = 'What changed about the self-serve onboarding launch, does it conflict with prior history, and what should the team do next?'
 
 export function DashboardPage() {
   const { session, refreshUser } = useAuth()
@@ -90,6 +89,42 @@ export function DashboardPage() {
   )
   const topPersistedSignal = persistedSignals[0] ?? null
   const latestCompletedArtifact = artifacts.find((artifact) => artifact.ingestion_status === 'completed') ?? artifacts[0] ?? null
+  const demoReadiness = useMemo(() => {
+    if (!latestCompletedArtifact) {
+      return {
+        status: 'Needs source',
+        title: 'Load evidence first',
+        detail: 'The demo path starts only after real artifacts exist in the workspace.',
+        actionLabel: 'Load evidence',
+        actionTo: '/artifacts',
+      }
+    }
+    if (!totalMemoryObjects) {
+      return {
+        status: 'Needs memory',
+        title: 'Run ingestion before reasoning',
+        detail: 'Artifacts exist, but the workspace still needs reconstructed memory objects before the intelligence path is credible.',
+        actionLabel: 'Build memory',
+        actionTo: '/ingestion',
+      }
+    }
+    if (!topPersistedSignal) {
+      return {
+        status: 'Needs signal',
+        title: 'Generate a durable signal',
+        detail: 'Memory exists, but the strongest demo needs a persisted contradiction, drift, supersession, or next-action signal.',
+        actionLabel: 'Inspect graph',
+        actionTo: '/graph',
+      }
+    }
+    return {
+      status: 'Ready',
+      title: 'Ready for the canonical question',
+      detail: 'Source, reconstructed memory, and persisted signals are all present. Ask the question and drill into the linked evidence.',
+      actionLabel: 'Ask demo question',
+      actionTo: `/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`,
+    }
+  }, [latestCompletedArtifact, topPersistedSignal, totalMemoryObjects])
 
   return (
     <div className="stack-xl">
@@ -122,11 +157,21 @@ export function DashboardPage() {
         title="Canonical demo path"
         description="One clean path for jury review: show source material, show memory construction, inspect a durable signal, ask the question, then drill into evidence."
         aside={
-          <Link className="primary-button" to={`/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`}>
-            Ask demo question
+          <Link className="primary-button" to={demoReadiness.actionTo}>
+            {demoReadiness.actionLabel}
           </Link>
         }
       >
+        <article className="panel-subtle stack-sm">
+          <div className="timeline-card-head">
+            <div>
+              <p className="section-label">Current proof state</p>
+              <p className="table-primary">{demoReadiness.title}</p>
+            </div>
+            <StatusBadge value={demoReadiness.status} />
+          </div>
+          <p className="muted-copy">{demoReadiness.detail}</p>
+        </article>
         <div className="signal-grid">
           <Link className="record-link signal-card panel-subtle" to="/artifacts">
             <p className="section-label">1 / Source state</p>
