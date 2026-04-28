@@ -50,6 +50,10 @@ use is opt-in and scoped to bounded assistance:
   local gateway improve persisted signal summaries, grounded reasoning, and
   recommended-action wording. It does not create signals, graph edges, memory
   objects, urgency scores, or evidence links.
+- `IZGE_LLM_QUERY_ROUTING_ENABLED=true` lets the local gateway classify a
+  natural-language question into one of the four fixed MVP reasoning modes
+  before deterministic graph execution. It does not answer the query or retrieve
+  evidence.
 
 Default local gateway settings:
 

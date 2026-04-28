@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     local_llm_model: str = "qwen3.5:9b"
     local_llm_timeout_seconds: int = 60
     llm_signal_explanation_enabled: bool = False
+    llm_query_routing_enabled: bool = False
 
     model_config = SettingsConfigDict(env_prefix="IZGE_", env_file=".env", extra="ignore")
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -12,6 +12,53 @@ from app.services.llm import LocalLLMError, run_structured_local_prompt
 MAX_CONTEXT_STRING_LENGTH = 900
 MAX_CONTEXT_LIST_ITEMS = 12
 MAX_CONTEXT_DICT_ITEMS = 36
+
+QUERY_CLASS_LABELS = (
+    "Decision lineage",
+    "Contradiction analysis",
+    "Assumption drift",
+    "Next-action guidance",
+)
+
+
+class LLMQueryIntent(BaseModel):
+    """LLM-authored routing hint for deterministic query execution."""
+
+    query_class: Literal["Decision lineage", "Contradiction analysis", "Assumption drift", "Next-action guidance"]
+    confidence: float = Field(ge=0.0, le=1.0)
+    route_rationale: str = Field(min_length=12, max_length=520)
+    secondary_signals: list[str] = Field(default_factory=list, max_length=3)
+    topic_terms: list[str] = Field(default_factory=list, max_length=8)
+    asks_for_evidence: bool = True
+    needs_next_action: bool = False
+
+    @field_validator("route_rationale", mode="before")
+    @classmethod
+    def strip_rationale(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("secondary_signals")
+    @classmethod
+    def filter_secondary_signals(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for item in value:
+            if item in QUERY_CLASS_LABELS and item not in cleaned:
+                cleaned.append(item)
+        return cleaned[:3]
+
+    @field_validator("topic_terms")
+    @classmethod
+    def clean_topic_terms(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                continue
+            normalized = " ".join(item.lower().strip().split())
+            if 2 <= len(normalized) <= 60 and normalized not in cleaned:
+                cleaned.append(normalized)
+        return cleaned[:8]
 
 
 class LLMSignalExplanation(BaseModel):
@@ -105,6 +152,51 @@ def _signal_explanation_system_prompt() -> str:
         "new memory object, new artifact, or unsupported claim. Use only the provided JSON context. Keep the wording "
         "serious, evidence-first, and implementation-aware. Return strict JSON matching the schema."
     )
+
+
+def _query_intent_system_prompt() -> str:
+    return (
+        "You are Izge's local, company-controlled query intent router. Classify the user's question into one of the "
+        "fixed MVP reasoning modes only. Do not answer the question, retrieve evidence, invent facts, or create new "
+        "memory. Your output only helps deterministic graph execution choose the route and topic focus. Return strict "
+        "JSON matching the schema."
+    )
+
+
+def classify_query_intent_with_local_llm(*, query_text: str, deterministic_route: dict[str, Any]) -> LLMQueryIntent:
+    """Use the local LLM to route a natural-language query into an MVP reasoning mode.
+
+    This is only a routing hint. Deterministic query execution still performs evidence selection, permission filtering,
+    contradiction/drift analysis, and answer composition.
+    """
+
+    schema = LLMQueryIntent.model_json_schema()
+    context = {
+        "routing_boundary": {
+            "llm_role": "classify_query_intent_only",
+            "deterministic_execution_remains_authority": True,
+        },
+        "mode_definitions": {
+            "Decision lineage": "Use when the user asks why/when/how a decision changed, the history of a topic, or what led to the current state.",
+            "Contradiction analysis": "Use when the user asks whether something conflicts with prior history, is inconsistent, or creates tension.",
+            "Assumption drift": "Use when the user asks what changed, whether assumptions still hold, or which beliefs became stale/reversed.",
+            "Next-action guidance": "Use when the user asks what to do next, needs a recommendation, or asks for a decision/action after evidence.",
+        },
+        "deterministic_keyword_route": _compact_for_prompt(deterministic_route),
+        "query_text": query_text,
+    }
+    user_prompt = (
+        "Classify this Izge query into exactly one MVP reasoning mode. Prefer the user's dominant intent, not generic "
+        "search. If the query asks both what changed and what to do, choose Next-action guidance and include Assumption "
+        "drift as a secondary signal. If it asks whether a new statement conflicts with history, choose Contradiction "
+        "analysis. Extract concise topic_terms that deterministic graph search can use.\n\n"
+        f"Context JSON:\n{json.dumps(context, sort_keys=True, default=str)}"
+    )
+    try:
+        parsed = run_structured_local_prompt(system_prompt=_query_intent_system_prompt(), user_prompt=user_prompt, schema=schema)
+        return LLMQueryIntent.model_validate(parsed)
+    except ValidationError as exc:
+        raise LocalLLMError("Local LLM query intent did not match the expected schema") from exc
 
 
 def explain_signal_with_local_llm(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import hashlib
 import re
@@ -39,7 +39,7 @@ from app.schemas.api import (
     SignalRead,
 )
 from app.services.audit import log_event
-from app.services.llm_reasoning import explain_signal_with_local_llm
+from app.services.llm_reasoning import classify_query_intent_with_local_llm, explain_signal_with_local_llm
 from app.services.permissions import artifact_is_visible_to_user
 
 STOPWORDS = {
@@ -144,6 +144,9 @@ class QueryRouteDecision:
     route_confidence: float
     route_rationale: str
     secondary_signals: list[str]
+    route_source: str = "keyword"
+    topic_terms: list[str] = field(default_factory=list)
+    llm_intent: dict[str, Any] | None = None
 
 
 def _query_terms(value: str) -> set[str]:
@@ -177,7 +180,7 @@ def _is_contradiction_comparable_pair(from_memory: MemoryRecord, to_memory: Memo
     return len(from_terms & to_terms) >= 2
 
 
-def classify_query_with_trace(query_text: str) -> QueryRouteDecision:
+def _classify_query_with_keywords(query_text: str) -> QueryRouteDecision:
     lowered = query_text.lower()
     scores = {
         "Decision lineage": 0,
@@ -212,6 +215,7 @@ def classify_query_with_trace(query_text: str) -> QueryRouteDecision:
             route_confidence=0.3,
             route_rationale="No explicit mode keywords matched, so the query fell back to the baseline historical-lineage route.",
             secondary_signals=[],
+            topic_terms=sorted(_query_terms(query_text))[:8],
         )
     confidence = min(0.98, 0.45 + (best_score * 0.12) + ((best_score - second_score) * 0.08))
     return QueryRouteDecision(
@@ -219,6 +223,74 @@ def classify_query_with_trace(query_text: str) -> QueryRouteDecision:
         route_confidence=round(confidence, 2),
         route_rationale=f"Matched route terms: {', '.join(matched_terms[best_class])}.",
         secondary_signals=[label for label, score in ranked[1:] if score > 0][:2],
+        topic_terms=sorted(_query_terms(query_text))[:8],
+    )
+
+
+def _route_decision_trace_payload(route_decision: QueryRouteDecision) -> dict[str, Any]:
+    payload = {
+        "query_class": route_decision.query_class,
+        "route_confidence": route_decision.route_confidence,
+        "route_rationale": route_decision.route_rationale,
+        "secondary_signals": route_decision.secondary_signals,
+        "route_source": route_decision.route_source,
+        "topic_terms": route_decision.topic_terms,
+    }
+    if route_decision.llm_intent is not None:
+        payload["llm_intent"] = route_decision.llm_intent
+    return payload
+
+
+def classify_query_with_trace(query_text: str) -> QueryRouteDecision:
+    keyword_decision = _classify_query_with_keywords(query_text)
+    settings = get_settings()
+    if not settings.llm_query_routing_enabled:
+        return keyword_decision
+
+    try:
+        llm_intent = classify_query_intent_with_local_llm(
+            query_text=query_text,
+            deterministic_route=_route_decision_trace_payload(keyword_decision),
+        )
+    except Exception as exc:
+        return QueryRouteDecision(
+            query_class=keyword_decision.query_class,
+            route_confidence=keyword_decision.route_confidence,
+            route_rationale=f"{keyword_decision.route_rationale} Local LLM routing fallback: {exc}",
+            secondary_signals=keyword_decision.secondary_signals,
+            route_source="keyword_after_llm_fallback",
+            topic_terms=keyword_decision.topic_terms,
+            llm_intent={"status": "fallback", "fallback_reason": str(exc)},
+        )
+
+    llm_confidence = round(float(llm_intent.confidence), 2)
+    combined_confidence = max(0.35, min(0.98, (llm_confidence * 0.72) + (keyword_decision.route_confidence * 0.28)))
+    secondary_signals = [
+        item
+        for item in [*llm_intent.secondary_signals, *keyword_decision.secondary_signals]
+        if item != llm_intent.query_class
+    ][:3]
+    return QueryRouteDecision(
+        query_class=llm_intent.query_class,
+        route_confidence=round(combined_confidence, 2),
+        route_rationale=(
+            f"Local LLM classified the query intent as {llm_intent.query_class}: {llm_intent.route_rationale} "
+            f"Deterministic keyword fallback would route to {keyword_decision.query_class}."
+        ),
+        secondary_signals=secondary_signals,
+        route_source="local_llm_intent",
+        topic_terms=llm_intent.topic_terms or keyword_decision.topic_terms,
+        llm_intent={
+            "status": "applied",
+            "query_class": llm_intent.query_class,
+            "confidence": llm_confidence,
+            "secondary_signals": llm_intent.secondary_signals,
+            "topic_terms": llm_intent.topic_terms,
+            "asks_for_evidence": llm_intent.asks_for_evidence,
+            "needs_next_action": llm_intent.needs_next_action,
+            "deterministic_fallback_class": keyword_decision.query_class,
+            "role": "classify_query_intent_only",
+        },
     )
 
 
@@ -1893,12 +1965,7 @@ def _persist_query_trace_steps(
     trace_payloads: list[tuple[str, dict[str, Any]]] = [
         (
             "route_decision",
-            {
-                "query_class": route_decision.query_class,
-                "route_confidence": route_decision.route_confidence,
-                "route_rationale": route_decision.route_rationale,
-                "secondary_signals": route_decision.secondary_signals,
-            },
+            _route_decision_trace_payload(route_decision),
         ),
         (
             "seed_selection",
