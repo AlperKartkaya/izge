@@ -21,6 +21,11 @@ function readRecordArray(record: Record<string, unknown>, field: string): Array<
   return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null) : []
 }
 
+function readRecord(record: Record<string, unknown>, field: string): Record<string, unknown> | null {
+  const value = record[field]
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
 function stepTitle(stepKind: string): string {
   switch (stepKind) {
     case 'route_decision':
@@ -55,6 +60,37 @@ function modePlainEnglish(queryClass: string): string {
 
 function firstAvailable(...values: string[]): string {
   return values.find((value) => value && value !== 'Unavailable') ?? 'No explicit signal returned.'
+}
+
+function findTracePayload(trace: QueryTraceRead | null, stepKind: string): Record<string, unknown> | null {
+  const step = trace?.steps.find((item) => item.step_kind === stepKind)
+  return step?.payload ?? null
+}
+
+function routeSourceLabel(routeSource: string): string {
+  switch (routeSource) {
+    case 'local_llm_intent':
+      return 'Local LLM intent routing'
+    case 'keyword_after_llm_fallback':
+      return 'Keyword routing after LLM fallback'
+    case 'keyword':
+      return 'Deterministic keyword routing'
+    default:
+      return formatLabel(routeSource)
+  }
+}
+
+function synthesisStatusLabel(status: string): string {
+  switch (status) {
+    case 'applied':
+      return 'LLM-assisted answer wording'
+    case 'fallback':
+      return 'Deterministic answer after LLM fallback'
+    case 'disabled':
+      return 'Deterministic answer only'
+    default:
+      return formatLabel(status)
+  }
 }
 
 export function QueryResultPage() {
@@ -110,6 +146,13 @@ export function QueryResultPage() {
   const topDrift = activeResult?.stale_assumptions[0]
   const topAction = activeResult?.recommended_next_actions[0]
   const graphEvidenceCount = activeResult?.supporting_evidence.filter((item) => item.evidence_kind === 'graph').length ?? 0
+  const routePayload = findTracePayload(trace, 'route_decision')
+  const answerCompositionPayload = findTracePayload(trace, 'answer_composition')
+  const answerSynthesis = answerCompositionPayload ? readRecord(answerCompositionPayload, 'answer_synthesis') : null
+  const synthesisStatus = answerSynthesis ? readRecordField(answerSynthesis, 'status') : 'Unavailable'
+  const routeSource = routePayload ? readRecordField(routePayload, 'route_source') : 'Unavailable'
+  const llmIntent = routePayload ? readRecord(routePayload, 'llm_intent') : null
+  const llmIntentStatus = llmIntent ? readRecordField(llmIntent, 'status') : 'Unavailable'
 
   return (
     <div className="stack-xl">
@@ -150,6 +193,54 @@ export function QueryResultPage() {
               <article className="panel-subtle detail-card">
                 <p className="section-label">Historical support</p>
                 <p className="table-primary">{activeResult.supporting_nodes.length + activeResult.supporting_evidence.length} linked items</p>
+              </article>
+            </div>
+          </Panel>
+
+          <Panel
+            title="Inference and authority boundary"
+            description="This shows where company-controlled local inference helped, and where deterministic graph/evidence logic remained the authority."
+          >
+            <div className="detail-grid">
+              <article className="panel-subtle detail-card">
+                <p className="section-label">Query routing</p>
+                <p className="table-primary">{routeSource !== 'Unavailable' ? routeSourceLabel(routeSource) : 'Trace loading'}</p>
+                <p className="muted-copy">
+                  {routeSource === 'local_llm_intent'
+                    ? `The local LLM classified intent only; deterministic execution still selected evidence and composed the graph packet.`
+                    : routeSource === 'keyword_after_llm_fallback'
+                      ? 'LLM intent routing was attempted, but deterministic keyword routing carried the query.'
+                      : 'The query mode was selected by deterministic routing.'}
+                </p>
+                {readStringArray(routePayload ?? {}, 'topic_terms').length > 0 ? (
+                  <p className="table-secondary">Topic terms: {readStringArray(routePayload ?? {}, 'topic_terms').join(', ')}</p>
+                ) : null}
+                {llmIntentStatus !== 'Unavailable' ? <p className="table-secondary">LLM intent status: {formatLabel(llmIntentStatus)}</p> : null}
+              </article>
+
+              <article className={synthesisStatus === 'applied' ? 'panel-subtle detail-card action-card' : 'panel-subtle detail-card'}>
+                <p className="section-label">Answer wording</p>
+                <p className="table-primary">{synthesisStatus !== 'Unavailable' ? synthesisStatusLabel(synthesisStatus) : 'Trace loading'}</p>
+                <p className="muted-copy">
+                  {synthesisStatus === 'applied'
+                    ? 'The final answer text was rewritten by the local LLM from the already-selected deterministic evidence packet.'
+                    : synthesisStatus === 'fallback'
+                      ? 'The backend kept the deterministic answer because local synthesis failed or returned invalid structure.'
+                      : 'The answer is the deterministic template output from the graph reasoning path.'}
+                </p>
+                {readStringArray(answerSynthesis ?? {}, 'cited_evidence_ids').length > 0 ? (
+                  <p className="table-secondary">Validated evidence citations: {readStringArray(answerSynthesis ?? {}, 'cited_evidence_ids').length}</p>
+                ) : null}
+              </article>
+
+              <article className="panel-subtle detail-card">
+                <p className="section-label">Evidence authority</p>
+                <p className="table-primary">
+                  {activeResult.supporting_evidence.length} evidence excerpts · {activeResult.supporting_nodes.length} memory objects
+                </p>
+                <p className="muted-copy">
+                  Permission filtering, evidence selection, contradiction/drift analysis, and next-action generation remain backend-deterministic.
+                </p>
               </article>
             </div>
           </Panel>
@@ -373,6 +464,8 @@ export function QueryResultPage() {
                     const staleAssumptions = readRecordArray(payload, 'stale_assumptions')
                     const supportingEvidence = readRecordArray(payload, 'supporting_evidence')
                     const sectionCounts = payload.section_counts as Record<string, unknown> | undefined
+                    const stepAnswerSynthesis = readRecord(payload, 'answer_synthesis')
+                    const stepSynthesisStatus = stepAnswerSynthesis ? readRecordField(stepAnswerSynthesis, 'status') : 'Unavailable'
                     return (
                       <article key={`${step.step_kind}-${step.created_at}`} className="panel-subtle stack-sm">
                         <div className="timeline-card-head">
@@ -381,6 +474,8 @@ export function QueryResultPage() {
                         </div>
 
                         {readRecordField(payload, 'route_rationale') !== 'Unavailable' ? <p className="muted-copy">{readRecordField(payload, 'route_rationale')}</p> : null}
+                        {readRecordField(payload, 'route_source') !== 'Unavailable' ? <p className="table-secondary">Route source: {routeSourceLabel(readRecordField(payload, 'route_source'))}</p> : null}
+                        {readStringArray(payload, 'topic_terms').length > 0 ? <p className="table-secondary">Topic terms: {readStringArray(payload, 'topic_terms').join(', ')}</p> : null}
                         {readStringArray(payload, 'secondary_signals').length > 0 ? <p className="table-secondary">Secondary signals: {readStringArray(payload, 'secondary_signals').join(', ')}</p> : null}
 
                         {supportingNodes.length > 0 ? (
@@ -435,6 +530,22 @@ export function QueryResultPage() {
                             <p className="table-secondary">
                               Nodes {String(sectionCounts.supporting_nodes ?? 0)} · Evidence {String(sectionCounts.supporting_evidence ?? 0)} · Contradictions {String(sectionCounts.contradictions ?? 0)} · Drift {String(sectionCounts.assumption_drift ?? 0)} · Actions {String(sectionCounts.recommended_next_actions ?? 0)}
                             </p>
+                          </div>
+                        ) : null}
+
+                        {stepAnswerSynthesis ? (
+                          <div className="stack-sm">
+                            <p className="section-label">Answer synthesis boundary</p>
+                            <p className="table-secondary">{synthesisStatusLabel(stepSynthesisStatus)}</p>
+                            {readRecordField(stepAnswerSynthesis, 'confidence_rationale') !== 'Unavailable' ? (
+                              <p className="muted-copy">{readRecordField(stepAnswerSynthesis, 'confidence_rationale')}</p>
+                            ) : null}
+                            {readRecordField(stepAnswerSynthesis, 'fallback_reason') !== 'Unavailable' ? (
+                              <p className="muted-copy">{readRecordField(stepAnswerSynthesis, 'fallback_reason')}</p>
+                            ) : null}
+                            {readStringArray(stepAnswerSynthesis, 'cited_memory_ids').length > 0 ? (
+                              <p className="table-secondary">Validated memory citations: {readStringArray(stepAnswerSynthesis, 'cited_memory_ids').join(', ')}</p>
+                            ) : null}
                           </div>
                         ) : null}
 
