@@ -177,6 +177,11 @@ def payload_contains_forbidden_value(value: Any, *, restricted_artifact_id: str)
     return any(forbidden in serialized for forbidden in (RESTRICTED_TITLE, RESTRICTED_MARKER, restricted_artifact_id))
 
 
+def payload_contains_artifact_id(value: Any, artifact_id: str) -> bool:
+    serialized = json.dumps(value, sort_keys=True, default=str)
+    return artifact_id in serialized
+
+
 def permission_regression_checks(admin_token: str) -> dict[str, Any]:
     fixture = create_permission_regression_fixture(admin_token)
     member_token = fixture["member_token"]
@@ -318,9 +323,27 @@ def run_eval() -> dict[str, Any]:
         else {}
     )
     graph_summary = expect_object(request("/api/graph/summary", headers={"Authorization": f"Bearer {token}"}), "graph summary")
-    audit_events = expect_list(request("/api/audit/events", headers={"Authorization": f"Bearer {token}"}), "audit events")
     reversal_artifact = next(artifact for filename, artifact in uploaded_artifacts.items() if filename.startswith("03_"))
     checkpoint_artifact = next(artifact for filename, artifact in uploaded_artifacts.items() if filename.startswith("04_"))
+    checkpoint_artifact_detail_before_review = expect_object(
+        request(f"/api/artifacts/{checkpoint_artifact['artifact_id']}", headers={"Authorization": f"Bearer {token}"}),
+        "checkpoint artifact detail before review",
+    )
+    checkpoint_artifact_reviewed = expect_object(
+        request(
+            f"/api/artifacts/{checkpoint_artifact['artifact_id']}/review",
+            method="PATCH",
+            data=json.dumps(
+                {
+                    "review_status": "reviewed",
+                    "review_notes": "Seed eval: reviewed as trusted demo memory.",
+                }
+            ).encode(),
+            headers=auth_headers,
+        ),
+        "checkpoint artifact review update",
+    )
+    audit_events = expect_list(request("/api/audit/events", headers={"Authorization": f"Bearer {token}"}), "audit events")
     reversal_signals = expect_object(
         request(f"/api/artifacts/{reversal_artifact['artifact_id']}/signals", headers={"Authorization": f"Bearer {token}"}),
         "reversal artifact signals",
@@ -383,6 +406,14 @@ def run_eval() -> dict[str, Any]:
                 for node in result.get("supporting_nodes", [])
             ),
             "has_related_persisted_signals": bool(result.get("related_signals")),
+            "supporting_evidence_has_review_status": all(
+                isinstance(item.get("artifact_review_status"), str) and item.get("artifact_review_status")
+                for item in result.get("supporting_evidence", [])
+            ),
+            "supporting_nodes_have_review_status": all(
+                isinstance(item.get("source_artifact_review_status"), str) and item.get("source_artifact_review_status")
+                for item in result.get("supporting_nodes", [])
+            ),
         }
         results.append(
             {
@@ -479,6 +510,19 @@ def run_eval() -> dict[str, Any]:
                 "has_persisted_signal_links": bool(checkpoint_signals.get("persisted_signals")),
             },
         },
+        "artifact_review_governance": {
+            "artifact_id": checkpoint_artifact["artifact_id"],
+            "before_review": checkpoint_artifact_detail_before_review.get("review_status"),
+            "after_review": checkpoint_artifact_reviewed.get("review_status"),
+            "checks": {
+                "ingested_artifact_needs_review": checkpoint_artifact_detail_before_review.get("review_status") == "needs_review",
+                "admin_can_mark_reviewed": checkpoint_artifact_reviewed.get("review_status") == "reviewed",
+                "review_notes_persist": checkpoint_artifact_reviewed.get("review_notes") == "Seed eval: reviewed as trusted demo memory.",
+                "review_actor_recorded": bool(checkpoint_artifact_reviewed.get("reviewed_by")),
+                "review_timestamp_recorded": bool(checkpoint_artifact_reviewed.get("reviewed_at")),
+                "audit_has_artifact_review_update": any(event.get("event_type") == "ARTIFACT_REVIEW_UPDATED" for event in audit_events),
+            },
+        },
         "persisted_signals": {
             "signal_counts": graph_summary.get("signal_counts"),
             "list_count": len(persisted_signal_list),
@@ -499,6 +543,14 @@ def run_eval() -> dict[str, Any]:
                     signal_detail.get("supporting_evidence") or signal_detail.get("supporting_memory_objects")
                 ),
                 "detail_has_intelligence_path": bool(signal_detail.get("intelligence_path")),
+                "detail_evidence_has_review_status": all(
+                    isinstance(item.get("artifact_review_status"), str) and item.get("artifact_review_status")
+                    for item in signal_detail.get("supporting_evidence", [])
+                ),
+                "detail_memory_has_review_status": all(
+                    isinstance(item.get("source_artifact_review_status"), str) and item.get("source_artifact_review_status")
+                    for item in signal_detail.get("supporting_memory_objects", [])
+                ),
                 "detail_payload_records_reasoning_boundary": (
                     signal_detail.get("payload_json", {}).get("reasoning_boundary", {}).get("signal_detection")
                     == "deterministic_graph_analysis"
@@ -519,6 +571,58 @@ def run_eval() -> dict[str, Any]:
                     for event in audit_events
                 ),
             },
+        },
+    }
+    rejected_review = expect_object(
+        request(
+            f"/api/artifacts/{reversal_artifact['artifact_id']}/review",
+            method="PATCH",
+            data=json.dumps(
+                {
+                    "review_status": "rejected",
+                    "review_notes": "Seed eval: rejected to verify trusted reasoning exclusion.",
+                }
+            ).encode(),
+            headers=auth_headers,
+        ),
+        "reversal artifact rejected review update",
+    )
+    rejected_query = expect_object(
+        request(
+            "/api/query",
+            method="POST",
+            data=json.dumps({"query_text": "Does the self-serve onboarding launch plan conflict with prior history?"}).encode(),
+            headers=auth_headers,
+        ),
+        "rejected artifact exclusion query",
+    )
+    rejected_signals = expect_object(
+        request(f"/api/artifacts/{reversal_artifact['artifact_id']}/signals", headers={"Authorization": f"Bearer {token}"}),
+        "rejected artifact proactive signals",
+    )
+    signals_after_rejection = expect_list(request("/api/signals", headers={"Authorization": f"Bearer {token}"}), "signals after rejection")
+    standalone["artifact_review_rejection_trust_boundary"] = {
+        "artifact_id": reversal_artifact["artifact_id"],
+        "review_status": rejected_review.get("review_status"),
+        "summary": rejected_signals.get("summary"),
+        "checks": {
+            "admin_can_mark_rejected": rejected_review.get("review_status") == "rejected",
+            "query_excludes_rejected_artifact": not payload_contains_artifact_id(
+                {
+                    "supporting_nodes": rejected_query.get("supporting_nodes", []),
+                    "supporting_evidence": rejected_query.get("supporting_evidence", []),
+                    "contradictions": rejected_query.get("contradictions", []),
+                    "stale_assumptions": rejected_query.get("stale_assumptions", []),
+                    "related_signals": rejected_query.get("related_signals", []),
+                },
+                reversal_artifact["artifact_id"],
+            ),
+            "query_names_rejected_evidence_boundary": any("rejected" in str(note).lower() for note in rejected_query.get("uncertainty_notes", [])),
+            "artifact_signals_suppressed_when_rejected": sum(int(value) for value in rejected_signals.get("signal_counts", {}).values()) == 0,
+            "artifact_signal_summary_names_rejection": "rejected" in str(rejected_signals.get("summary", "")).lower(),
+            "persisted_signals_hide_rejected_source": all(
+                signal.get("source_artifact_id") != reversal_artifact["artifact_id"] for signal in signals_after_rejection
+            ),
         },
     }
 

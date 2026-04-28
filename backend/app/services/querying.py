@@ -126,6 +126,7 @@ class MemoryRecord:
     confidence_score: float
     event_timestamp: datetime
     source_artifact_id: str
+    source_artifact_review_status: str
     source_chunk_id: str | None
     evidence_span: str | None
     topic_key: str
@@ -261,6 +262,7 @@ def _answer_synthesis_context(result_data: dict[str, Any]) -> dict[str, Any]:
                 "memory_type": node.memory_type,
                 "title_or_label": node.title_or_label,
                 "source_artifact_id": node.source_artifact_id,
+                "source_artifact_review_status": node.source_artifact_review_status,
                 "status": node.status,
                 "due_date": node.due_date,
             }
@@ -271,6 +273,7 @@ def _answer_synthesis_context(result_data: dict[str, Any]) -> dict[str, Any]:
                 "evidence_id": _evidence_reference_id(evidence),
                 "artifact_id": evidence.artifact_id,
                 "artifact_title": evidence.artifact_title,
+                "artifact_review_status": evidence.artifact_review_status,
                 "chunk_id": evidence.chunk_id,
                 "evidence_kind": evidence.evidence_kind,
                 "excerpt": evidence.excerpt,
@@ -397,8 +400,30 @@ def _visible_artifact_ids(db: Session, user: User) -> set[str]:
     return {artifact.artifact_id for artifact in _visible_artifacts(db, user)}
 
 
+def _trusted_visible_artifacts(db: Session, user: User) -> list[Artifact]:
+    return [artifact for artifact in _visible_artifacts(db, user) if artifact.review_status != "rejected"]
+
+
+def _trusted_visible_artifact_ids(db: Session, user: User) -> set[str]:
+    return {artifact.artifact_id for artifact in _trusted_visible_artifacts(db, user)}
+
+
+def _artifact_review_status_map(db: Session, artifact_ids: set[str]) -> dict[str, str]:
+    if not artifact_ids:
+        return {}
+    artifacts = db.scalars(select(Artifact).where(Artifact.artifact_id.in_(artifact_ids))).all()
+    return {artifact.artifact_id: artifact.review_status or "submitted" for artifact in artifacts}
+
+
+def _artifact_review_status_for_id(review_statuses: dict[str, str], artifact_id: str | None) -> str:
+    if artifact_id is None:
+        return "unknown"
+    return review_statuses.get(artifact_id, "unknown")
+
+
 def _load_memory_records(db: Session, user: User) -> list[MemoryRecord]:
-    visible_artifact_ids = _visible_artifact_ids(db, user)
+    trusted_artifacts = _trusted_visible_artifacts(db, user)
+    trusted_artifact_review_statuses = {artifact.artifact_id: artifact.review_status or "submitted" for artifact in trusted_artifacts}
     records: list[MemoryRecord] = []
     model_configs = [
         (Decision, "decision", "decision_id"),
@@ -410,7 +435,7 @@ def _load_memory_records(db: Session, user: User) -> list[MemoryRecord]:
     for model, label, pk_name in model_configs:
         rows = db.scalars(select(model).where(model.workspace_id == user.workspace_id).order_by(model.event_timestamp.asc())).all()
         for row in rows:
-            if row.source_artifact_id not in visible_artifact_ids:
+            if row.source_artifact_id not in trusted_artifact_review_statuses:
                 continue
             records.append(
                 MemoryRecord(
@@ -421,6 +446,7 @@ def _load_memory_records(db: Session, user: User) -> list[MemoryRecord]:
                     confidence_score=row.confidence_score,
                     event_timestamp=row.event_timestamp,
                     source_artifact_id=row.source_artifact_id,
+                    source_artifact_review_status=trusted_artifact_review_statuses[row.source_artifact_id],
                     source_chunk_id=row.source_chunk_id,
                     evidence_span=row.evidence_span,
                     topic_key=row.topic_key,
@@ -433,9 +459,9 @@ def _load_memory_records(db: Session, user: User) -> list[MemoryRecord]:
 
 
 def _load_nodes_by_id(db: Session, user: User) -> dict[str, NodeRecord]:
-    visible_artifact_ids = _visible_artifact_ids(db, user)
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
     nodes = db.scalars(select(GraphNode).where(GraphNode.workspace_id == user.workspace_id)).all()
-    allowed_entity_ids = set(visible_artifact_ids)
+    allowed_entity_ids = set(trusted_artifact_ids)
     for memory in _load_memory_records(db, user):
         allowed_entity_ids.add(memory.memory_id)
     return {
@@ -452,6 +478,7 @@ def _memory_reference(memory: MemoryRecord) -> MemoryReference:
         title_or_label=memory.title_or_label,
         confidence_score=memory.confidence_score,
         source_artifact_id=memory.source_artifact_id,
+        source_artifact_review_status=memory.source_artifact_review_status,
         topic_key=memory.topic_key,
         status=memory.status,
         due_date=memory.due_date,
@@ -491,12 +518,14 @@ def _contradiction_side_evidence(
     *,
     memory: MemoryRecord,
     artifact_titles: dict[str, str],
+    artifact_review_statuses: dict[str, str],
     time_label: str,
 ) -> dict[str, str | None]:
     artifact_title = _artifact_title_for_id(artifact_titles, memory.source_artifact_id)
     return {
         "artifact_id": memory.source_artifact_id,
         "artifact_title": artifact_title,
+        "artifact_review_status": _artifact_review_status_for_id(artifact_review_statuses, memory.source_artifact_id),
         "chunk_id": memory.source_chunk_id,
         "excerpt": _evidence_excerpt(db, chunk_id=memory.source_chunk_id, fallback=memory.evidence_span or memory.normalized_text),
         "provenance": f"{time_label.capitalize()} claim evidence from {artifact_title}.",
@@ -562,6 +591,7 @@ def _memory_trace_payload_items(nodes: list[MemoryReference]) -> list[dict[str, 
             "memory_id": node.memory_id,
             "title_or_label": node.title_or_label,
             "source_artifact_id": node.source_artifact_id,
+            "source_artifact_review_status": node.source_artifact_review_status,
         }
         for node in nodes[:6]
     ]
@@ -572,6 +602,7 @@ def _evidence_trace_payload_items(evidence: list[EvidenceReference]) -> list[dic
         {
             "artifact_id": item.artifact_id,
             "artifact_title": item.artifact_title,
+            "artifact_review_status": item.artifact_review_status,
             "chunk_id": item.chunk_id,
             "evidence_kind": item.evidence_kind,
             "excerpt": item.excerpt,
@@ -655,14 +686,14 @@ def _redacted_query_text(
     supporting_nodes: list[dict[str, Any]],
 ) -> tuple[str, str, list[str]]:
     recommended_next_actions = _safe_next_actions_from_payload(contradictions, stale_assumptions, supporting_nodes)
-    why_this_answer = "Some previously cached support is no longer visible, so this result was reduced to the currently permitted evidence only."
+    why_this_answer = "Some previously cached support is no longer visible or trusted, so this result was reduced to the currently permitted and review-accepted evidence only."
 
     if query_class == "Contradiction analysis":
         if contradictions:
             top = contradictions[0]
             answer_text = f"The clearest contradiction still visible is between {top['from_title']} and {top['to_title']}."
         else:
-            answer_text = "No contradiction can be shown from the currently permitted evidence."
+            answer_text = "No contradiction can be shown from the currently permitted and review-accepted evidence."
             recommended_next_actions = []
         return answer_text, why_this_answer, recommended_next_actions
 
@@ -671,12 +702,12 @@ def _redacted_query_text(
             top = stale_assumptions[0]
             answer_text = f"The strongest drift signal still visible is {top['title_or_label']} with status {top['status']}."
         else:
-            answer_text = "No stale-assumption signal can be shown from the currently permitted evidence."
+            answer_text = "No stale-assumption signal can be shown from the currently permitted and review-accepted evidence."
             recommended_next_actions = []
         return answer_text, why_this_answer, recommended_next_actions
 
     if query_class == "Next-action guidance":
-        answer_text = recommended_next_actions[0] if recommended_next_actions else "No high-confidence next action can be shown from the currently permitted evidence."
+        answer_text = recommended_next_actions[0] if recommended_next_actions else "No high-confidence next action can be shown from the currently permitted and review-accepted evidence."
         return answer_text, why_this_answer, recommended_next_actions
 
     visible_decisions = [node for node in supporting_nodes if node.get("memory_type") == "decision"]
@@ -687,7 +718,7 @@ def _redacted_query_text(
     elif visible_decisions:
         answer_text = f"The clearest visible decision lineage is '{visible_decisions[0]['title_or_label']}'."
     else:
-        answer_text = "No decision lineage can be shown from the currently permitted evidence."
+        answer_text = "No decision lineage can be shown from the currently permitted and review-accepted evidence."
         recommended_next_actions = []
     return answer_text, why_this_answer, recommended_next_actions
 
@@ -705,6 +736,7 @@ def _evidence_from_memories(db: Session, memories: list[MemoryRecord]) -> list[E
             EvidenceReference(
                 artifact_id=memory.source_artifact_id,
                 artifact_title=_artifact_title_for_id(titles, memory.source_artifact_id),
+                artifact_review_status=memory.source_artifact_review_status,
                 chunk_id=memory.source_chunk_id,
                 excerpt=_chunk_excerpt(db, memory.source_chunk_id, memory.evidence_span or memory.normalized_text),
                 evidence_kind="graph",
@@ -726,10 +758,11 @@ def _fts_evidence(db: Session, user: User, query_text: str) -> list[EvidenceRefe
         return []
     artifact_ids = {artifact_id for _chunk_id, artifact_id, _text_value in rows}
     titles = _artifact_title_map(db, artifact_ids)
-    visible_artifact_ids = _visible_artifact_ids(db, user)
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
+    review_statuses = _artifact_review_status_map(db, trusted_artifact_ids)
     evidence: list[EvidenceReference] = []
     for chunk_id, artifact_id, text_value in rows:
-        if artifact_id not in visible_artifact_ids:
+        if artifact_id not in trusted_artifact_ids:
             continue
         artifact_id_text = artifact_id if isinstance(artifact_id, str) else None
         chunk_id_text = chunk_id if isinstance(chunk_id, str) else None
@@ -738,6 +771,7 @@ def _fts_evidence(db: Session, user: User, query_text: str) -> list[EvidenceRefe
             EvidenceReference(
                 artifact_id=artifact_id_text or "unknown-artifact",
                 artifact_title=_artifact_title_for_id(titles, artifact_id_text),
+                artifact_review_status=_artifact_review_status_for_id(review_statuses, artifact_id_text),
                 chunk_id=chunk_id_text,
                 excerpt=(text_excerpt[:240] + "...") if len(text_excerpt) > 240 else text_excerpt,
                 evidence_kind="search_fallback",
@@ -747,9 +781,9 @@ def _fts_evidence(db: Session, user: User, query_text: str) -> list[EvidenceRefe
 
 
 def _visible_edges(db: Session, user: User) -> list[GraphEdge]:
-    visible_artifact_ids = _visible_artifact_ids(db, user)
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
     edges = db.scalars(select(GraphEdge).where(GraphEdge.workspace_id == user.workspace_id).order_by(GraphEdge.created_at.desc())).all()
-    return [edge for edge in edges if edge.evidence_artifact_id is None or edge.evidence_artifact_id in visible_artifact_ids]
+    return [edge for edge in edges if edge.evidence_artifact_id is None or edge.evidence_artifact_id in trusted_artifact_ids]
 
 
 def _related_memories_for_node(db: Session, user: User, node_id: str) -> list[MemoryRecord]:
@@ -980,7 +1014,9 @@ def _ranking_basis(from_type: str, to_type: str, topic_key: str, chronology_bonu
 def _contradiction_dicts(db: Session, user: User, query_text: str, memories: list[MemoryRecord], limit: int = 6) -> list[dict]:
     nodes = _load_nodes_by_id(db, user)
     memory_by_id = {memory.memory_id: memory for memory in _load_memory_records(db, user)}
-    artifact_titles = _artifact_title_map(db, _visible_artifact_ids(db, user))
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
+    artifact_titles = _artifact_title_map(db, trusted_artifact_ids)
+    artifact_review_statuses = _artifact_review_status_map(db, trusted_artifact_ids)
     ranked: list[dict] = []
     query_terms = _query_terms(query_text)
     for edge in _visible_edges(db, user):
@@ -1039,11 +1075,24 @@ def _contradiction_dicts(db: Session, user: User, query_text: str, memories: lis
                 "relation_label": "Contradicts",
                 "confidence_score": edge.confidence_score,
                 "evidence_artifact_id": edge.evidence_artifact_id,
+                "evidence_artifact_review_status": _artifact_review_status_for_id(artifact_review_statuses, edge.evidence_artifact_id),
                 "evidence_chunk_id": edge.evidence_chunk_id,
                 "evidence_span": evidence_span,
                 "evidence_provenance": evidence_provenance,
-                "from_evidence": _contradiction_side_evidence(db, memory=from_memory, artifact_titles=artifact_titles, time_label="later"),
-                "to_evidence": _contradiction_side_evidence(db, memory=to_memory, artifact_titles=artifact_titles, time_label="earlier"),
+                "from_evidence": _contradiction_side_evidence(
+                    db,
+                    memory=from_memory,
+                    artifact_titles=artifact_titles,
+                    artifact_review_statuses=artifact_review_statuses,
+                    time_label="later",
+                ),
+                "to_evidence": _contradiction_side_evidence(
+                    db,
+                    memory=to_memory,
+                    artifact_titles=artifact_titles,
+                    artifact_review_statuses=artifact_review_statuses,
+                    time_label="earlier",
+                ),
                 "topic_key": topic_key,
                 "claim_family_key": family_key,
                 "relevance": relevance,
@@ -1068,13 +1117,14 @@ def _contradiction_dicts(db: Session, user: User, query_text: str, memories: lis
 
 
 def _stale_assumption_dicts(db: Session, user: User, query_text: str, memories: list[MemoryRecord], limit: int = 6) -> list[dict]:
-    visible_artifact_ids = _visible_artifact_ids(db, user)
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
     memory_by_id = {memory.memory_id: memory for memory in memories}
-    artifact_titles = _artifact_title_map(db, visible_artifact_ids)
+    artifact_titles = _artifact_title_map(db, trusted_artifact_ids)
+    artifact_review_statuses = _artifact_review_status_map(db, trusted_artifact_ids)
     assumptions = db.scalars(select(Assumption).where(Assumption.workspace_id == user.workspace_id).order_by(Assumption.event_timestamp.desc())).all()
     items: list[dict] = []
     for row in assumptions:
-        if row.source_artifact_id not in visible_artifact_ids or row.status not in {"stale", "reversed", "weakening"}:
+        if row.source_artifact_id not in trusted_artifact_ids or row.status not in {"stale", "reversed", "weakening"}:
             continue
         relevance = _text_overlap(f"{row.title_or_label} {row.normalized_text}", query_text)
         if relevance == 0 and query_text.strip():
@@ -1107,9 +1157,15 @@ def _stale_assumption_dicts(db: Session, user: User, query_text: str, memories: 
                 "status": row.status,
                 "validity_notes": row.validity_notes,
                 "source_artifact_id": row.source_artifact_id,
+                "source_artifact_review_status": _artifact_review_status_for_id(artifact_review_statuses, row.source_artifact_id),
                 "confidence_score": row.confidence_score,
                 "topic_key": row.topic_key,
                 "supporting_signal_source_artifact_id": supporting_signal.source_artifact_id if supporting_signal is not None else None,
+                "supporting_signal_artifact_review_status": (
+                    _artifact_review_status_for_id(artifact_review_statuses, supporting_signal.source_artifact_id)
+                    if supporting_signal is not None
+                    else None
+                ),
                 "supporting_signal_title": supporting_signal.title_or_label if supporting_signal is not None else None,
                 "supporting_signal_type": supporting_signal.memory_type if supporting_signal is not None else None,
                 "supporting_signal_memory_id": supporting_signal.memory_id if supporting_signal is not None else None,
@@ -1324,6 +1380,7 @@ def _prior_relevant_work_items(db: Session, user: User, artifact: Artifact, memo
         return []
 
     artifact_titles = _artifact_title_map(db, set(grouped) | {artifact.artifact_id})
+    artifact_review_statuses = _artifact_review_status_map(db, set(grouped) | {artifact.artifact_id})
     items: list[dict[str, Any]] = []
     for prior_artifact_id, bucket in grouped.items():
         introduced_support = _dedupe_memories(bucket["introduced"])[:4]
@@ -1339,6 +1396,7 @@ def _prior_relevant_work_items(db: Session, user: User, artifact: Artifact, memo
             {
                 "prior_artifact_id": prior_artifact_id,
                 "prior_artifact_title": prior_artifact_title,
+                "prior_artifact_review_status": _artifact_review_status_for_id(artifact_review_statuses, prior_artifact_id),
                 "related_topic": related_topic or "general",
                 "overlap_score": overlap_score,
                 "continuity_reason": (
@@ -1489,7 +1547,9 @@ def _commitment_next_action_signal(db: Session, *, commitment: MemoryRecord) -> 
 def _supersession_dicts_for_artifact(db: Session, user: User, artifact_id: str, limit: int = 6) -> list[dict[str, Any]]:
     nodes = _load_nodes_by_id(db, user)
     memory_by_id = {memory.memory_id: memory for memory in _load_memory_records(db, user)}
-    artifact_titles = _artifact_title_map(db, _visible_artifact_ids(db, user))
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
+    artifact_titles = _artifact_title_map(db, trusted_artifact_ids)
+    artifact_review_statuses = _artifact_review_status_map(db, trusted_artifact_ids)
     items: list[dict[str, Any]] = []
 
     for edge in _visible_edges(db, user):
@@ -1520,6 +1580,7 @@ def _supersession_dicts_for_artifact(db: Session, user: User, artifact_id: str, 
                 "confidence_score": edge.confidence_score,
                 "evidence_artifact_id": edge.evidence_artifact_id,
                 "evidence_artifact_title": evidence_artifact_title,
+                "evidence_artifact_review_status": _artifact_review_status_for_id(artifact_review_statuses, edge.evidence_artifact_id),
                 "evidence_chunk_id": edge.evidence_chunk_id,
                 "evidence_span": _evidence_excerpt(
                     db,
@@ -1548,6 +1609,27 @@ def _signal_supports_artifact(signal: dict[str, Any], artifact_id: str) -> bool:
 
 
 def artifact_proactive_signals(db: Session, user: User, artifact: Artifact, *, include_persisted: bool = True) -> dict[str, Any]:
+    if artifact.review_status == "rejected":
+        signal_counts = {
+            "contradictions": 0,
+            "assumption_drift": 0,
+            "supersessions": 0,
+            "prior_relevant_work": 0,
+            "next_actions": 0,
+        }
+        return {
+            "artifact_id": artifact.artifact_id,
+            "artifact_title": artifact.title,
+            "ingestion_status": artifact.ingestion_status,
+            "summary": "This artifact is marked rejected by admin review, so it is excluded from trusted proactive intelligence.",
+            "signal_counts": signal_counts,
+            "introduced_contradictions": [],
+            "revealed_assumption_drift": [],
+            "superseded_memory": [],
+            "prior_relevant_work": [],
+            "recommended_next_actions": [],
+            "persisted_signals": [],
+        }
     memories = _load_memory_records(db, user)
     contradiction_items = [
         item
@@ -1796,15 +1878,15 @@ def _signal_read_model(signal: Signal, artifact_titles: dict[str, str]) -> Signa
 
 
 def _signal_visible_rows(db: Session, user: User, *, limit: int = 50) -> list[Signal]:
-    visible_artifact_ids = _visible_artifact_ids(db, user)
-    if not visible_artifact_ids:
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
+    if not trusted_artifact_ids:
         return []
     return db.scalars(
         select(Signal)
         .where(
             Signal.workspace_id == user.workspace_id,
             Signal.status == "active",
-            Signal.source_artifact_id.in_(visible_artifact_ids),
+            Signal.source_artifact_id.in_(trusted_artifact_ids),
         )
         .order_by(Signal.urgency_score.desc(), Signal.created_at.desc())
         .limit(limit)
@@ -1818,7 +1900,7 @@ def list_persisted_signals(db: Session, user: User, *, limit: int = 50) -> list[
 
 
 def _persisted_signals_for_artifact(db: Session, user: User, artifact_id: str, *, limit: int = 12) -> list[SignalRead]:
-    if artifact_id not in _visible_artifact_ids(db, user):
+    if artifact_id not in _trusted_visible_artifact_ids(db, user):
         return []
     signals = db.scalars(
         select(Signal)
@@ -1869,8 +1951,8 @@ def _query_payload_artifact_ids(payload: dict[str, Any], visible_artifact_ids: s
 
 
 def related_signals_for_query_payload(db: Session, user: User, payload: dict[str, Any], *, limit: int = 6) -> list[SignalRead]:
-    visible_artifact_ids = _visible_artifact_ids(db, user)
-    artifact_ids = _query_payload_artifact_ids(payload, visible_artifact_ids)
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
+    artifact_ids = _query_payload_artifact_ids(payload, trusted_artifact_ids)
     if not artifact_ids:
         return []
     signals = db.scalars(
@@ -1911,25 +1993,48 @@ def _dedupe_evidence_references(references: list[EvidenceReference]) -> list[Evi
     return deduped
 
 
-def _memory_reference_from_payload(item: dict[str, Any], visible_artifact_ids: set[str]) -> MemoryReference | None:
+def _memory_reference_from_payload(
+    item: dict[str, Any],
+    visible_artifact_ids: set[str],
+    artifact_review_statuses: dict[str, str],
+) -> MemoryReference | None:
     if item.get("source_artifact_id") not in visible_artifact_ids:
         return None
     try:
-        return MemoryReference.model_validate(item)
+        reference = MemoryReference.model_validate(item)
+        return reference.model_copy(
+            update={
+                "source_artifact_review_status": _artifact_review_status_for_id(
+                    artifact_review_statuses,
+                    reference.source_artifact_id,
+                )
+            }
+        )
     except Exception:
         return None
 
 
-def _evidence_reference_from_payload(item: dict[str, Any], visible_artifact_ids: set[str]) -> EvidenceReference | None:
+def _evidence_reference_from_payload(
+    item: dict[str, Any],
+    visible_artifact_ids: set[str],
+    artifact_review_statuses: dict[str, str],
+) -> EvidenceReference | None:
     if item.get("artifact_id") not in visible_artifact_ids:
         return None
     try:
-        return EvidenceReference.model_validate(item)
+        reference = EvidenceReference.model_validate(item)
+        return reference.model_copy(
+            update={"artifact_review_status": _artifact_review_status_for_id(artifact_review_statuses, reference.artifact_id)}
+        )
     except Exception:
         return None
 
 
-def _evidence_reference_from_side_evidence(item: dict[str, Any], visible_artifact_ids: set[str]) -> EvidenceReference | None:
+def _evidence_reference_from_side_evidence(
+    item: dict[str, Any],
+    visible_artifact_ids: set[str],
+    artifact_review_statuses: dict[str, str],
+) -> EvidenceReference | None:
     artifact_id = item.get("artifact_id")
     if not isinstance(artifact_id, str) or artifact_id not in visible_artifact_ids:
         return None
@@ -1938,6 +2043,7 @@ def _evidence_reference_from_side_evidence(item: dict[str, Any], visible_artifac
     return EvidenceReference(
         artifact_id=artifact_id,
         artifact_title=str(artifact_title or artifact_id),
+        artifact_review_status=_artifact_review_status_for_id(artifact_review_statuses, artifact_id),
         chunk_id=item.get("chunk_id") if isinstance(item.get("chunk_id"), str) else None,
         excerpt=str(excerpt or ""),
         evidence_kind="graph",
@@ -1993,12 +2099,13 @@ def _memory_refs_for_signal_payload(
     visible_artifact_ids: set[str],
 ) -> list[MemoryReference]:
     references: list[MemoryReference] = []
+    artifact_review_statuses = _artifact_review_status_map(db, visible_artifact_ids)
 
     if isinstance(payload.get("supporting_memory_objects"), list):
         for item in payload["supporting_memory_objects"]:
             if not isinstance(item, dict):
                 continue
-            reference = _memory_reference_from_payload(item, visible_artifact_ids)
+            reference = _memory_reference_from_payload(item, visible_artifact_ids, artifact_review_statuses)
             if reference is not None:
                 references.append(reference)
 
@@ -2027,19 +2134,20 @@ def _evidence_refs_for_signal_payload(
     artifact_titles: dict[str, str],
 ) -> list[EvidenceReference]:
     references: list[EvidenceReference] = []
+    artifact_review_statuses = _artifact_review_status_map(db, visible_artifact_ids)
 
     if isinstance(payload.get("supporting_evidence"), list):
         for item in payload["supporting_evidence"]:
             if not isinstance(item, dict):
                 continue
-            reference = _evidence_reference_from_payload(item, visible_artifact_ids)
+            reference = _evidence_reference_from_payload(item, visible_artifact_ids, artifact_review_statuses)
             if reference is not None:
                 references.append(reference)
 
     for side_key in ("from_evidence", "to_evidence"):
         side_payload = payload.get(side_key)
         if isinstance(side_payload, dict):
-            reference = _evidence_reference_from_side_evidence(side_payload, visible_artifact_ids)
+            reference = _evidence_reference_from_side_evidence(side_payload, visible_artifact_ids, artifact_review_statuses)
             if reference is not None:
                 references.append(reference)
 
@@ -2051,6 +2159,7 @@ def _evidence_refs_for_signal_payload(
             EvidenceReference(
                 artifact_id=direct_artifact_id,
                 artifact_title=_artifact_title_for_id(artifact_titles, direct_artifact_id),
+                artifact_review_status=_artifact_review_status_for_id(artifact_review_statuses, direct_artifact_id),
                 chunk_id=evidence_chunk_id,
                 excerpt=_evidence_excerpt(
                     db,
@@ -2070,6 +2179,7 @@ def _evidence_refs_for_signal_payload(
             EvidenceReference(
                 artifact_id=artifact_id,
                 artifact_title=_artifact_title_for_id(artifact_titles, artifact_id),
+                artifact_review_status=_artifact_review_status_for_id(artifact_review_statuses, artifact_id),
                 chunk_id=None,
                 excerpt=str(evidence_span or "Visible source artifact contributed to this persisted signal."),
                 evidence_kind="graph",
@@ -2103,7 +2213,7 @@ def _signal_intelligence_path(
     )
     graph_description = (
         "The backend normalized extracted claims into structured memory objects and graph edges, then filtered support "
-        "through the reader's artifact permissions."
+        "through the reader's artifact permissions and artifact review status. Rejected artifacts are not used as trusted support."
     )
     classification_description = (
         f"Deterministic graph analysis classified the persisted object as {_signal_type_label(signal.signal_type)} on topic "
@@ -2165,17 +2275,17 @@ def get_persisted_signal_detail(db: Session, user: User, signal_id: str) -> Sign
     if signal is None:
         return None
 
-    visible_artifact_ids = _visible_artifact_ids(db, user)
-    if signal.source_artifact_id not in visible_artifact_ids:
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
+    if signal.source_artifact_id not in trusted_artifact_ids:
         return None
 
-    artifact_titles = _artifact_title_map(db, {artifact_id for artifact_id in visible_artifact_ids if artifact_id})
+    artifact_titles = _artifact_title_map(db, {artifact_id for artifact_id in trusted_artifact_ids if artifact_id})
     raw_payload = signal.payload_json if isinstance(signal.payload_json, dict) else {}
-    payload = _filter_signal_payload_for_reader(raw_payload, visible_artifact_ids)
+    payload = _filter_signal_payload_for_reader(raw_payload, trusted_artifact_ids)
     if not isinstance(payload, dict):
         payload = {}
-    supporting_memory_objects = _memory_refs_for_signal_payload(db, user, payload, visible_artifact_ids)
-    supporting_evidence = _evidence_refs_for_signal_payload(db, payload, visible_artifact_ids, artifact_titles)
+    supporting_memory_objects = _memory_refs_for_signal_payload(db, user, payload, trusted_artifact_ids)
+    supporting_evidence = _evidence_refs_for_signal_payload(db, payload, trusted_artifact_ids, artifact_titles)
     intelligence_path = _signal_intelligence_path(
         signal,
         supporting_memory_objects=supporting_memory_objects,
@@ -2198,6 +2308,7 @@ def _persist_query_trace_steps(
     result_data: dict[str, Any],
     permissions_limited: bool,
     hidden_artifact_count: int,
+    rejected_artifact_count: int,
 ) -> None:
     supporting_nodes = result_data.get("supporting_nodes", [])
     supporting_evidence = result_data.get("supporting_evidence", [])
@@ -2248,6 +2359,7 @@ def _persist_query_trace_steps(
                 "notes": uncertainty_notes,
                 "permissions_limited": permissions_limited,
                 "hidden_artifact_count": hidden_artifact_count,
+                "rejected_artifact_count": rejected_artifact_count,
             },
         ),
     ]
@@ -2364,8 +2476,10 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
     query_class = route_decision.query_class
     all_workspace_artifacts = db.scalars(select(Artifact).where(Artifact.workspace_id == actor.workspace_id)).all()
     visible_artifacts = _visible_artifacts(db, actor)
+    trusted_visible_artifacts = [artifact for artifact in visible_artifacts if artifact.review_status != "rejected"]
     permissions_limited = len(visible_artifacts) < len(all_workspace_artifacts)
     hidden_artifact_count = max(len(all_workspace_artifacts) - len(visible_artifacts), 0)
+    rejected_artifact_count = max(len(visible_artifacts) - len(trusted_visible_artifacts), 0)
 
     if query_class == "Contradiction analysis":
         result_data = _contradiction_result(db, actor, query_text)
@@ -2375,6 +2489,8 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         result_data = _next_action_result(db, actor, query_text)
     else:
         result_data = _lineage_result(db, actor, query_text)
+    if rejected_artifact_count and "Some visible evidence was excluded because an admin marked its source artifact rejected." not in result_data["uncertainty_notes"]:
+        result_data["uncertainty_notes"].append("Some visible evidence was excluded because an admin marked its source artifact rejected.")
     result_data = _apply_optional_llm_answer_synthesis(query_text=query_text, query_class=query_class, result_data=result_data)
 
     query_run = QueryRun(
@@ -2416,6 +2532,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         result_data=result_data,
         permissions_limited=permissions_limited,
         hidden_artifact_count=hidden_artifact_count,
+        rejected_artifact_count=rejected_artifact_count,
     )
     db.commit()
     log_event(
@@ -2443,25 +2560,47 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
 def build_query_result_for_reader(db: Session, query_run: QueryRun, reader: User) -> QueryResult:
     payload = query_run.answer_payload
     visible_artifact_ids = _visible_artifact_ids(db, reader)
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, reader)
+    trusted_artifact_review_statuses = _artifact_review_status_map(db, trusted_artifact_ids)
     payload_supporting_nodes = [item for item in payload.get("supporting_nodes", []) if isinstance(item, dict)]
     payload_supporting_evidence = [item for item in payload.get("supporting_evidence", []) if isinstance(item, dict)]
     payload_contradictions = [item for item in payload.get("contradictions", []) if isinstance(item, dict)]
     payload_stale_assumptions = [item for item in payload.get("stale_assumptions", []) if isinstance(item, dict)]
 
-    supporting_node_dicts = [item for item in payload_supporting_nodes if item.get("source_artifact_id") in visible_artifact_ids]
-    supporting_evidence_dicts = [item for item in payload_supporting_evidence if item.get("artifact_id") in visible_artifact_ids]
+    supporting_node_dicts = [item for item in payload_supporting_nodes if item.get("source_artifact_id") in trusted_artifact_ids]
+    supporting_evidence_dicts = [item for item in payload_supporting_evidence if item.get("artifact_id") in trusted_artifact_ids]
     contradictions = [
         item
         for item in payload_contradictions
-        if _payload_item_visible(item, ["evidence_artifact_id", "from_source_artifact_id", "to_source_artifact_id"], visible_artifact_ids)
+        if _payload_item_visible(item, ["evidence_artifact_id", "from_source_artifact_id", "to_source_artifact_id"], trusted_artifact_ids)
     ]
     stale_assumptions = [
         item
         for item in payload_stale_assumptions
-        if _payload_item_visible(item, ["source_artifact_id", "supporting_signal_source_artifact_id"], visible_artifact_ids)
+        if _payload_item_visible(item, ["source_artifact_id", "supporting_signal_source_artifact_id"], trusted_artifact_ids)
     ]
-    supporting_nodes = [MemoryReference.model_validate(item) for item in supporting_node_dicts]
-    supporting_evidence = [EvidenceReference.model_validate(item) for item in supporting_evidence_dicts]
+    supporting_nodes = [
+        MemoryReference.model_validate(item).model_copy(
+            update={
+                "source_artifact_review_status": _artifact_review_status_for_id(
+                    trusted_artifact_review_statuses,
+                    item.get("source_artifact_id") if isinstance(item.get("source_artifact_id"), str) else None,
+                )
+            }
+        )
+        for item in supporting_node_dicts
+    ]
+    supporting_evidence = [
+        EvidenceReference.model_validate(item).model_copy(
+            update={
+                "artifact_review_status": _artifact_review_status_for_id(
+                    trusted_artifact_review_statuses,
+                    item.get("artifact_id") if isinstance(item.get("artifact_id"), str) else None,
+                )
+            }
+        )
+        for item in supporting_evidence_dicts
+    ]
     permissions_limited = payload.get("permissions_limited", False) or len(visible_artifact_ids) < db.query(Artifact).filter(Artifact.workspace_id == reader.workspace_id).count()
     uncertainty_notes = list(payload.get("uncertainty_notes", []))
     answer_text = query_run.answer_text
@@ -2485,8 +2624,10 @@ def build_query_result_for_reader(db: Session, query_run: QueryRun, reader: User
         )
     if permissions_limited and "Some relevant evidence may be unavailable due to artifact permissions." not in uncertainty_notes:
         uncertainty_notes.append("Some relevant evidence may be unavailable due to artifact permissions.")
+    if len(trusted_artifact_ids) < len(visible_artifact_ids) and "Some visible evidence was excluded because an admin marked its source artifact rejected." not in uncertainty_notes:
+        uncertainty_notes.append("Some visible evidence was excluded because an admin marked its source artifact rejected.")
     if redacted_payload and "This cached result was reduced to remove details from artifacts you can no longer access." not in uncertainty_notes:
-        uncertainty_notes.append("This cached result was reduced to remove details from artifacts you can no longer access.")
+        uncertainty_notes.append("This cached result was reduced to remove details from artifacts you can no longer access or that are no longer review-accepted.")
     return QueryResult(
         query_run_id=query_run.query_run_id,
         query_text=query_run.query_text,
@@ -2517,7 +2658,7 @@ def build_query_result_for_reader(db: Session, query_run: QueryRun, reader: User
 
 
 def build_query_trace_for_reader(db: Session, query_run: QueryRun, reader: User) -> QueryTraceRead:
-    visible_artifact_ids = _visible_artifact_ids(db, reader)
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, reader)
     trace_steps = db.scalars(
         select(QueryTraceStep)
         .where(QueryTraceStep.query_run_id == query_run.query_run_id, QueryTraceStep.workspace_id == reader.workspace_id)
@@ -2526,11 +2667,12 @@ def build_query_trace_for_reader(db: Session, query_run: QueryRun, reader: User)
     steps = [
         QueryTraceStepRead(
             step_kind=step.step_kind,
-            payload=_filter_trace_payload(step.payload_json, visible_artifact_ids),
+            payload=_filter_trace_payload(step.payload_json, trusted_artifact_ids),
             created_at=step.created_at,
         )
         for step in trace_steps
     ]
+    visible_artifact_ids = _visible_artifact_ids(db, reader)
     permissions_limited = query_run.permissions_limited or len(visible_artifact_ids) < db.query(Artifact).filter(Artifact.workspace_id == reader.workspace_id).count()
     return QueryTraceRead(
         query_run_id=query_run.query_run_id,
@@ -2542,7 +2684,7 @@ def build_query_trace_for_reader(db: Session, query_run: QueryRun, reader: User)
 
 
 def graph_summary(db: Session, user: User) -> tuple[dict[str, int], dict[str, int], int, dict[str, int]]:
-    visible_artifact_ids = _visible_artifact_ids(db, user)
+    visible_artifact_ids = _trusted_visible_artifact_ids(db, user)
     memory_counts = {
         "decisions": db.query(Decision).filter(Decision.workspace_id == user.workspace_id, Decision.source_artifact_id.in_(visible_artifact_ids)).count(),
         "assumptions": db.query(Assumption).filter(Assumption.workspace_id == user.workspace_id, Assumption.source_artifact_id.in_(visible_artifact_ids)).count(),

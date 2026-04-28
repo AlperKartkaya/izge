@@ -143,7 +143,7 @@ export function SignalDetailPage() {
                   ) : null}
                   {step.supporting_evidence.length > 0 ? (
                     <p className="table-secondary">
-                      Evidence: {step.supporting_evidence.map((evidence) => evidence.artifact_title).join(' | ')}
+                      Evidence: {step.supporting_evidence.map((evidence) => `${evidence.artifact_title} (${formatLabel(evidence.artifact_review_status)})`).join(' | ')}
                     </p>
                   ) : null}
                 </article>
@@ -159,7 +159,10 @@ export function SignalDetailPage() {
                 <div className="stack-sm">
                   {detail.supporting_evidence.map((evidence, index) => (
                     <article key={`${evidence.artifact_id}-${evidence.chunk_id ?? 'root'}-${index}`} className="panel-subtle stack-sm">
-                      <p className="table-primary">{evidence.artifact_title}</p>
+                      <div className="timeline-card-head">
+                        <p className="table-primary">{evidence.artifact_title}</p>
+                        <StatusBadge value={formatLabel(evidence.artifact_review_status)} />
+                      </div>
                       <p className="table-secondary">{evidence.evidence_kind === 'graph' ? 'Graph-linked evidence' : 'Search fallback evidence'} · chunk {evidence.chunk_id ?? 'root'}</p>
                       <p className="evidence-block">{evidence.excerpt}</p>
                     </article>
@@ -181,7 +184,9 @@ export function SignalDetailPage() {
                     >
                       <div>
                         <p className="table-primary">{memory.title_or_label}</p>
-                        <p className="table-secondary">{formatLabel(memory.memory_type)} · topic {memory.topic_key}</p>
+                        <p className="table-secondary">
+                          {formatLabel(memory.memory_type)} · topic {memory.topic_key} · source {formatLabel(memory.source_artifact_review_status)}
+                        </p>
                         {memory.status ? <p className="table-secondary">Status {formatLabel(memory.status)}</p> : null}
                       </div>
                       <span className="table-secondary">Confidence {formatPercent(memory.confidence_score)}</span>

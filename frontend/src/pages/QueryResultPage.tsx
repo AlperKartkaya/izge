@@ -290,7 +290,7 @@ export function QueryResultPage() {
                     {activeResult.supporting_evidence.length} evidence excerpts · {graphEvidenceCount} graph-linked
                   </p>
                   <p className="muted-copy">
-                    {activeResult.supporting_nodes.length} structured memory objects and {activeResult.related_signals.length} persisted signal links support this packet.
+                    {activeResult.supporting_nodes.length} structured memory objects and {activeResult.related_signals.length} persisted signal links support this review-aware packet.
                   </p>
                 </article>
                 <article className={topAction ? 'panel-subtle detail-card action-card' : 'panel-subtle detail-card'}>
@@ -314,7 +314,10 @@ export function QueryResultPage() {
                 <div className="stack-md">
                   {activeResult.supporting_evidence.map((item) => (
                     <article key={`${item.artifact_id}-${item.chunk_id ?? 'root'}`} className="panel-subtle stack-sm">
-                      <p className="table-primary">{item.artifact_title}</p>
+                      <div className="timeline-card-head">
+                        <p className="table-primary">{item.artifact_title}</p>
+                        <StatusBadge value={formatLabel(item.artifact_review_status)} />
+                      </div>
                       <p className="table-secondary">{item.evidence_kind === 'graph' ? 'Graph-linked evidence' : 'Search fallback evidence'} · chunk {item.chunk_id ?? 'root'}</p>
                       <p className="evidence-block">{item.excerpt}</p>
                     </article>
@@ -336,7 +339,9 @@ export function QueryResultPage() {
                     >
                       <div>
                         <p className="table-primary">{item.title_or_label}</p>
-                        <p className="table-secondary">{formatLabel(item.memory_type)} · topic {item.topic_key}</p>
+                        <p className="table-secondary">
+                          {formatLabel(item.memory_type)} · topic {item.topic_key} · source {formatLabel(item.source_artifact_review_status)}
+                        </p>
                         {item.memory_type === 'commitment' ? (
                           <p className="table-secondary">
                             {item.status ? `Status ${formatLabel(item.status)} · ` : ''}

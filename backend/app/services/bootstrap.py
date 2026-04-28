@@ -31,6 +31,15 @@ def initialize_database() -> None:
         query_run_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(query_runs)").fetchall()}
         if "route_confidence" not in query_run_columns:
             connection.exec_driver_sql("ALTER TABLE query_runs ADD COLUMN route_confidence FLOAT NOT NULL DEFAULT 0.0")
+        artifact_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(artifacts)").fetchall()}
+        if "review_status" not in artifact_columns:
+            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN review_status VARCHAR(32) NOT NULL DEFAULT 'submitted'")
+        if "reviewed_by" not in artifact_columns:
+            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN reviewed_by VARCHAR(64)")
+        if "reviewed_at" not in artifact_columns:
+            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN reviewed_at DATETIME")
+        if "review_notes" not in artifact_columns:
+            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN review_notes TEXT")
         connection.exec_driver_sql(
             "CREATE VIRTUAL TABLE IF NOT EXISTS artifact_chunks_fts USING fts5(chunk_id UNINDEXED, artifact_id UNINDEXED, workspace_id UNINDEXED, text)"
         )

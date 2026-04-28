@@ -978,6 +978,8 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
         _update_assumption_drift(db, all_memories, artifact.artifact_id, artifact.workspace_id)
 
         artifact.ingestion_status = "completed"
+        if artifact.review_status == "submitted":
+            artifact.review_status = "needs_review"
         job.status = "completed"
         job.detail = (
             f"Stored {len(stored_chunks)} chunks and {sum(extracted_counts.values())} extracted memory objects "

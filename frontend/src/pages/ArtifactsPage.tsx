@@ -7,6 +7,7 @@ import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { ArtifactDetail, ArtifactProactiveSignals, ArtifactRead, UserRead } from '../lib/types'
 
 type VisibilityScope = 'workspace' | 'restricted'
+type ReviewStatus = 'submitted' | 'needs_review' | 'reviewed' | 'rejected'
 
 const defaultUploadState = {
   title: '',
@@ -21,6 +22,11 @@ const defaultPasteState = {
   permitted_user_ids: [] as string[],
 }
 
+const defaultReviewState = {
+  review_status: 'submitted' as ReviewStatus,
+  review_notes: '',
+}
+
 export function ArtifactsPage() {
   const { session } = useAuth()
   const [artifacts, setArtifacts] = useState<ArtifactRead[]>([])
@@ -30,6 +36,7 @@ export function ArtifactsPage() {
   const [selectedArtifactSignals, setSelectedArtifactSignals] = useState<ArtifactProactiveSignals | null>(null)
   const [uploadState, setUploadState] = useState(defaultUploadState)
   const [pasteState, setPasteState] = useState(defaultPasteState)
+  const [reviewState, setReviewState] = useState(defaultReviewState)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,9 +60,14 @@ export function ArtifactsPage() {
         api.getArtifactSignals(session.token, nextSelected),
       ])
       setSelectedArtifact(detail)
+      setReviewState({
+        review_status: detail.review_status as ReviewStatus,
+        review_notes: detail.review_notes ?? '',
+      })
       setSelectedArtifactSignals(signals)
     } else {
       setSelectedArtifact(null)
+      setReviewState(defaultReviewState)
       setSelectedArtifactSignals(null)
     }
   }
@@ -162,9 +174,55 @@ export function ArtifactsPage() {
         api.getArtifactSignals(session.token, artifactId),
       ])
       setSelectedArtifact(detail)
+      setReviewState({
+        review_status: detail.review_status as ReviewStatus,
+        review_notes: detail.review_notes ?? '',
+      })
       setSelectedArtifactSignals(signals)
     } catch (caughtError) {
       setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load artifact detail.')
+    }
+  }
+
+  async function handleReviewUpdate() {
+    if (!session?.token || !selectedArtifact) {
+      return
+    }
+
+    setIsBusy(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const detail = await api.updateArtifactReview(session.token, selectedArtifact.artifact_id, {
+        review_status: reviewState.review_status,
+        review_notes: reviewState.review_notes.trim() || null,
+      })
+      setSelectedArtifact(detail)
+      setReviewState({
+        review_status: detail.review_status as ReviewStatus,
+        review_notes: detail.review_notes ?? '',
+      })
+      setArtifacts((current) =>
+        current.map((artifact) =>
+          artifact.artifact_id === detail.artifact_id
+            ? {
+                ...artifact,
+                ingestion_status: detail.ingestion_status,
+                review_status: detail.review_status,
+                reviewed_by: detail.reviewed_by,
+                reviewed_at: detail.reviewed_at,
+                review_notes: detail.review_notes,
+                updated_at: detail.updated_at,
+              }
+            : artifact,
+        ),
+      )
+      setSuccess('Artifact review status updated.')
+    } catch (caughtError) {
+      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to update artifact review status.')
+    } finally {
+      setIsBusy(false)
     }
   }
 
@@ -308,6 +366,7 @@ export function ArtifactsPage() {
                     <th>Title</th>
                     <th>Source</th>
                     <th>Status</th>
+                    <th>Review</th>
                     <th>Updated</th>
                   </tr>
                 </thead>
@@ -327,6 +386,9 @@ export function ArtifactsPage() {
                       <td>{artifact.source_type}</td>
                       <td>
                         <StatusBadge value={artifact.ingestion_status} />
+                      </td>
+                      <td>
+                        <StatusBadge value={formatLabel(artifact.review_status)} />
                       </td>
                       <td>{formatDateTime(artifact.updated_at)}</td>
                     </tr>
@@ -359,7 +421,65 @@ export function ArtifactsPage() {
                   <dt>Original file</dt>
                   <dd>{selectedArtifact.original_filename ?? 'Pasted text'}</dd>
                 </div>
+                <div>
+                  <dt>Review status</dt>
+                  <dd>
+                    <StatusBadge value={formatLabel(selectedArtifact.review_status)} />
+                  </dd>
+                </div>
+                <div>
+                  <dt>Last reviewed</dt>
+                  <dd>{selectedArtifact.reviewed_at ? formatDateTime(selectedArtifact.reviewed_at) : 'Not reviewed yet'}</dd>
+                </div>
               </dl>
+              <div className="panel-subtle stack-sm">
+                <p className="section-label">Admin memory preparation</p>
+                {isAdmin ? (
+                  <>
+                    <p className="muted-copy">
+                      Mark whether this artifact is only submitted, needs admin review after ingestion, has been reviewed, or should be flagged as rejected for governance.
+                    </p>
+                    <label className="field">
+                      <span className="field-label">Review status</span>
+                      <select
+                        value={reviewState.review_status}
+                        onChange={(event) =>
+                          setReviewState((current) => ({
+                            ...current,
+                            review_status: event.target.value as ReviewStatus,
+                          }))
+                        }
+                      >
+                        <option value="submitted">Submitted</option>
+                        <option value="needs_review">Needs review</option>
+                        <option value="reviewed">Reviewed</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </label>
+                    <label className="field field-block">
+                      <span className="field-label">Review notes</span>
+                      <textarea
+                        value={reviewState.review_notes}
+                        onChange={(event) => setReviewState((current) => ({ ...current, review_notes: event.target.value }))}
+                        rows={4}
+                        placeholder="Why this artifact is trusted, suspect, rejected, or waiting for inspection."
+                      />
+                    </label>
+                    <button type="button" className="secondary-button" onClick={() => void handleReviewUpdate()} disabled={isBusy}>
+                      {isBusy ? 'Updating…' : 'Update review status'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="muted-copy">
+                      {selectedArtifact.review_status === 'reviewed'
+                        ? 'This artifact has been reviewed by an admin before contributing to trusted workspace memory.'
+                        : 'This artifact is visible evidence, but admin review is still part of the trust boundary.'}
+                    </p>
+                    {selectedArtifact.review_notes ? <p className="evidence-block">{selectedArtifact.review_notes}</p> : null}
+                  </>
+                )}
+              </div>
               <div className="panel-subtle">
                 <p className="section-label">Extracted text preview</p>
                 <p className="evidence-block">{selectedArtifact.extracted_text_preview || 'No extracted text available yet.'}</p>

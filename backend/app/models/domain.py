@@ -67,6 +67,10 @@ class Artifact(Base, TimestampMixin):
     checksum_sha256: Mapped[str | None] = mapped_column(String(64))
     extracted_text: Mapped[str | None] = mapped_column(Text)
     ingestion_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    review_status: Mapped[str] = mapped_column(String(32), default="submitted", nullable=False)
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.user_id"), nullable=True, index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    review_notes: Mapped[str | None] = mapped_column(Text)
 
 
 class ArtifactPermission(Base):

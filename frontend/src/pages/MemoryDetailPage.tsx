@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { Callout, EmptyState, PageIntro, Panel } from '../components/ui'
+import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDate, formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { MemoryDetail } from '../lib/types'
@@ -73,6 +73,12 @@ export function MemoryDetailPage() {
               <div>
                 <dt>Source artifact</dt>
                 <dd>{detail.source_artifact_id}</dd>
+              </div>
+              <div>
+                <dt>Source review</dt>
+                <dd>
+                  <StatusBadge value={formatLabel(detail.source_artifact_review_status)} />
+                </dd>
               </div>
               <div>
                 <dt>Source chunk</dt>

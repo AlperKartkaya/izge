@@ -54,6 +54,7 @@ def get_memory_detail(memory_type: str, memory_id: str, current_user: User = Dep
         owner_label=getattr(memory, "owner_label", None),
         extraction_method=getattr(memory, "extraction_method", "heuristic"),
         source_artifact_title=artifact.title,
+        source_artifact_review_status=artifact.review_status or "submitted",
         source_chunk_excerpt=chunk.text if chunk is not None else None,
         extraction_fallback_reason=chunk_metadata.get("fallback_reason"),
     )

@@ -62,6 +62,6 @@ Default local gateway settings:
 
 ```bash
 IZGE_LOCAL_LLM_BASE_URL=http://127.0.0.1:11434
-IZGE_LOCAL_LLM_MODEL=qwen3.5:9b
+IZGE_LOCAL_LLM_MODEL=qwen3.5:4b
 IZGE_LOCAL_LLM_TIMEOUT_SECONDS=60
 ```

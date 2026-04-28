@@ -162,6 +162,14 @@ export const api = {
     })
   },
 
+  updateArtifactReview(token: string, artifactId: string, payload: { review_status: string; review_notes: string | null }) {
+    return request<ArtifactDetail>(`/artifacts/${artifactId}/review`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify(payload),
+    })
+  },
+
   runIngestion(token: string, artifactId: string) {
     return request<IngestionJobRead>('/ingestion/run', {
       method: 'POST',

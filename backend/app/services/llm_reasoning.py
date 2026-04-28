@@ -26,7 +26,7 @@ class LLMQueryIntent(BaseModel):
 
     query_class: Literal["Decision lineage", "Contradiction analysis", "Assumption drift", "Next-action guidance"]
     confidence: float = Field(ge=0.0, le=1.0)
-    route_rationale: str = Field(min_length=12, max_length=520)
+    route_rationale: str = Field(min_length=1, max_length=520)
     secondary_signals: list[str] = Field(default_factory=list, max_length=3)
     topic_terms: list[str] = Field(default_factory=list, max_length=8)
     asks_for_evidence: bool = True
@@ -64,8 +64,8 @@ class LLMQueryIntent(BaseModel):
 class LLMQueryAnswerSynthesis(BaseModel):
     """LLM-authored final wording for a deterministic query result packet."""
 
-    answer_text: str = Field(min_length=24, max_length=1600)
-    why_this_answer: str = Field(min_length=24, max_length=900)
+    answer_text: str = Field(min_length=1, max_length=1600)
+    why_this_answer: str = Field(min_length=1, max_length=900)
     recommended_next_actions: list[str] = Field(default_factory=list, max_length=4)
     cited_evidence_ids: list[str] = Field(default_factory=list, max_length=8)
     cited_memory_ids: list[str] = Field(default_factory=list, max_length=8)
@@ -94,8 +94,8 @@ class LLMQueryAnswerSynthesis(BaseModel):
 class LLMSignalExplanation(BaseModel):
     """LLM-authored wording for a deterministic proactive signal."""
 
-    summary: str = Field(min_length=12, max_length=420)
-    grounded_reasoning: str = Field(min_length=24, max_length=1200)
+    summary: str = Field(min_length=1, max_length=420)
+    grounded_reasoning: str = Field(min_length=1, max_length=1200)
     recommended_action: str | None = Field(default=None, max_length=420)
     confidence_rationale: str | None = Field(default=None, max_length=360)
     cited_artifact_ids: list[str] = Field(default_factory=list)

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -5,7 +7,15 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import Artifact, ArtifactChunk, User
-from app.schemas.api import ArtifactChunkProvenance, ArtifactDetail, ArtifactPermissionUpdate, ArtifactProactiveSignals, ArtifactRead, PastedTextCreate
+from app.schemas.api import (
+    ArtifactChunkProvenance,
+    ArtifactDetail,
+    ArtifactPermissionUpdate,
+    ArtifactProactiveSignals,
+    ArtifactRead,
+    ArtifactReviewUpdate,
+    PastedTextCreate,
+)
 from app.config import get_settings
 from app.services.audit import log_event
 from app.services.permissions import list_permitted_user_ids, require_admin, require_artifact_access, set_artifact_permissions
@@ -173,6 +183,34 @@ def update_artifact_permissions(
         target_type="artifact",
         target_id=artifact.artifact_id,
         event_metadata={"visibility_scope": payload.visibility_scope, "permitted_user_ids": payload.permitted_user_ids},
+    )
+    return get_artifact(artifact_id, current_user, db)
+
+
+@router.patch("/{artifact_id}/review", response_model=ArtifactDetail)
+def update_artifact_review_status(
+    artifact_id: str,
+    payload: ArtifactReviewUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ArtifactDetail:
+    require_admin(current_user)
+    artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
+    if artifact is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+    artifact.review_status = payload.review_status
+    artifact.review_notes = payload.review_notes
+    artifact.reviewed_by = current_user.user_id
+    artifact.reviewed_at = datetime.utcnow()
+    db.commit()
+    log_event(
+        db,
+        workspace_id=current_user.workspace_id,
+        actor_user_id=current_user.user_id,
+        event_type="ARTIFACT_REVIEW_UPDATED",
+        target_type="artifact",
+        target_id=artifact.artifact_id,
+        event_metadata={"review_status": payload.review_status, "has_notes": bool(payload.review_notes)},
     )
     return get_artifact(artifact_id, current_user, db)
 

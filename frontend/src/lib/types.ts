@@ -29,6 +29,10 @@ export interface ArtifactRead {
   original_filename: string | null
   checksum_sha256: string | null
   ingestion_status: string
+  review_status: string
+  reviewed_by: string | null
+  reviewed_at: string | null
+  review_notes: string | null
   created_at: string
   updated_at: string
 }
@@ -65,6 +69,7 @@ export interface ArtifactChunkProvenance {
 export interface EvidenceReference {
   artifact_id: string
   artifact_title: string
+  artifact_review_status: string
   chunk_id: string | null
   excerpt: string
   evidence_kind: 'graph' | 'search_fallback'
@@ -76,6 +81,7 @@ export interface MemoryReference {
   title_or_label: string
   confidence_score: number
   source_artifact_id: string
+  source_artifact_review_status: string
   topic_key: string
   status: string | null
   due_date: string | null
@@ -187,6 +193,7 @@ export interface MemoryDetail {
   owner_label: string | null
   extraction_method: string
   source_artifact_title: string | null
+  source_artifact_review_status: string
   source_chunk_excerpt: string | null
   extraction_fallback_reason: string | null
 }
@@ -194,6 +201,7 @@ export interface MemoryDetail {
 export interface ContradictionEvidence {
   artifact_id: string
   artifact_title: string
+  artifact_review_status: string
   chunk_id: string | null
   excerpt: string
   provenance: string
@@ -211,6 +219,7 @@ export interface ContradictionItem {
   relation_label: string
   confidence_score: number
   evidence_artifact_id: string | null
+  evidence_artifact_review_status: string | null
   evidence_chunk_id: string | null
   evidence_span: string | null
   evidence_provenance: string | null
@@ -227,8 +236,11 @@ export interface AssumptionDriftItem {
   status: string
   validity_notes: string | null
   source_artifact_id: string
+  source_artifact_review_status: string
   confidence_score: number
   topic_key: string
+  supporting_signal_source_artifact_id: string | null
+  supporting_signal_artifact_review_status: string | null
   supporting_signal_title: string | null
   supporting_signal_type: string | null
   supporting_signal_memory_id: string | null
@@ -266,6 +278,7 @@ export interface SupersessionItem {
   confidence_score: number
   evidence_artifact_id: string | null
   evidence_artifact_title: string | null
+  evidence_artifact_review_status: string | null
   evidence_chunk_id: string | null
   evidence_span: string | null
   evidence_provenance: string | null
@@ -276,6 +289,7 @@ export interface SupersessionItem {
 export interface PriorRelevantWorkItem {
   prior_artifact_id: string
   prior_artifact_title: string
+  prior_artifact_review_status: string
   related_topic: string
   overlap_score: number
   continuity_reason: string

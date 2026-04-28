@@ -57,6 +57,10 @@ class ArtifactRead(BaseModel):
     original_filename: str | None
     checksum_sha256: str | None
     ingestion_status: str
+    review_status: str = "submitted"
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    review_notes: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -64,6 +68,11 @@ class ArtifactRead(BaseModel):
 class ArtifactPermissionUpdate(BaseModel):
     visibility_scope: Literal["workspace", "restricted"]
     permitted_user_ids: list[str] = Field(default_factory=list)
+
+
+class ArtifactReviewUpdate(BaseModel):
+    review_status: Literal["submitted", "needs_review", "reviewed", "rejected"]
+    review_notes: str | None = Field(default=None, max_length=1200)
 
 
 class PastedTextCreate(BaseModel):
@@ -111,6 +120,7 @@ class ArtifactChunkProvenance(BaseModel):
 class EvidenceReference(BaseModel):
     artifact_id: str
     artifact_title: str
+    artifact_review_status: str = "submitted"
     chunk_id: str | None = None
     excerpt: str
     evidence_kind: Literal["graph", "search_fallback"] = "graph"
@@ -122,6 +132,7 @@ class MemoryReference(BaseModel):
     title_or_label: str
     confidence_score: float
     source_artifact_id: str
+    source_artifact_review_status: str = "submitted"
     topic_key: str
     status: str | None = None
     due_date: datetime | None = None
@@ -253,6 +264,7 @@ class MemoryDetail(BaseModel):
     owner_label: str | None = None
     extraction_method: str = "heuristic"
     source_artifact_title: str | None = None
+    source_artifact_review_status: str = "submitted"
     source_chunk_excerpt: str | None = None
     extraction_fallback_reason: str | None = None
 
@@ -260,6 +272,7 @@ class MemoryDetail(BaseModel):
 class ContradictionEvidence(BaseModel):
     artifact_id: str
     artifact_title: str
+    artifact_review_status: str = "submitted"
     chunk_id: str | None = None
     excerpt: str
     provenance: str
@@ -277,6 +290,7 @@ class ContradictionItem(BaseModel):
     relation_label: str
     confidence_score: float
     evidence_artifact_id: str | None
+    evidence_artifact_review_status: str | None = None
     evidence_chunk_id: str | None
     evidence_span: str | None = None
     evidence_provenance: str | None = None
@@ -293,8 +307,11 @@ class AssumptionDriftItem(BaseModel):
     status: str
     validity_notes: str | None
     source_artifact_id: str
+    source_artifact_review_status: str = "submitted"
     confidence_score: float
     topic_key: str
+    supporting_signal_source_artifact_id: str | None = None
+    supporting_signal_artifact_review_status: str | None = None
     supporting_signal_title: str | None = None
     supporting_signal_type: str | None = None
     supporting_signal_memory_id: str | None = None
@@ -332,6 +349,7 @@ class SupersessionItem(BaseModel):
     confidence_score: float
     evidence_artifact_id: str | None
     evidence_artifact_title: str | None = None
+    evidence_artifact_review_status: str | None = None
     evidence_chunk_id: str | None
     evidence_span: str | None = None
     evidence_provenance: str | None = None
@@ -342,6 +360,7 @@ class SupersessionItem(BaseModel):
 class PriorRelevantWorkItem(BaseModel):
     prior_artifact_id: str
     prior_artifact_title: str
+    prior_artifact_review_status: str = "submitted"
     related_topic: str
     overlap_score: float
     continuity_reason: str
