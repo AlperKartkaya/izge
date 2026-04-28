@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models import (
     Artifact,
     ArtifactChunk,
@@ -38,6 +39,7 @@ from app.schemas.api import (
     SignalRead,
 )
 from app.services.audit import log_event
+from app.services.llm_reasoning import explain_signal_with_local_llm
 from app.services.permissions import artifact_is_visible_to_user
 
 STOPWORDS = {
@@ -1355,6 +1357,47 @@ def _persist_signal_row(
     recommended_action: str | None,
     payload_json: dict[str, Any],
 ) -> None:
+    settings = get_settings()
+    payload_to_store = dict(payload_json)
+    payload_to_store["reasoning_boundary"] = {
+        "signal_detection": "deterministic_graph_analysis",
+        "signal_persistence": "deterministic_backend",
+        "llm_role": "disabled" if not settings.llm_signal_explanation_enabled else "explain_existing_signal_only",
+    }
+
+    if settings.llm_signal_explanation_enabled:
+        try:
+            llm_explanation = explain_signal_with_local_llm(
+                signal_type=signal_type,
+                title=title,
+                summary=summary,
+                related_topic=related_topic,
+                grounded_reasoning=grounded_reasoning,
+                recommended_action=recommended_action,
+                payload_json=payload_json,
+            )
+            summary = llm_explanation.summary
+            grounded_reasoning = llm_explanation.grounded_reasoning
+            recommended_action = llm_explanation.recommended_action
+            payload_to_store["llm_signal_explanation"] = {
+                "status": "applied",
+                "model": settings.local_llm_model,
+                "gateway": settings.local_llm_base_url,
+                "role": "wording_and_guidance_only",
+                "confidence_rationale": llm_explanation.confidence_rationale,
+                "cited_artifact_ids": llm_explanation.cited_artifact_ids,
+                "cited_memory_ids": llm_explanation.cited_memory_ids,
+                "risk_notes": llm_explanation.risk_notes,
+            }
+        except Exception as exc:
+            payload_to_store["llm_signal_explanation"] = {
+                "status": "fallback",
+                "model": settings.local_llm_model,
+                "gateway": settings.local_llm_base_url,
+                "role": "wording_and_guidance_only",
+                "fallback_reason": str(exc),
+            }
+
     db.add(
         Signal(
             signal_id=signal_id,
@@ -1368,7 +1411,7 @@ def _persist_signal_row(
             uncertainty_score=round(max(0.05, min(0.95, uncertainty_score)), 2),
             grounded_reasoning=grounded_reasoning,
             recommended_action=recommended_action,
-            payload_json=payload_json,
+            payload_json=payload_to_store,
             status="active",
         )
     )
@@ -1754,10 +1797,25 @@ def _signal_intelligence_path(
         f"Deterministic graph analysis classified the persisted object as {_signal_type_label(signal.signal_type)} on topic "
         f"{signal.related_topic}; urgency and uncertainty are stored with the signal instead of recomputed in the browser."
     )
-    guidance_description = (
-        signal.recommended_action
-        or "No automatic task was promoted; the signal remains inspectable so an operator can resolve the memory tension before acting."
-    )
+    payload = signal.payload_json if isinstance(signal.payload_json, dict) else {}
+    llm_metadata = payload.get("llm_signal_explanation") if isinstance(payload.get("llm_signal_explanation"), dict) else {}
+    if llm_metadata.get("status") == "applied":
+        guidance_description = (
+            "A central company-controlled local LLM assisted only the wording of the persisted explanation and action; "
+            "the signal type, source evidence, urgency, and persistence boundary remained deterministic. "
+            f"{signal.recommended_action or 'No automatic task was promoted.'}"
+        )
+    elif llm_metadata.get("status") == "fallback":
+        guidance_description = (
+            "LLM-assisted wording was attempted but the backend kept the deterministic explanation because the local "
+            "inference gateway failed or returned invalid structure. "
+            f"{signal.recommended_action or 'No automatic task was promoted.'}"
+        )
+    else:
+        guidance_description = (
+            signal.recommended_action
+            or "No automatic task was promoted; the signal remains inspectable so an operator can resolve the memory tension before acting."
+        )
     return [
         SignalIntelligenceStep(
             step_kind="source_artifact",

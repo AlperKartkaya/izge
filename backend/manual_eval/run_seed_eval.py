@@ -496,6 +496,13 @@ def run_eval() -> dict[str, Any]:
                     signal_detail.get("supporting_evidence") or signal_detail.get("supporting_memory_objects")
                 ),
                 "detail_has_intelligence_path": bool(signal_detail.get("intelligence_path")),
+                "detail_payload_records_reasoning_boundary": (
+                    signal_detail.get("payload_json", {}).get("reasoning_boundary", {}).get("signal_detection")
+                    == "deterministic_graph_analysis"
+                ),
+                "detail_payload_records_llm_role": bool(
+                    signal_detail.get("payload_json", {}).get("reasoning_boundary", {}).get("llm_role")
+                ),
                 "detail_names_inference_boundary": contains_any_fragment(
                     json.dumps(signal_detail.get("intelligence_path", []), sort_keys=True, default=str),
                     ["central company-controlled", "deterministic graph", "Signal was classified"],

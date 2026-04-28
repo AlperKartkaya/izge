@@ -37,3 +37,24 @@ directly:
 ```bash
 IZGE_EVAL_BASE_URL=http://127.0.0.1:8000 .venv/bin/python -m manual_eval.run_seed_eval
 ```
+
+## Local LLM integration boundaries
+
+Izge keeps deterministic graph logic as the authority for memory objects,
+signal classification, persistence, permissions, and evidence links. Local LLM
+use is opt-in and scoped to bounded assistance:
+
+- `IZGE_LOCAL_LLM_ENABLED=true` upgrades artifact memory extraction through the
+  configured Ollama-compatible gateway, with heuristic fallback.
+- `IZGE_LLM_SIGNAL_EXPLANATION_ENABLED=true` lets the same company-controlled
+  local gateway improve persisted signal summaries, grounded reasoning, and
+  recommended-action wording. It does not create signals, graph edges, memory
+  objects, urgency scores, or evidence links.
+
+Default local gateway settings:
+
+```bash
+IZGE_LOCAL_LLM_BASE_URL=http://127.0.0.1:11434
+IZGE_LOCAL_LLM_MODEL=qwen3.5:9b
+IZGE_LOCAL_LLM_TIMEOUT_SECONDS=60
+```
