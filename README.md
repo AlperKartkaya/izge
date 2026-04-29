@@ -26,11 +26,14 @@ The MVP wedge is **product and roadmap history**, while remaining capable of sup
 
 ## Local-first meaning
 
-For the MVP, local-first means:
-- artifacts are stored inside company-controlled infrastructure,
-- heavy reasoning runs on a central company-controlled inference node,
-- external hosted AI is not the primary reasoning layer,
-- future optional edge-side smaller-model participation is possible but not required for MVP.
+For the MVP, local-first means **organization-controlled storage and inference**, not that every employee runs a desktop app. The UI can be a normal browser-based web app.
+
+Deployment stance:
+- **Local development:** your laptop runs the frontend/backend and a local Ollama/Qwen model.
+- **Jury demo:** `app.izge.dev` runs on Izge-controlled EC2 with an EC2-local/private LLM gateway.
+- **Customer target:** self-hosted or customer-controlled deployment at an internal/customer URL, with customer-controlled storage and local/private inference.
+- **Commercial bridge:** Izge-managed single-tenant deployment may be used for pilots, but generic multi-tenant SaaS is not the core product identity.
+- **Future only:** employee-local/edge models may participate later, but they are not required for MVP correctness.
 
 ## Core user roles
 

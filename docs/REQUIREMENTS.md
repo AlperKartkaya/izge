@@ -28,6 +28,48 @@
 
 **FR-10** The system shall not require external hosted AI services as its primary reasoning layer in the MVP.
 
+### 2A. MVP LLM integration and inference boundaries
+
+The MVP may use local LLMs, but only inside a bounded, company-controlled inference architecture. These requirements define what the MVP must support regardless of the current implementation state.
+
+**LLM-MVP-1** The MVP shall support a centrally configured, company-controlled local inference gateway for LLM-assisted work, with no dependency on external hosted AI services for the primary demo path.
+
+**LLM-MVP-2** The MVP shall expose configuration for the local inference gateway, model name, timeout, and independent feature flags for LLM-assisted extraction, query routing, answer synthesis, and proactive-signal explanation.
+
+**LLM-MVP-3** The MVP shall treat deterministic storage, permission filtering, artifact review status, graph construction, signal classification, and persistence as the authority of record; LLM output must not directly create trusted signals, graph edges, or final persisted memory without validation.
+
+**LLM-MVP-4** LLM-assisted structured extraction shall return schema-validated memory candidates for the locked MVP object types: **Decision, Assumption, Constraint, Outcome, and Commitment**.
+
+**LLM-MVP-5** If LLM-assisted extraction fails, times out, returns malformed JSON, or fails schema validation, the system shall fall back to deterministic extraction and clearly preserve fallback provenance.
+
+**LLM-MVP-6** LLM-assisted query routing shall be limited to intent classification among the locked MVP reasoning modes; deterministic graph reasoning shall still select evidence and construct the answer packet.
+
+**LLM-MVP-7** LLM-assisted answer synthesis shall be limited to rewriting the final response from an already-selected deterministic evidence packet; it shall not introduce new claims, citations, actions, or hidden evidence.
+
+**LLM-MVP-8** LLM-assisted proactive-signal explanation shall be limited to wording and guidance for signals already detected by deterministic graph analysis; it shall not alter signal type, urgency, evidence support, or persistence boundaries.
+
+**LLM-MVP-9** All LLM inputs shall be permission-aware and review-aware before prompt construction; restricted, hidden, or admin-rejected artifact content shall not be sent to the local inference gateway for a reader who cannot use that evidence.
+
+**LLM-MVP-10** All LLM outputs used in the MVP shall be schema-validated, citation-bounded to provided artifact or memory IDs, and fail closed to deterministic output when validation fails.
+
+**LLM-MVP-11** The product UI or trace surfaces shall identify when LLM assistance was applied, disabled, or bypassed by fallback, while preserving the distinction between deterministic reasoning and LLM wording assistance.
+
+**LLM-MVP-12** The MVP shall not assume edge-side or employee-local model participation. Edge-side inference remains a future trajectory and must not be required for MVP correctness or demo readiness.
+
+### 2B. MVP deployment interpretation
+
+**DEPLOY-MVP-1** The product shall define **local-first** as organization-controlled storage, memory, and inference, not as a requirement that every employee runs a desktop or localhost app.
+
+**DEPLOY-MVP-2** The primary customer architecture shall be self-hosted/customer-controlled deployment at an internal or customer-controlled URL, with customer-controlled backend, artifact storage, database, and local/private LLM gateway.
+
+**DEPLOY-MVP-3** The jury/demo architecture shall use `https://app.izge.dev` as an Izge-controlled deployment backed by EC2 storage and EC2-local or Izge-private LLM inference.
+
+**DEPLOY-MVP-4** Izge-managed single-tenant deployment may be supported as a pilot or commercial bridge when a customer does not want to operate infrastructure directly.
+
+**DEPLOY-MVP-5** Generic multi-tenant SaaS shall not be the category-defining default for the MVP because it weakens the local-first institutional-memory trust promise.
+
+**DEPLOY-MVP-6** Employee-local or edge-side LLM participation shall remain future optional capability and shall not be required for the MVP, jury demo, or initial customer deployment.
+
 ---
 
 ### 3. Artifact intake and ingestion

@@ -75,17 +75,25 @@ Handles:
 ### 8. Infrastructure Layer
 Handles:
 - local filesystem storage,
-- SQLite persistence,
-- central company-controlled inference runtime,
+- SQLite persistence for MVP-scale deployments,
+- central company-controlled local/private inference runtime,
+- deployment inside an organization-controlled boundary,
 - future compatibility with optional edge-side model participation.
+
+Deployment forms:
+- **Development:** localhost frontend/backend plus local Ollama/Qwen.
+- **Jury/demo:** `app.izge.dev` served from EC2 with backend-local/private LLM access.
+- **Customer target:** self-hosted/customer-controlled URL, backend, storage, and local/private LLM.
+- **Optional pilot bridge:** Izge-managed single-tenant deployment.
 
 ## Architectural rules
 - memory before magic,
 - raw documents are not the primary reasoning substrate,
 - graph and memory are first-class, not decorative,
 - proactive ingestion-time intelligence is part of the product, not a bolt-on,
-- central local inference is the MVP default,
-- future edge participation is optional and non-blocking,
+- central organization-controlled local/private inference is the MVP default,
+- `app.izge.dev` is a jury/pilot deployment, not proof that generic multi-tenant SaaS is the core product model,
+- future employee-edge participation is optional and non-blocking,
 - trust and inspectability are product requirements.
 
 ## Complexity placement

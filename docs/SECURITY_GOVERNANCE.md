@@ -25,9 +25,15 @@ Restricted artifacts must not leak through summaries, signal explanations, or qu
 
 ## Local-first rule
 For MVP:
-- artifacts remain within company-controlled infrastructure,
-- the main reasoning layer is company-controlled,
+- artifacts remain within company/customer-controlled infrastructure,
+- the main reasoning layer is company/customer-controlled,
 - external hosted AI is not the primary reasoning dependency.
+
+Interpretation:
+- `app.izge.dev` is acceptable for jury/pilot use only when backed by Izge-controlled EC2 storage and EC2-local/private inference.
+- Customer production should default to a customer-controlled/self-hosted deployment with customer-controlled storage and inference.
+- Managed single-tenant deployments are acceptable as pilot/commercial bridges.
+- Generic multi-tenant SaaS and employee-local edge inference are not MVP trust assumptions.
 
 ## Intake governance
 Members may contribute artifacts such as logs, reports, notes, and presentations.

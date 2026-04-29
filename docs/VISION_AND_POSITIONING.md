@@ -67,11 +67,27 @@ On top of reconstructed memory, Izge recommends grounded next actions based on h
 Once memory reconstruction and guidance are strong enough, Izge can compare bounded future paths and surface likely consequences of repeating or reversing historical patterns.
 
 ## Operating model
-For the MVP, Izge is local-first in the following sense:
-- storage remains inside company-controlled infrastructure,
-- heavy reasoning runs on a company-controlled central inference node,
-- external hosted AI is not the primary reasoning layer,
-- future lightweight edge-side models on employee devices are optional, not required for MVP.
+For the MVP, Izge is local-first in the following sense: storage, memory, and inference remain inside the organization-controlled boundary. This does **not** require each employee to run Izge on localhost. The UI can be a browser app served from an internal/customer URL.
+
+Primary customer architecture:
+- customer/internal URL, for example `https://izge.company.com`,
+- customer-controlled backend,
+- customer-controlled database and artifact storage,
+- customer-controlled local/private inference gateway.
+
+Jury and pilot architecture:
+- `https://app.izge.dev` is the Izge-controlled demo/pilot surface,
+- the backend runs on EC2,
+- the LLM runs on the same EC2 host or an Izge-controlled private inference gateway,
+- no external hosted AI service is required for the primary demo path.
+
+Commercial bridge:
+- managed single-tenant deployments may be offered for pilots or customers that do not want to operate infrastructure,
+- generic multi-tenant SaaS is not the category-defining default.
+
+Future trajectory:
+- lightweight edge-side models on employee devices may assist later,
+- employee-local inference is not required for MVP correctness or demo readiness.
 
 ## Core product philosophy
 - Memory before magic

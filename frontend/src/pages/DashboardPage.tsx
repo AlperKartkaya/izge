@@ -90,8 +90,19 @@ export function DashboardPage() {
     () => Object.values(summary?.signal_counts ?? {}).reduce((total, count) => total + count, 0),
     [summary],
   )
+  const isAdmin = session?.user.role === 'Admin'
+  const reviewQueue = useMemo(
+    () => artifacts.filter((artifact) => artifact.review_status === 'submitted' || artifact.review_status === 'needs_review'),
+    [artifacts],
+  )
+  const reviewedArtifactCount = useMemo(() => artifacts.filter((artifact) => artifact.review_status === 'reviewed').length, [artifacts])
+  const rejectedArtifactCount = useMemo(() => artifacts.filter((artifact) => artifact.review_status === 'rejected').length, [artifacts])
   const topPersistedSignal = persistedSignals[0] ?? null
-  const latestCompletedArtifact = artifacts.find((artifact) => artifact.ingestion_status === 'completed') ?? artifacts[0] ?? null
+  const latestCompletedArtifact =
+    artifacts.find((artifact) => artifact.ingestion_status === 'completed' && artifact.review_status !== 'rejected') ??
+    artifacts.find((artifact) => artifact.review_status !== 'rejected') ??
+    artifacts[0] ??
+    null
   const demoReadiness = useMemo(() => {
     if (!latestCompletedArtifact) {
       return {
@@ -111,6 +122,15 @@ export function DashboardPage() {
         actionTo: '/ingestion',
       }
     }
+    if (isAdmin && reviewQueue.length > 0) {
+      return {
+        status: 'Needs review',
+        title: 'Govern evidence before the demo',
+        detail: `${reviewQueue.length} artifact(s) are waiting for admin review. Mark trusted evidence reviewed or reject it before presenting the reasoning path.`,
+        actionLabel: 'Open review queue',
+        actionTo: '/admin',
+      }
+    }
     if (!topPersistedSignal) {
       return {
         status: 'Needs signal',
@@ -127,7 +147,7 @@ export function DashboardPage() {
       actionLabel: 'Ask demo question',
       actionTo: `/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`,
     }
-  }, [latestCompletedArtifact, topPersistedSignal, totalMemoryObjects])
+  }, [isAdmin, latestCompletedArtifact, reviewQueue.length, topPersistedSignal, totalMemoryObjects])
 
   return (
     <div className="stack-xl">
@@ -150,10 +170,11 @@ export function DashboardPage() {
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <section className="metric-grid">
-        <MetricCard label="Visible sources" value={summary?.artifact_count ?? '—'} detail="Artifacts currently available in your permitted scope." />
+        <MetricCard label="Trusted sources" value={summary?.artifact_count ?? '—'} detail="Visible artifacts accepted for trusted reasoning; rejected sources are excluded." />
         <MetricCard label="Memory objects" value={totalMemoryObjects || '—'} detail="Structured decisions, assumptions, constraints, outcomes, and commitments." />
         <MetricCard label="Active tensions" value={contradictions.length + assumptionDrift.length} detail="Contradictions and assumption drift visible in your permitted scope." />
         <MetricCard label="Persisted signals" value={persistedSignalCount || nextActions.length} detail="Durable proactive signals generated from ingested artifact impact." />
+        <MetricCard label="Needs review" value={reviewQueue.length} detail="Artifacts waiting for admin evidence governance." />
       </section>
 
       <Panel
@@ -181,7 +202,7 @@ export function DashboardPage() {
             <p className="signal-title">{latestCompletedArtifact?.title ?? 'Load the demo artifacts'}</p>
             <p className="muted-copy">
               {latestCompletedArtifact
-                ? `Visible source ${latestCompletedArtifact.artifact_id} is ready for evidence inspection.`
+                ? `Visible source ${latestCompletedArtifact.artifact_id} is ${formatLabel(latestCompletedArtifact.review_status)} and ready for evidence inspection.`
                 : 'Add or seed source artifacts before demonstrating institutional memory.'}
             </p>
           </Link>
@@ -210,6 +231,54 @@ export function DashboardPage() {
           </Link>
         </div>
       </Panel>
+
+      {isAdmin ? (
+        <Panel
+          title="Admin evidence review readiness"
+          description="This queue makes the memory boundary operational: review accepts evidence into trusted reasoning, rejection stores it but keeps it out of intelligence outputs."
+          aside={
+            <Link className="secondary-button" to="/admin">
+              Govern evidence
+            </Link>
+          }
+        >
+          <div className="detail-grid">
+            <article className="panel-subtle detail-card">
+              <p className="section-label">Waiting</p>
+              <p className="table-primary">{reviewQueue.length} artifact(s)</p>
+              <p className="muted-copy">Submitted or ingested sources that need an admin trust decision.</p>
+            </article>
+            <article className="panel-subtle detail-card">
+              <p className="section-label">Reviewed</p>
+              <p className="table-primary">{reviewedArtifactCount} artifact(s)</p>
+              <p className="muted-copy">Explicitly accepted source material for trusted demo memory.</p>
+            </article>
+            <article className="panel-subtle detail-card">
+              <p className="section-label">Rejected</p>
+              <p className="table-primary">{rejectedArtifactCount} artifact(s)</p>
+              <p className="muted-copy">Stored for audit/history but excluded from trusted reasoning support.</p>
+            </article>
+          </div>
+          {reviewQueue.length > 0 ? (
+            <div className="stack-sm">
+              <p className="section-label">Next sources to inspect</p>
+              {reviewQueue.slice(0, 4).map((artifact) => (
+                <Link key={artifact.artifact_id} className="record-link panel-subtle" to="/admin">
+                  <div>
+                    <p className="table-primary">{artifact.title}</p>
+                    <p className="table-secondary">
+                      {formatLabel(artifact.ingestion_status)} · updated {formatDateTime(artifact.updated_at)}
+                    </p>
+                  </div>
+                  <StatusBadge value={formatLabel(artifact.review_status)} />
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="muted-copy">No submitted or needs-review artifacts are waiting in the admin queue.</p>
+          )}
+        </Panel>
+      ) : null}
 
       <div className="two-column-layout">
         <Panel title="Reasoning modes, not chat modes" description="Each block is a fixed institutional-memory operation designed to expose why a recommendation is justified.">
@@ -316,6 +385,7 @@ export function DashboardPage() {
                   <th>Source</th>
                   <th>Visibility</th>
                   <th>Status</th>
+                  <th>Review</th>
                   <th>Updated</th>
                 </tr>
               </thead>
@@ -330,7 +400,10 @@ export function DashboardPage() {
                     </td>
                     <td>{artifact.visibility_scope}</td>
                     <td>
-                      <StatusBadge value={artifact.ingestion_status} />
+                      <StatusBadge value={formatLabel(artifact.ingestion_status)} />
+                    </td>
+                    <td>
+                      <StatusBadge value={formatLabel(artifact.review_status)} />
                     </td>
                     <td>{formatDateTime(artifact.updated_at)}</td>
                   </tr>

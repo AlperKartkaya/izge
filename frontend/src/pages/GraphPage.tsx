@@ -113,7 +113,7 @@ export function GraphPage() {
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <section className="metric-grid">
-        <MetricCard label="Sources in scope" value={summary?.artifact_count ?? '—'} />
+        <MetricCard label="Trusted sources" value={summary?.artifact_count ?? '—'} />
         <MetricCard label="Timeline cards" value={timelineItems.length || '—'} />
         <MetricCard label="Relationship types" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} />
         <MetricCard label="Contradictions surfaced" value={contradictions.length} />

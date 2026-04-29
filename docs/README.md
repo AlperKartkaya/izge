@@ -19,6 +19,8 @@ Keep these files at the root of `docs/` because project prompts and repo guidanc
 - `PRD.md`
 - `MVP_SCOPE.md`
 - `MVP_IMPLEMENTATION_CONTRACT.md`
+- `REQUIREMENTS.md`
+- `MVP_REQUIREMENTS_IMPLEMENTATION_PLAN.md`
 
 ### Architecture and domain model
 

@@ -7,7 +7,9 @@ The system reconstructs decision history from internal artifacts and produces us
 ## What V1 must do
 - accept uploaded internal documents and pasted text,
 - allow members to contribute logs, reports, presentations, notes, and updates,
-- store and process artifacts locally within company-controlled infrastructure,
+- store and process artifacts locally within company/customer-controlled infrastructure,
+- support the jury demo on `app.izge.dev` using EC2-local/private LLM inference,
+- keep customer production oriented toward self-hosted/customer-controlled deployment rather than generic multi-tenant SaaS,
 - parse and chunk supported artifacts,
 - extract structured memory objects,
 - build an explicit institutional-memory graph,

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type FormEventHandler } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { Callout, EmptyState, PageIntro, Panel } from '../components/ui'
+import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import { formatDateTime } from '../lib/format'
+import { formatDateTime, formatLabel } from '../lib/format'
 import type { ArtifactDetail, ArtifactRead, UserRead, UserRole } from '../lib/types'
 
 type VisibilityScope = 'workspace' | 'restricted'
+type ReviewStatus = 'submitted' | 'needs_review' | 'reviewed' | 'rejected'
 
 const emptyUserForm = {
   display_name: '',
@@ -85,6 +86,19 @@ export function AdminPage() {
   }, [isAdmin, selectedArtifactId, session?.token])
 
   const activeUsers = useMemo(() => users.filter((user) => user.is_active), [users])
+  const reviewCounts = useMemo(
+    () => ({
+      submitted: artifacts.filter((artifact) => artifact.review_status === 'submitted').length,
+      needs_review: artifacts.filter((artifact) => artifact.review_status === 'needs_review').length,
+      reviewed: artifacts.filter((artifact) => artifact.review_status === 'reviewed').length,
+      rejected: artifacts.filter((artifact) => artifact.review_status === 'rejected').length,
+    }),
+    [artifacts],
+  )
+  const reviewQueue = useMemo(
+    () => artifacts.filter((artifact) => artifact.review_status === 'submitted' || artifact.review_status === 'needs_review'),
+    [artifacts],
+  )
 
   const handleCreateUser: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault()
@@ -168,6 +182,34 @@ export function AdminPage() {
     }
   }
 
+  async function handleReviewStatusUpdate(artifact: ArtifactRead, review_status: ReviewStatus) {
+    if (!session?.token) {
+      return
+    }
+
+    setIsBusy(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      await api.updateArtifactReview(session.token, artifact.artifact_id, {
+        review_status,
+        review_notes:
+          review_status === 'reviewed'
+            ? 'Admin review queue: marked as reviewed for trusted memory.'
+            : review_status === 'rejected'
+              ? 'Admin review queue: rejected from trusted reasoning.'
+              : null,
+      })
+      await loadAdminState(artifact.artifact_id)
+      setSuccess(`Artifact marked ${formatLabel(review_status)}.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to update artifact review status.')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   if (!isAdmin) {
     return (
       <div className="stack-xl">
@@ -184,13 +226,71 @@ export function AdminPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Admin users & permissions"
-        title="Manage workspace access"
-        description="Admin-only controls for user lifecycle and artifact-scoped visibility, aligned with the backend permission model."
+        eyebrow="Admin users, permissions & evidence review"
+        title="Govern the workspace memory boundary"
+        description="Admin-only controls for user lifecycle, artifact-scoped visibility, and the evidence review queue that determines trusted reasoning inputs."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {success ? <Callout>{success}</Callout> : null}
+
+      <section className="metric-grid">
+        <MetricCard label="Needs review" value={reviewCounts.needs_review + reviewCounts.submitted} detail="Submitted or ingested evidence waiting for admin trust review." />
+        <MetricCard label="Reviewed" value={reviewCounts.reviewed} detail="Artifacts marked accepted for trusted memory." />
+        <MetricCard label="Rejected" value={reviewCounts.rejected} detail="Artifacts excluded from trusted reasoning and persisted-signal visibility." />
+        <MetricCard label="Active users" value={activeUsers.length} detail="Users currently eligible for workspace access." />
+      </section>
+
+      <Panel title="Evidence review queue" description="Review status is now part of the reasoning boundary: rejected artifacts remain stored, but are excluded from trusted query, graph, and signal support.">
+        {artifacts.length === 0 ? (
+          <EmptyState title="No artifacts available" description="Artifacts must exist before the memory boundary can be governed." />
+        ) : reviewQueue.length === 0 ? (
+          <EmptyState title="No artifacts waiting for review" description="All visible artifacts are either reviewed or rejected." />
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Artifact</th>
+                  <th>Ingestion</th>
+                  <th>Review</th>
+                  <th>Updated</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reviewQueue.map((artifact) => (
+                  <tr key={artifact.artifact_id}>
+                    <td>
+                      <div>
+                        <p className="table-primary">{artifact.title}</p>
+                        <p className="table-secondary">{artifact.artifact_id}</p>
+                      </div>
+                    </td>
+                    <td>
+                      <StatusBadge value={formatLabel(artifact.ingestion_status)} />
+                    </td>
+                    <td>
+                      <StatusBadge value={formatLabel(artifact.review_status)} />
+                    </td>
+                    <td>{formatDateTime(artifact.updated_at)}</td>
+                    <td>
+                      <div className="inline-actions">
+                        <button type="button" className="text-button" onClick={() => void handleReviewStatusUpdate(artifact, 'reviewed')} disabled={isBusy}>
+                          Mark reviewed
+                        </button>
+                        <button type="button" className="text-button" onClick={() => void handleReviewStatusUpdate(artifact, 'rejected')} disabled={isBusy}>
+                          Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
 
       <div className="two-column-layout">
         <Panel title="Create user" description="Adds a new member or admin to the single workspace.">

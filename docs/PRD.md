@@ -60,9 +60,12 @@ Important context gets scattered across roadmap docs, planning notes, weekly upd
 - The system shall enforce artifact/evidence/output-level permissions.
 
 ### Local-first processing
-- The system shall use company-controlled infrastructure for storage and primary reasoning.
-- The system shall support a central inference node for heavy reasoning tasks.
-- The system should allow future lightweight edge-side reasoning with smaller local models.
+- The system shall use organization-controlled infrastructure for storage and primary reasoning.
+- The system shall support a central local/private inference node for heavy reasoning tasks.
+- For jury/demo use, `app.izge.dev` shall run against Izge-controlled EC2 storage and EC2-local/private LLM inference.
+- For customer use, the primary target shall be self-hosted/customer-controlled deployment at an internal or customer-controlled URL.
+- Izge-managed single-tenant deployment may be used as a pilot bridge, but generic multi-tenant SaaS is not the core MVP model.
+- The system should allow future lightweight edge-side reasoning with smaller local models, but employee-local inference is not required for MVP correctness.
 
 ### Intake and ingestion
 - The system shall support Markdown, plain text, PDF, and pasted text.

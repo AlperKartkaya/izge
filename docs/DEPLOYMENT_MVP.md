@@ -6,9 +6,17 @@ Recommended MVP topology:
 izge.dev           -> website/ static marketing site
 app.izge.dev       -> frontend/dist/ React app
 app.izge.dev/api   -> backend FastAPI service on localhost:8000 behind nginx
+EC2 local/private LLM gateway -> Ollama or equivalent on 127.0.0.1:11434
 ```
 
 This keeps the public story and protected product surface separate while letting the frontend call the API on the same origin (`/api`). Same-origin API routing avoids CORS and cookie/session surprises during the demo.
+
+Deployment stance:
+
+- `app.izge.dev` is the **jury/pilot environment**, not the long-term generic multi-tenant SaaS model.
+- For the jury demo, storage and inference should run inside the Izge-controlled EC2 boundary.
+- For customer production, the primary target remains self-hosted/customer-controlled deployment at an internal/customer URL with customer-controlled storage and local/private inference.
+- Employee-local edge models are future optional capability and are not needed for the jury demo.
 
 ## DNS
 
@@ -95,6 +103,46 @@ sudo systemctl status izge-backend --no-pager
 curl -fsS http://127.0.0.1:8000/health
 ```
 
+## EC2 local/private LLM gateway
+
+For the jury demo, `app.izge.dev` should use an LLM reachable from the EC2 backend, preferably on loopback (`127.0.0.1`) or through a private inference endpoint. The current demo-friendly default is Qwen through an Ollama-compatible API.
+
+Example Ollama setup on EC2:
+
+```sh
+# Install Ollama using the official installer or your preferred package path.
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull the model currently used by the Izge demo config.
+ollama pull qwen3.5:4b
+
+# Confirm the gateway is reachable from the EC2 host.
+curl -fsS http://127.0.0.1:11434/api/tags
+```
+
+Then edit `/etc/izge/backend.env`:
+
+```sh
+IZGE_LOCAL_LLM_ENABLED=true
+IZGE_LOCAL_LLM_BASE_URL=http://127.0.0.1:11434
+IZGE_LOCAL_LLM_MODEL=qwen3.5:4b
+IZGE_LOCAL_LLM_TIMEOUT_SECONDS=60
+
+# Optional for richer demo behavior once the model is confirmed stable.
+IZGE_LLM_QUERY_ROUTING_ENABLED=true
+IZGE_LLM_ANSWER_SYNTHESIS_ENABLED=true
+IZGE_LLM_SIGNAL_EXPLANATION_ENABLED=true
+```
+
+Restart the backend after changing LLM settings:
+
+```sh
+sudo systemctl restart izge-backend
+sudo journalctl -u izge-backend -n 80 --no-pager
+```
+
+If the model is unavailable, Izge should still run using deterministic extraction/reasoning fallback. Do not use an external hosted AI endpoint for the primary jury demo path unless the product positioning is explicitly changed.
+
 ## Build and publish static assets
 
 Run on EC2:
@@ -158,6 +206,28 @@ Then verify:
 curl -I https://izge.dev
 curl -I https://app.izge.dev
 curl -fsS https://app.izge.dev/health
+```
+
+LLM smoke check on EC2:
+
+```sh
+cd /srv/izge/current/backend
+sudo -u izge env IZGE_LOCAL_LLM_MODEL=qwen3.5:4b /srv/izge/venv/bin/python - <<'PY'
+from app.services.llm import run_structured_local_prompt
+schema = {
+    "type": "object",
+    "properties": {"status": {"type": "string"}, "mode": {"type": "string"}},
+    "required": ["status", "mode"],
+    "additionalProperties": False,
+}
+result = run_structured_local_prompt(
+    system_prompt="Return only valid JSON matching the schema.",
+    user_prompt="Return status ok and mode smoke_test.",
+    schema=schema,
+)
+assert result.get("status") == "ok", result
+print(result)
+PY
 ```
 
 ## Demo verification

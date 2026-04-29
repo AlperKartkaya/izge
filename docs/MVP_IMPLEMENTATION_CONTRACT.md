@@ -100,9 +100,14 @@ If some evidence is hidden, the system may return a partial answer, but it must 
 ### 5. Product capabilities
 
 #### 5.1 Local-first processing model
-The MVP uses company-controlled infrastructure as the primary storage and reasoning environment.
-- artifacts are stored locally,
-- heavy reasoning runs on a central company-controlled inference node,
+The MVP uses organization-controlled infrastructure as the primary storage and reasoning environment. Local-first means the memory store and inference runtime stay inside a trusted company/customer boundary; it does not mean every employee runs a desktop app.
+
+Required MVP deployment interpretations:
+- local development runs on the developer laptop with local Ollama/Qwen,
+- jury/demo runs at `https://app.izge.dev` with Izge-controlled EC2 storage and EC2-local/private LLM inference,
+- customer production target is self-hosted/customer-controlled deployment at an internal or customer-controlled URL,
+- Izge-managed single-tenant deployment is allowed as a pilot/commercial bridge,
+- generic multi-tenant SaaS is not the category-defining default,
 - external hosted AI is not required as the primary reasoning layer,
 - future optional edge-side small-model participation is not part of MVP acceptance.
 
