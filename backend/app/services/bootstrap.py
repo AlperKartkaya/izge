@@ -94,3 +94,18 @@ def seed_defaults(db: Session) -> None:
             target_id=admin.user_id,
             event_metadata={"role": admin.role, "email": admin.email},
         )
+    elif settings.sync_default_admin_password and settings.default_admin_password:
+        admin.password_hash = hash_password(settings.default_admin_password)
+        admin.display_name = settings.default_admin_display_name
+        admin.is_active = True
+        admin.role = "Admin"
+        db.commit()
+        log_event(
+            db,
+            workspace_id=workspace.workspace_id,
+            actor_user_id=admin.user_id,
+            event_type="USER_SEEDED_PASSWORD_SYNCED",
+            target_type="user",
+            target_id=admin.user_id,
+            event_metadata={"role": admin.role, "email": admin.email, "demo_sync": True},
+        )

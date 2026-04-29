@@ -237,7 +237,7 @@ export function DashboardPage() {
           title="Admin evidence review readiness"
           description="This queue makes the memory boundary operational: review accepts evidence into trusted reasoning, rejection stores it but keeps it out of intelligence outputs."
           aside={
-            <Link className="secondary-button" to="/admin">
+            <Link className="secondary-button" to="/admin/users">
               Govern evidence
             </Link>
           }
@@ -263,7 +263,7 @@ export function DashboardPage() {
             <div className="stack-sm">
               <p className="section-label">Next sources to inspect</p>
               {reviewQueue.slice(0, 4).map((artifact) => (
-                <Link key={artifact.artifact_id} className="record-link panel-subtle" to="/admin">
+                <Link key={artifact.artifact_id} className="record-link panel-subtle" to="/admin/users">
                   <div>
                     <p className="table-primary">{artifact.title}</p>
                     <p className="table-secondary">

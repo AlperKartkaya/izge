@@ -3,10 +3,39 @@ import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatLabel } from '../lib/format'
-import type { ArtifactDetail, ArtifactRead, UserRead, UserRole } from '../lib/types'
+import type { ArtifactDetail, ArtifactRead, LocalLLMSmokeRead, LocalLLMStatusRead, UserRead, UserRole } from '../lib/types'
 
 type VisibilityScope = 'workspace' | 'restricted'
 type ReviewStatus = 'submitted' | 'needs_review' | 'reviewed' | 'rejected'
+
+function llmStatusLabel(status: LocalLLMStatusRead | null): string {
+  if (!status) {
+    return 'Checking'
+  }
+  if (status.gateway_status === 'ready') {
+    return 'Ready'
+  }
+  if (status.gateway_status === 'model_missing') {
+    return 'Model missing'
+  }
+  if (status.gateway_status === 'unreachable') {
+    return 'Unreachable'
+  }
+  return 'Disabled'
+}
+
+function enabledFlagLabels(status: LocalLLMStatusRead | null): string {
+  if (!status) {
+    return 'Loading feature flags…'
+  }
+  const labels = [
+    status.feature_flags.extraction ? 'extraction' : null,
+    status.feature_flags.query_routing ? 'query routing' : null,
+    status.feature_flags.answer_synthesis ? 'answer synthesis' : null,
+    status.feature_flags.signal_explanation ? 'signal explanation' : null,
+  ].filter(Boolean)
+  return labels.length ? labels.join(', ') : 'No LLM-assisted capability enabled'
+}
 
 const emptyUserForm = {
   display_name: '',
@@ -21,6 +50,8 @@ export function AdminPage() {
   const isAdmin = session?.user.role === 'Admin'
   const [users, setUsers] = useState<UserRead[]>([])
   const [artifacts, setArtifacts] = useState<ArtifactRead[]>([])
+  const [llmStatus, setLlmStatus] = useState<LocalLLMStatusRead | null>(null)
+  const [llmSmoke, setLlmSmoke] = useState<LocalLLMSmokeRead | null>(null)
   const [selectedArtifactId, setSelectedArtifactId] = useState('')
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail | null>(null)
   const [createUserForm, setCreateUserForm] = useState(emptyUserForm)
@@ -31,19 +62,22 @@ export function AdminPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isBusy, setIsBusy] = useState(false)
+  const [isSmokeRunning, setIsSmokeRunning] = useState(false)
 
   async function loadAdminState(nextArtifactId?: string) {
     if (!session?.token) {
       return
     }
 
-    const [userList, artifactList] = await Promise.all([
+    const [userList, artifactList, localLlmStatus] = await Promise.all([
       api.listUsers(session.token),
       api.listArtifacts(session.token),
+      api.getLocalLLMStatus(session.token),
     ])
 
     setUsers(userList)
     setArtifacts(artifactList)
+    setLlmStatus(localLlmStatus)
 
     const artifactId = nextArtifactId || selectedArtifactId || artifactList[0]?.artifact_id || ''
     setSelectedArtifactId(artifactId)
@@ -210,6 +244,28 @@ export function AdminPage() {
     }
   }
 
+  async function handleLocalLLMSmoke() {
+    if (!session?.token) {
+      return
+    }
+
+    setIsSmokeRunning(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const result = await api.runLocalLLMSmoke(session.token)
+      const latestStatus = await api.getLocalLLMStatus(session.token)
+      setLlmSmoke(result)
+      setLlmStatus(latestStatus)
+      setSuccess(result.status === 'passed' ? 'Local/private LLM smoke test passed.' : `Local/private LLM smoke test ${result.status}.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to run local/private LLM smoke test.')
+    } finally {
+      setIsSmokeRunning(false)
+    }
+  }
+
   if (!isAdmin) {
     return (
       <div className="stack-xl">
@@ -240,6 +296,54 @@ export function AdminPage() {
         <MetricCard label="Rejected" value={reviewCounts.rejected} detail="Artifacts excluded from trusted reasoning and persisted-signal visibility." />
         <MetricCard label="Active users" value={activeUsers.length} detail="Users currently eligible for workspace access." />
       </section>
+
+      <Panel
+        title="Local/private LLM readiness"
+        description="Jury demo proof that app.izge.dev can reach a controlled private model gateway while deterministic memory and evidence logic remain the authority."
+        aside={<StatusBadge value={llmStatusLabel(llmStatus)} />}
+      >
+        <div className="detail-grid">
+          <article className={llmStatus?.gateway_status === 'ready' ? 'panel-subtle detail-card action-card' : 'panel-subtle detail-card'}>
+            <p className="section-label">Gateway</p>
+            <p className="table-primary">{llmStatus?.base_url ?? 'Checking gateway…'}</p>
+            <p className="muted-copy">
+              {llmStatus?.gateway_reachable
+                ? 'Backend can reach the configured Ollama-compatible gateway without exposing it publicly.'
+                : llmStatus?.error || 'Waiting for gateway status.'}
+            </p>
+          </article>
+          <article className="panel-subtle detail-card">
+            <p className="section-label">Configured model</p>
+            <p className="table-primary">{llmStatus?.configured_model ?? 'Unknown'}</p>
+            <p className="muted-copy">
+              {llmStatus?.configured_model_available
+                ? 'Configured model is available at the gateway.'
+                : llmStatus?.available_models.length
+                  ? `Available models: ${llmStatus.available_models.join(', ')}`
+                  : 'No model list returned yet.'}
+            </p>
+          </article>
+          <article className="panel-subtle detail-card">
+            <p className="section-label">LLM-assisted paths</p>
+            <p className="table-primary">{enabledFlagLabels(llmStatus)}</p>
+            <p className="muted-copy">Extraction, query intent, answer wording, and signal explanations can use local inference; permission filtering and evidence authority stay deterministic.</p>
+          </article>
+        </div>
+        <div className="panel-subtle stack-sm">
+          <div className="timeline-card-head">
+            <div>
+              <p className="section-label">Structured smoke test</p>
+              <p className="table-primary">{llmSmoke ? `${formatLabel(llmSmoke.status)} · ${llmSmoke.duration_ms}ms` : 'Not run in this browser session'}</p>
+            </div>
+            <button type="button" className="secondary-button" onClick={() => void handleLocalLLMSmoke()} disabled={isSmokeRunning}>
+              {isSmokeRunning ? 'Testing…' : 'Run LLM smoke'}
+            </button>
+          </div>
+          <p className="muted-copy">
+            {llmSmoke ? llmSmoke.error || llmSmoke.message : 'This triggers a tiny structured JSON generation through the same local/private gateway used by Izge reasoning.'}
+          </p>
+        </div>
+      </Panel>
 
       <Panel title="Evidence review queue" description="Review status is now part of the reasoning boundary: rejected artifacts remain stored, but are excluded from trusted query, graph, and signal support.">
         {artifacts.length === 0 ? (

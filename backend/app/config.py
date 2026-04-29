@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     default_admin_email: str = "admin@example.com"
     default_admin_password: str | None = "change-me-admin"
     default_admin_display_name: str = "Local Admin"
+    sync_default_admin_password: bool = False
     sqlite_path: str = "./data/izge.db"
     storage_root: str = "./data/storage"
     pasted_text_root: str = "./data/pasted"

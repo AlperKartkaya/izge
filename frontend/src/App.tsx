@@ -33,6 +33,7 @@ function App() {
         <Route path="signals/:signalId" element={<SignalDetailPage />} />
         <Route path="memory/:memoryType/:memoryId" element={<MemoryDetailPage />} />
         <Route path="graph" element={<GraphPage />} />
+        <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users" element={<AdminPage />} />
         <Route path="audit" element={<AuditPage />} />
       </Route>

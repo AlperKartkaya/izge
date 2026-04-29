@@ -88,7 +88,7 @@ Run on EC2:
 
 ```sh
 sudo cp /srv/izge/current/deploy/env/backend.env.example /etc/izge/backend.env
-sudo nano /etc/izge/backend.env  # set a real IZGE_DEFAULT_ADMIN_PASSWORD before first start
+sudo nano /etc/izge/backend.env  # for jury demo, keep admin@example.com / change-me-admin aligned with the pre-filled app sign-in
 sudo chmod 640 /etc/izge/backend.env
 sudo chown root:izge /etc/izge/backend.env
 
@@ -133,6 +133,16 @@ IZGE_LLM_QUERY_ROUTING_ENABLED=true
 IZGE_LLM_ANSWER_SYNTHESIS_ENABLED=true
 IZGE_LLM_SIGNAL_EXPLANATION_ENABLED=true
 ```
+
+For the jury build, verify the app can prove the LLM path from the browser:
+
+1. Open `https://app.izge.dev`.
+2. Sign in with the pre-filled demo admin credentials.
+3. Open **Admin**.
+4. Confirm **Local/private LLM readiness** is `Ready`.
+5. Click **Run LLM smoke** and expect `Passed`.
+
+This smoke test calls the backend `/api/system/llm-smoke` endpoint, which runs a tiny structured JSON generation through the same local/private gateway used by extraction, query intent, synthesis, and signal explanation.
 
 Restart the backend after changing LLM settings:
 
@@ -248,7 +258,7 @@ sudo -u izge bash -lc 'cd /srv/izge/current/backend && /srv/izge/venv/bin/python
 Then in the browser:
 
 1. Open `https://izge.dev` and click **Open app**.
-2. Sign in at `https://app.izge.dev` with the admin credentials from `/etc/izge/backend.env`.
+2. Sign in at `https://app.izge.dev` with the pre-filled jury demo credentials (`admin@example.com` / `change-me-admin`) or the values explicitly configured in `/etc/izge/backend.env`.
 3. Upload or use the demo seed artifacts.
 4. Validate decision lineage, contradiction analysis, assumption drift, and next-action guidance before the live demo.
 

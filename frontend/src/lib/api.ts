@@ -9,6 +9,8 @@ import type {
   GraphSummary,
   GraphTimeline,
   IngestionJobRead,
+  LocalLLMSmokeRead,
+  LocalLLMStatusRead,
   MemoryDetail,
   NextActionSignalItem,
   QueryResult,
@@ -236,5 +238,16 @@ export const api = {
 
   listAuditEvents(token: string) {
     return request<AuditEventRead[]>('/audit/events', { token })
+  },
+
+  getLocalLLMStatus(token: string) {
+    return request<LocalLLMStatusRead>('/system/llm-status', { token })
+  },
+
+  runLocalLLMSmoke(token: string) {
+    return request<LocalLLMSmokeRead>('/system/llm-smoke', {
+      method: 'POST',
+      token,
+    })
   },
 }

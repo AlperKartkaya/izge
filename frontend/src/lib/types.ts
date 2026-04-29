@@ -121,6 +121,37 @@ export interface QueryTraceRead {
   steps: QueryTraceStepRead[]
 }
 
+
+export interface LocalLLMFeatureFlags {
+  extraction: boolean
+  query_routing: boolean
+  answer_synthesis: boolean
+  signal_explanation: boolean
+}
+
+export interface LocalLLMStatusRead {
+  enabled: boolean
+  configured_model: string
+  base_url: string
+  timeout_seconds: number
+  feature_flags: LocalLLMFeatureFlags
+  gateway_reachable: boolean
+  gateway_status: 'disabled' | 'unreachable' | 'model_missing' | 'ready'
+  available_models: string[]
+  configured_model_available: boolean
+  checked_at: string
+  error: string | null
+}
+
+export interface LocalLLMSmokeRead {
+  status: 'passed' | 'failed' | 'skipped'
+  model: string
+  duration_ms: number
+  message: string
+  checked_at: string
+  error: string | null
+}
+
 export interface GraphSummary {
   workspace_id: string
   artifact_count: number

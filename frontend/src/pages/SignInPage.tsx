@@ -3,12 +3,15 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../lib/api'
 
+const DEMO_ADMIN_EMAIL = import.meta.env.VITE_DEMO_ADMIN_EMAIL?.trim() || 'admin@example.com'
+const DEMO_ADMIN_PASSWORD = import.meta.env.VITE_DEMO_ADMIN_PASSWORD?.trim() || 'change-me-admin'
+
 export function SignInPage() {
   const { isAuthenticated, isAuthReady, signIn } = useAuth()
   const location = useLocation()
   const redirectTo = (location.state as { from?: string } | null)?.from || '/'
-  const [email, setEmail] = useState('admin@example.com')
-  const [password, setPassword] = useState('change-me-admin')
+  const [email, setEmail] = useState(DEMO_ADMIN_EMAIL)
+  const [password, setPassword] = useState(DEMO_ADMIN_PASSWORD)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -67,7 +70,7 @@ export function SignInPage() {
 
         <div className="panel-subtle auth-footnote">
           <p className="section-label">Seeded local admin</p>
-          <p className="muted-copy">Use the backend defaults shown here to validate the frontend against the current FastAPI foundation.</p>
+          <p className="muted-copy">Demo credentials are pre-filled so a jury reviewer can enter the workspace with one Sign in click when the backend demo env matches these values.</p>
         </div>
       </section>
     </main>

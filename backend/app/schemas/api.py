@@ -191,6 +191,35 @@ class QueryTraceRead(BaseModel):
     permissions_limited: bool
     steps: list[QueryTraceStepRead]
 
+class LocalLLMFeatureFlags(BaseModel):
+    extraction: bool
+    query_routing: bool
+    answer_synthesis: bool
+    signal_explanation: bool
+
+
+class LocalLLMStatusRead(BaseModel):
+    enabled: bool
+    configured_model: str
+    base_url: str
+    timeout_seconds: int
+    feature_flags: LocalLLMFeatureFlags
+    gateway_reachable: bool
+    gateway_status: Literal["disabled", "unreachable", "model_missing", "ready"]
+    available_models: list[str] = Field(default_factory=list)
+    configured_model_available: bool
+    checked_at: datetime
+    error: str | None = None
+
+
+class LocalLLMSmokeRead(BaseModel):
+    status: Literal["passed", "failed", "skipped"]
+    model: str
+    duration_ms: int
+    message: str
+    checked_at: datetime
+    error: str | None = None
+
 
 class GraphSummary(BaseModel):
     workspace_id: str
