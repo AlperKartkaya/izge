@@ -153,6 +153,10 @@ export function QueryResultPage() {
   const routeSource = routePayload ? readRecordField(routePayload, 'route_source') : 'Unavailable'
   const llmIntent = routePayload ? readRecord(routePayload, 'llm_intent') : null
   const llmIntentStatus = llmIntent ? readRecordField(llmIntent, 'status') : 'Unavailable'
+  const llmApplied = routeSource === 'local_llm_intent' || synthesisStatus === 'applied'
+  const llmTopicTerms = readStringArray(routePayload ?? {}, 'topic_terms')
+  const llmCitedEvidenceCount = readStringArray(answerSynthesis ?? {}, 'cited_evidence_ids').length
+  const llmCitedMemoryCount = readStringArray(answerSynthesis ?? {}, 'cited_memory_ids').length
 
   return (
     <div className="stack-xl">
@@ -198,38 +202,64 @@ export function QueryResultPage() {
           </Panel>
 
           <Panel
-            title="Inference and authority boundary"
-            description="This shows where company-controlled local inference helped, and where deterministic graph/evidence logic remained the authority."
+            title="Local LLM output"
+            description="A compact proof surface for the jury: what the private model helped with, and the exact answer wording it produced."
+            aside={<StatusBadge value={llmApplied ? 'LLM applied' : 'Deterministic'} />}
           >
+            <article className={synthesisStatus === 'applied' ? 'panel-subtle llm-output-card action-card' : 'panel-subtle llm-output-card'}>
+              <div className="timeline-card-head">
+                <div>
+                  <p className="section-label">LLM-written answer</p>
+                  <p className="table-secondary">{synthesisStatusLabel(synthesisStatus)}</p>
+                </div>
+                <StatusBadge value={synthesisStatus !== 'Unavailable' ? formatLabel(synthesisStatus) : 'Trace loading'} />
+              </div>
+              <p className="llm-answer-text">{activeResult.answer_text}</p>
+              <p className="llm-rationale-text">{activeResult.why_this_answer}</p>
+            </article>
+
+            <div className="detail-grid compact-boundary-grid">
+              <article className="panel-subtle detail-card">
+                <p className="section-label">Intent routing</p>
+                <p className="table-primary">{routeSource !== 'Unavailable' ? routeSourceLabel(routeSource) : 'Trace loading'}</p>
+                <p className="muted-copy">
+                  {routeSource === 'local_llm_intent'
+                    ? 'The LLM classified the question; deterministic execution kept authority over evidence and reasoning.'
+                    : routeSource === 'keyword_after_llm_fallback'
+                      ? 'LLM routing was attempted, then deterministic keyword routing carried the query.'
+                      : 'Deterministic routing selected the query mode.'}
+                </p>
+                {llmTopicTerms.length > 0 ? <p className="table-secondary">Terms: {llmTopicTerms.join(', ')}</p> : null}
+              </article>
+
+              <article className="panel-subtle detail-card">
+                <p className="section-label">Citations accepted</p>
+                <p className="table-primary">{llmCitedEvidenceCount} evidence · {llmCitedMemoryCount} memory</p>
+                <p className="muted-copy">The LLM can only cite IDs already selected by the deterministic packet.</p>
+              </article>
+
+              <article className="panel-subtle detail-card">
+                <p className="section-label">Deterministic authority</p>
+                <p className="table-primary">{activeResult.supporting_evidence.length} excerpts · {activeResult.supporting_nodes.length} objects</p>
+                <p className="muted-copy">Permissions, evidence selection, contradiction/drift checks, and next-action promotion remain backend-controlled.</p>
+              </article>
+            </div>
+          </Panel>
+
+          <details className="reasoning-disclosure panel section-panel">
+            <summary>Inference and authority boundary details</summary>
             <div className="detail-grid">
               <article className="panel-subtle detail-card">
                 <p className="section-label">Query routing</p>
                 <p className="table-primary">{routeSource !== 'Unavailable' ? routeSourceLabel(routeSource) : 'Trace loading'}</p>
-                <p className="muted-copy">
-                  {routeSource === 'local_llm_intent'
-                    ? `The local LLM classified intent only; deterministic execution still selected evidence and composed the graph packet.`
-                    : routeSource === 'keyword_after_llm_fallback'
-                      ? 'LLM intent routing was attempted, but deterministic keyword routing carried the query.'
-                      : 'The query mode was selected by deterministic routing.'}
-                </p>
-                {readStringArray(routePayload ?? {}, 'topic_terms').length > 0 ? (
-                  <p className="table-secondary">Topic terms: {readStringArray(routePayload ?? {}, 'topic_terms').join(', ')}</p>
-                ) : null}
                 {llmIntentStatus !== 'Unavailable' ? <p className="table-secondary">LLM intent status: {formatLabel(llmIntentStatus)}</p> : null}
               </article>
 
               <article className={synthesisStatus === 'applied' ? 'panel-subtle detail-card action-card' : 'panel-subtle detail-card'}>
                 <p className="section-label">Answer wording</p>
                 <p className="table-primary">{synthesisStatus !== 'Unavailable' ? synthesisStatusLabel(synthesisStatus) : 'Trace loading'}</p>
-                <p className="muted-copy">
-                  {synthesisStatus === 'applied'
-                    ? 'The final answer text was rewritten by the local LLM from the already-selected deterministic evidence packet.'
-                    : synthesisStatus === 'fallback'
-                      ? 'The backend kept the deterministic answer because local synthesis failed or returned invalid structure.'
-                      : 'The answer is the deterministic template output from the graph reasoning path.'}
-                </p>
-                {readStringArray(answerSynthesis ?? {}, 'cited_evidence_ids').length > 0 ? (
-                  <p className="table-secondary">Validated evidence citations: {readStringArray(answerSynthesis ?? {}, 'cited_evidence_ids').length}</p>
+                {readRecordField(answerSynthesis ?? {}, 'confidence_rationale') !== 'Unavailable' ? (
+                  <p className="muted-copy">{readRecordField(answerSynthesis ?? {}, 'confidence_rationale')}</p>
                 ) : null}
               </article>
 
@@ -238,12 +268,10 @@ export function QueryResultPage() {
                 <p className="table-primary">
                   {activeResult.supporting_evidence.length} evidence excerpts · {activeResult.supporting_nodes.length} memory objects
                 </p>
-                <p className="muted-copy">
-                  Permission filtering, evidence selection, contradiction/drift analysis, and next-action generation remain backend-deterministic.
-                </p>
+                <p className="muted-copy">Permission filtering, evidence selection, contradiction/drift analysis, and next-action generation remain backend-deterministic.</p>
               </article>
             </div>
-          </Panel>
+          </details>
 
           <Panel
             title="Decision intelligence packet"
@@ -450,7 +478,9 @@ export function QueryResultPage() {
               </ul>
             </Panel>
 
-            <Panel title="Inspectable reasoning path" description="Trace details remain available for trust and audit, but the primary reading stays centered on memory and evidence.">
+            <details className="reasoning-disclosure panel section-panel">
+              <summary>Inspectable reasoning path</summary>
+              <p className="section-description">Trace details remain available for trust and audit, but stay collapsed so the main answer is easy to read during a demo.</p>
               {!trace ? (
                 <EmptyState title="Trace not loaded" description="The query result is visible, but the inspectable reasoning path could not be loaded." />
               ) : (
@@ -568,7 +598,7 @@ export function QueryResultPage() {
                   })}
                 </div>
               )}
-            </Panel>
+            </details>
           </div>
         </>
       ) : null}
