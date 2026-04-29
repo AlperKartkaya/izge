@@ -235,17 +235,29 @@ class LLMExtractionEnvelope(BaseModel):
 
 
 def extract_text_for_artifact(artifact: Artifact) -> str:
+    settings = get_settings()
     path = Path(artifact.source_path)
     suffix = path.suffix.lower()
     if suffix == ".pdf":
-        reader = PdfReader(str(path))
+        reader = PdfReader(str(path), strict=True)
+        page_count = len(reader.pages)
+        if page_count > settings.max_pdf_pages:
+            raise ValueError(f"PDF has {page_count} pages; maximum allowed is {settings.max_pdf_pages}")
         pages: list[str] = []
+        extracted_chars = 0
         for index, page in enumerate(reader.pages, start=1):
             page_text = page.extract_text(extraction_mode="layout") or page.extract_text() or ""
             if page_text.strip():
-                pages.append(f"[Page {index}]\n{page_text.strip()}")
+                normalized_page = page_text.strip()
+                extracted_chars += len(normalized_page)
+                if extracted_chars > settings.max_extracted_text_chars:
+                    raise ValueError("Extracted PDF text exceeds maximum allowed size")
+                pages.append(f"[Page {index}]\n{normalized_page}")
         return "\n\n".join(pages).strip()
-    return path.read_text(encoding="utf-8", errors="ignore")
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    if len(text) > settings.max_extracted_text_chars:
+        raise ValueError("Extracted text exceeds maximum allowed size")
+    return text
 
 
 def chunk_text(text: str) -> list[str]:
@@ -495,8 +507,8 @@ def _extract_memory_candidates_with_local_llm(chunks: list[str], artifact: Artif
 
 def extract_memory_candidates(chunks: list[str], artifact: Artifact, artifact_text: str) -> tuple[list[ExtractionItem], ExtractionDiagnostics]:
     settings = get_settings()
+    fallback_reason: str | None = None
     if settings.local_llm_enabled:
-        fallback_reason: str | None = None
         try:
             llm_items = _extract_memory_candidates_with_local_llm(chunks, artifact, artifact_text)
             if llm_items:

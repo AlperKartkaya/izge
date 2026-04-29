@@ -674,7 +674,7 @@ def _safe_next_actions_from_payload(
 
 def _stable_signal_id(prefix: str, *parts: str | None) -> str:
     material = "|".join(part or "" for part in parts)
-    digest = hashlib.sha1(material.encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
     return f"{prefix}_{digest}"
 
 
@@ -1881,16 +1881,18 @@ def _signal_visible_rows(db: Session, user: User, *, limit: int = 50) -> list[Si
     trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
     if not trusted_artifact_ids:
         return []
-    return db.scalars(
-        select(Signal)
-        .where(
-            Signal.workspace_id == user.workspace_id,
-            Signal.status == "active",
-            Signal.source_artifact_id.in_(trusted_artifact_ids),
-        )
-        .order_by(Signal.urgency_score.desc(), Signal.created_at.desc())
-        .limit(limit)
-    ).all()
+    return list(
+        db.scalars(
+            select(Signal)
+            .where(
+                Signal.workspace_id == user.workspace_id,
+                Signal.status == "active",
+                Signal.source_artifact_id.in_(trusted_artifact_ids),
+            )
+            .order_by(Signal.urgency_score.desc(), Signal.created_at.desc())
+            .limit(limit)
+        ).all()
+    )
 
 
 def list_persisted_signals(db: Session, user: User, *, limit: int = 50) -> list[SignalRead]:
@@ -2220,7 +2222,8 @@ def _signal_intelligence_path(
         f"{signal.related_topic}; urgency and uncertainty are stored with the signal instead of recomputed in the browser."
     )
     payload = signal.payload_json if isinstance(signal.payload_json, dict) else {}
-    llm_metadata = payload.get("llm_signal_explanation") if isinstance(payload.get("llm_signal_explanation"), dict) else {}
+    llm_metadata_value = payload.get("llm_signal_explanation")
+    llm_metadata = llm_metadata_value if isinstance(llm_metadata_value, dict) else {}
     if llm_metadata.get("status") == "applied":
         guidance_description = (
             "A central company-controlled local LLM assisted only the wording of the persisted explanation and action; "

@@ -23,6 +23,7 @@ import type {
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() || '/api'
+export const COOKIE_SESSION_TOKEN = '__izge_cookie_session__'
 
 type VisibilityScope = 'workspace' | 'restricted'
 
@@ -48,12 +49,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     requestHeaders.set('Content-Type', 'application/json')
   }
 
-  if (token) {
+  if (token && token !== COOKIE_SESSION_TOKEN) {
     requestHeaders.set('Authorization', `Bearer ${token}`)
   }
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
+    credentials: 'same-origin',
     headers: requestHeaders,
     body,
   })
@@ -82,8 +84,15 @@ export const api = {
     })
   },
 
-  getCurrentUser(token: string) {
+  getCurrentUser(token?: string) {
     return request<UserRead>('/users/me', { token })
+  },
+
+  signOut(token?: string) {
+    return request<{ status: string }>('/auth/sign-out', {
+      method: 'POST',
+      token,
+    })
   },
 
   listUsers(token: string) {

@@ -84,6 +84,9 @@ async def upload_artifact(
 
 @router.post("/pasted-text", response_model=ArtifactRead, status_code=status.HTTP_201_CREATED)
 def create_pasted_text_artifact(payload: PastedTextCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ArtifactRead:
+    settings = get_settings()
+    if len(payload.text.encode("utf-8")) > settings.max_pasted_text_bytes:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Pasted text exceeds maximum allowed size")
     if current_user.role != "Admin" and payload.visibility_scope != "workspace":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can create restricted artifacts")
     artifact = Artifact(

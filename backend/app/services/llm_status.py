@@ -1,27 +1,11 @@
 from __future__ import annotations
 
-import json
 import time
 from datetime import UTC, datetime
 from typing import Any
-from urllib import error, request
 
 from app.config import get_settings
-from app.services.llm import LocalLLMError, run_structured_local_prompt
-
-
-def _gateway_url(path: str) -> str:
-    settings = get_settings()
-    return f"{settings.local_llm_base_url.rstrip('/')}{path}"
-
-
-def _request_json(path: str, *, timeout_seconds: float) -> dict[str, Any]:
-    http_request = request.Request(_gateway_url(path), method="GET")
-    try:
-        with request.urlopen(http_request, timeout=timeout_seconds) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except (TimeoutError, error.URLError, error.HTTPError, json.JSONDecodeError) as exc:
-        raise LocalLLMError(f"Unable to reach local LLM gateway at {_gateway_url(path)}: {exc}") from exc
+from app.services.llm import LocalLLMError, request_local_llm_json, run_structured_local_prompt
 
 
 def inspect_local_llm_status() -> dict[str, Any]:
@@ -55,7 +39,7 @@ def inspect_local_llm_status() -> dict[str, Any]:
         return base_payload
 
     try:
-        payload = _request_json("/api/tags", timeout_seconds=timeout_seconds)
+        payload = request_local_llm_json("/api/tags", timeout_seconds=timeout_seconds)
     except LocalLLMError as exc:
         base_payload["error"] = str(exc)
         return base_payload

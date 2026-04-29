@@ -18,9 +18,15 @@ class Settings(BaseSettings):
     pasted_text_root: str = "./data/pasted"
     bootstrap_admin_credentials_path: str = "./data/bootstrap_admin_credentials.json"
     token_ttl_hours: int = 24
+    auth_rate_limit_window_seconds: int = 300
+    auth_rate_limit_max_attempts: int = 8
+    session_cookie_name: str = "izge_session"
     chunk_size: int = 1200
     chunk_overlap: int = 120
     max_upload_bytes: int = 10 * 1024 * 1024
+    max_pasted_text_bytes: int = 2 * 1024 * 1024
+    max_pdf_pages: int = 50
+    max_extracted_text_chars: int = 500_000
     local_llm_enabled: bool = False
     local_llm_base_url: str = "http://127.0.0.1:11434"
     local_llm_model: str = "qwen3.5:4b"
@@ -28,6 +34,7 @@ class Settings(BaseSettings):
     llm_signal_explanation_enabled: bool = False
     llm_query_routing_enabled: bool = False
     llm_answer_synthesis_enabled: bool = False
+    allow_public_llm_base_url: bool = False
 
     model_config = SettingsConfigDict(env_prefix="IZGE_", env_file=".env", extra="ignore")
 

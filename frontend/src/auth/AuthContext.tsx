@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { api } from '../lib/api'
+import { COOKIE_SESSION_TOKEN, api } from '../lib/api'
 import type { SessionState } from '../lib/types'
 
 interface AuthContextValue {
@@ -14,72 +14,47 @@ interface AuthContextValue {
   refreshUser: () => Promise<void>
 }
 
-const STORAGE_KEY = 'izge.session'
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
-function readStoredSession(): SessionState | null {
-  const raw = window.localStorage.getItem(STORAGE_KEY)
-  if (!raw) {
-    return null
-  }
-
-  try {
-    return JSON.parse(raw) as SessionState
-  } catch {
-    window.localStorage.removeItem(STORAGE_KEY)
-    return null
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<SessionState | null>(() => readStoredSession())
-  const [isAuthReady, setIsAuthReady] = useState<boolean>(() => !readStoredSession()?.token)
-
-  useEffect(() => {
-    if (session) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
-      return
-    }
-
-    window.localStorage.removeItem(STORAGE_KEY)
-  }, [session])
+  const [session, setSession] = useState<SessionState | null>(null)
+  const [isAuthReady, setIsAuthReady] = useState(false)
 
   useEffect(() => {
     let cancelled = false
 
-    async function validateStoredSession() {
-      if (!session?.token) {
-        setIsAuthReady(true)
-        return
-      }
-
-      setIsAuthReady(false)
-
+    async function validateCookieSession() {
       try {
-        const user = await api.getCurrentUser(session.token)
+        const user = await api.getCurrentUser()
         if (!cancelled) {
-          setSession((current) => (current ? { ...current, user } : current))
-          setIsAuthReady(true)
+          setSession({
+            token: COOKIE_SESSION_TOKEN,
+            expiresAt: '',
+            user,
+          })
         }
       } catch {
         if (!cancelled) {
           setSession(null)
+        }
+      } finally {
+        if (!cancelled) {
           setIsAuthReady(true)
         }
       }
     }
 
-    void validateStoredSession()
+    void validateCookieSession()
 
     return () => {
       cancelled = true
     }
-  }, [session?.token])
+  }, [])
 
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
-      isAuthenticated: Boolean(session?.token) && isAuthReady,
+      isAuthenticated: Boolean(session) && isAuthReady,
       isAuthReady,
       async signIn(email: string, password: string) {
         const response = await api.signIn(email, password)
@@ -90,10 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
       },
       signOut() {
+        const token = session?.token
         setSession(null)
+        if (token) {
+          void api.signOut(token).catch(() => undefined)
+        }
       },
       async refreshUser() {
-        if (!session?.token) {
+        if (!session) {
           return
         }
 
