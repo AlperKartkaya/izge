@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Izge is a local-first institutional memory and decision intelligence system for reconstructing decisions, contradictions, assumption drift, and evidence-grounded next actions."
+      content="Izge is a local-first institutional memory and decision intelligence system for reconstructing decisions, governing evidence, using private/local inference, and producing evidence-grounded next actions."
     />
-    <title>Izge — Memory before magic</title>
+    <title>Izge — Local-first institutional memory</title>
     <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon-16.png?v=11" />
     <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32.png?v=11" />
     <link rel="shortcut icon" type="image/png" href="./assets/favicon-32.png?v=11" />
@@ -34,10 +34,10 @@
         <a href="#tension">Anti-category</a>
         <a href="#scenario">Scenario</a>
         <a href="#system">System</a>
+        <a href="#boundary">Boundary</a>
         <a href="#modes">Modes</a>
-        <a href="#manifesto">Manifesto</a>
       </nav>
-      <a class="nav-cta" href="https://app.izge.dev">Open app</a>
+      <a class="nav-cta" href="https://app.izge.dev">TRY DEMO</a>
     </header>
 
     <main id="top">
@@ -46,12 +46,13 @@
           <p class="kicker">local-first decision intelligence</p>
           <h1 id="hero-title">Izge reveals the hidden structure of organizational memory.</h1>
           <p class="hero-subhead">
-            Not chat over files. Not internal search. Izge reconstructs decisions, assumptions, contradictions, drift,
-            and next actions from the artifacts your team already leaves behind.
+            Not chat over files. Not internal search. Izge reconstructs decisions, assumptions, constraints,
+            commitments, outcomes, contradictions, drift, and next actions from the artifacts your team already leaves behind —
+            with private/local inference assisting, not deciding.
           </p>
           <div class="cta-row" aria-label="Primary actions">
-            <a class="button primary" href="https://app.izge.dev">Open the app</a>
-            <a class="button secondary" href="#scenario">Watch a decision come back to life</a>
+            <a class="button primary" href="https://app.izge.dev">TRY DEMO</a>
+            <a class="button secondary" href="#boundary">See the trust boundary</a>
           </div>
         </div>
 
@@ -121,6 +122,7 @@
           <p class="strike-card" data-reveal>Not internal search.</p>
           <p class="strike-card" data-reveal>Not chat over files.</p>
           <p class="strike-card" data-reveal>Not a PM copilot.</p>
+          <p class="strike-card" data-reveal>Not a multi-tenant AI black box.</p>
           <p class="truth-card" data-reveal>A system that remembers why decisions happened.</p>
         </div>
       </section>
@@ -131,7 +133,8 @@
           <h2 id="scenario-title">Watch a decision come back to life.</h2>
           <p>
             Upload the fragments. Izge reconstructs what was decided, why it happened, what later contradicted it,
-            and what should happen next.
+            and what should happen next. A new artifact can trigger contradiction, drift, supersession, continuity,
+            or next-action signals against existing memory.
           </p>
         </div>
 
@@ -273,7 +276,7 @@
             <span class="core-ring ring-one"></span>
             <span class="core-ring ring-two"></span>
             <span class="core-ring ring-three"></span>
-            <strong>Memory engine</strong>
+            <strong>Memory boundary</strong>
           </div>
         </div>
         <div class="story-steps">
@@ -288,17 +291,84 @@
             <p>Izge extracts decisions, assumptions, constraints, outcomes, commitments, owners, and timestamps into a traceable graph.</p>
           </div>
           <div class="story-step" data-reveal>
-            <p class="kicker">03 / Reason</p>
+            <p class="kicker">03 / Govern</p>
+            <h2>Evidence has a trust status before it becomes authority.</h2>
+            <p>Admins review artifacts, manage visibility, and reject sources that should stay stored but out of trusted reasoning.</p>
+          </div>
+          <div class="story-step" data-reveal>
+            <p class="kicker">04 / Reason</p>
             <h2>The record starts arguing with itself.</h2>
             <p>Contradictions, drift, lineage, uncertainty, and permission limits become visible before recommendations appear.</p>
           </div>
+          <div class="story-step" data-reveal>
+            <p class="kicker">05 / Assist</p>
+            <h2>The local LLM helps explain the packet. It does not become the record.</h2>
+            <p>Private inference can assist extraction, intent routing, answer wording, and signal explanation while deterministic graph logic remains the authority.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="boundary" class="boundary scene scene-stack" aria-labelledby="boundary-title">
+        <div class="section-heading" data-reveal>
+          <p class="kicker">Local-first trust boundary</p>
+          <h2 id="boundary-title">The LLM is a helper. The institutional record is the authority.</h2>
+          <p>
+            Local-first does not mean every employee runs localhost. It means artifacts, memory, permissions, and inference
+            stay inside an organization-controlled boundary. The browser UI can be served from a customer/internal URL.
+          </p>
+        </div>
+
+        <div class="boundary-grid" aria-label="Izge inference and authority boundary">
+          <article class="boundary-card authority" data-reveal>
+            <span>Authority layer</span>
+            <h3>Deterministic memory engine</h3>
+            <p>Permissions, artifact review, graph construction, signal classification, persistence, and audit trails stay deterministic and inspectable.</p>
+          </article>
+          <article class="boundary-card llm" data-reveal>
+            <span>Private inference</span>
+            <h3>Local/private LLM helper</h3>
+            <p>LLM assistance is bounded to extraction help, query intent routing, final-answer wording, and explanation of already-detected signals.</p>
+          </article>
+          <article class="boundary-card fallback" data-reveal>
+            <span>Fail closed</span>
+            <h3>Schema validation and fallback</h3>
+            <p>If the model is slow, malformed, or overreaches, Izge falls back to deterministic output and preserves the fallback boundary.</p>
+          </article>
+          <article class="boundary-card deployment" data-reveal>
+            <span>Deployment stance</span>
+            <h3>Demo now. Customer-controlled target.</h3>
+            <p><strong>app.izge.dev</strong> is the jury/pilot surface. The customer target is self-hosted or customer-controlled storage, backend, and local/private inference.</p>
+          </article>
+        </div>
+
+        <div class="role-split" aria-label="Admin and member operating model">
+          <article class="role-card" data-reveal>
+            <span>Admin</span>
+            <h3>Prepare and govern the memory.</h3>
+            <ul>
+              <li>Upload and inspect artifacts.</li>
+              <li>Review evidence before it becomes trusted.</li>
+              <li>Verify local/private LLM readiness.</li>
+              <li>Inspect contradiction, drift, and next-action signals.</li>
+            </ul>
+          </article>
+          <article class="role-card" data-reveal>
+            <span>Member</span>
+            <h3>Consume and extend decision intelligence.</h3>
+            <ul>
+              <li>Contribute logs, reports, notes, and updates.</li>
+              <li>Ask real questions in natural language.</li>
+              <li>Inspect evidence, memory objects, and uncertainty.</li>
+              <li>Use grounded guidance without turning memory into chat.</li>
+            </ul>
+          </article>
         </div>
       </section>
 
       <section id="modes" class="modes scene scene-rise" aria-labelledby="modes-title">
         <div class="section-heading split-heading" data-reveal>
           <p class="kicker">Four reasoning modes</p>
-          <h2 id="modes-title">Decision intelligence is not a chat box. It is a sequence of checks.</h2>
+          <h2 id="modes-title">Decision intelligence is not a chat box. It is a sequence of bounded checks.</h2>
         </div>
         <div class="mode-sequence">
           <article class="mode-panel" data-reveal>
@@ -319,7 +389,7 @@
           <article class="mode-panel action" data-reveal>
             <span>04</span>
             <h3>Next-action guidance</h3>
-            <p>Recommend the next move only after the evidence is inspectable.</p>
+            <p>Recommend the next move only after evidence, conflict, drift, and open commitments are inspectable.</p>
           </article>
         </div>
         <div class="reasoning-console" data-reveal aria-label="Evidence-grounded reasoning sequence preview">
@@ -366,10 +436,10 @@
           <h2 id="why-title">Trust is not a feature added later. It is the architecture.</h2>
         </div>
         <div class="why-grid">
-          <article data-reveal><strong>Local-first from day one</strong><span>Private memory should not begin inside a black box.</span></article>
-          <article data-reveal><strong>Evidence-aware reasoning</strong><span>Every answer should show where its confidence came from.</span></article>
+          <article data-reveal><strong>Organization-controlled by design</strong><span>Private memory should not begin inside a multi-tenant AI black box.</span></article>
+          <article data-reveal><strong>Evidence-aware reasoning</strong><span>Every answer should show what evidence supported it and what evidence was missing.</span></article>
           <article data-reveal><strong>Graph-backed intelligence</strong><span>Contradictions need relationships, not keyword matches.</span></article>
-          <article data-reveal><strong>Auditability</strong><span>The system must remember how it reasoned, not just what it said.</span></article>
+          <article data-reveal><strong>Deterministic authority</strong><span>The system must remember how it reasoned, when the LLM helped, and when fallback protected the record.</span></article>
         </div>
       </section>
 
@@ -380,6 +450,7 @@
           <p>History before speculation.</p>
           <p>Evidence before confidence.</p>
           <p>Structure before summary.</p>
+          <p>Private inference before black boxes.</p>
           <p>Local-first trust from day one.</p>
         </div>
       </section>
@@ -387,19 +458,19 @@
       <section id="contact" class="final-cta scene scene-rise" aria-labelledby="cta-title">
         <div data-reveal>
           <p class="kicker">Izge</p>
-          <h2 id="cta-title">Build memory that survives the next meeting.</h2>
+          <h2 id="cta-title">Enter the memory system and inspect the reasoning path.</h2>
           <p>
             For product and roadmap teams entering the phase where forgotten rationale becomes strategic drag.
           </p>
           <div class="cta-row">
-            <a class="button primary" href="https://app.izge.dev">Open the app</a>
+            <a class="button primary" href="https://app.izge.dev">TRY DEMO</a>
             <a class="button secondary" href="#top">Return to the opening claim</a>
           </div>
           <nav class="closing-nav" aria-label="Lower page navigation">
             <a href="#scenario">Scenario</a>
-            <a href="#system">Memory engine</a>
+            <a href="#system">Memory boundary</a>
             <a href="#modes">Reasoning modes</a>
-            <a href="#trust">Trust architecture</a>
+            <a href="#boundary">Trust boundary</a>
             <a href="#manifesto">Manifesto</a>
           </nav>
         </div>
@@ -416,28 +487,29 @@
         <section>
           <h3>Product</h3>
           <a href="#scenario">Use case scenario</a>
-          <a href="#system">Memory engine</a>
+          <a href="#system">Memory boundary</a>
           <a href="#modes">Reasoning modes</a>
           <a href="#trajectory">Product trajectory</a>
         </section>
         <section>
           <h3>Access</h3>
-          <a href="https://app.izge.dev">Open app</a>
+          <a href="https://app.izge.dev">TRY DEMO</a>
           <a href="mailto:hello@izge.dev?subject=Izge%20MVP%20brief">Request MVP brief</a>
           <a href="mailto:hello@izge.dev?subject=Izge%20demo%20scenario">Share demo scenario</a>
         </section>
         <section>
           <h3>Trust</h3>
-          <a href="#trust">Local-first posture</a>
+          <a href="#boundary">Local-first posture</a>
           <a href="mailto:security@izge.dev?subject=Izge%20security%20question">Security contact</a>
           <span>Evidence-linked outputs</span>
-          <span>Auditability by design</span>
+          <span>Deterministic authority</span>
         </section>
         <section>
           <h3>Operating posture</h3>
-          <span>Local-first memory</span>
-          <span>Evidence-linked reasoning</span>
+          <span>Organization-controlled memory</span>
+          <span>Private/local inference helper</span>
           <span>Decision lineage first</span>
+          <span>Fail-closed fallback</span>
         </section>
       </nav>
       <div class="footer-bottom">
