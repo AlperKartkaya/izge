@@ -120,6 +120,113 @@ class LLMSignalExplanation(BaseModel):
         return cleaned[:8]
 
 
+
+def _coerce_query_class(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = " ".join(value.strip().lower().replace("_", " ").replace("-", " ").split())
+    aliases = {
+        "decision lineage": "Decision lineage",
+        "lineage": "Decision lineage",
+        "history": "Decision lineage",
+        "decision history": "Decision lineage",
+        "contradiction analysis": "Contradiction analysis",
+        "contradiction": "Contradiction analysis",
+        "conflict": "Contradiction analysis",
+        "conflict analysis": "Contradiction analysis",
+        "assumption drift": "Assumption drift",
+        "drift": "Assumption drift",
+        "what changed": "Assumption drift",
+        "next action guidance": "Next-action guidance",
+        "next action": "Next-action guidance",
+        "next actions": "Next-action guidance",
+        "recommendation": "Next-action guidance",
+        "guidance": "Next-action guidance",
+    }
+    if normalized in aliases:
+        return aliases[normalized]
+    for label in QUERY_CLASS_LABELS:
+        if normalized == label.lower():
+            return label
+    return None
+
+
+def _first_string(payload: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _first_number(payload: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                continue
+    return None
+
+
+def _normalize_llm_query_intent_payload(payload: dict[str, Any], *, deterministic_route: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    query_class = _coerce_query_class(
+        normalized.get("query_class")
+        or normalized.get("classification")
+        or normalized.get("mode")
+        or normalized.get("reasoning_mode")
+        or normalized.get("intent")
+    )
+    if query_class is None:
+        query_class = _coerce_query_class(deterministic_route.get("query_class")) or "Next-action guidance"
+    normalized["query_class"] = query_class
+
+    confidence = _first_number(normalized, ("confidence", "confidence_score", "score", "route_confidence"))
+    if confidence is None:
+        confidence = _first_number(deterministic_route, ("route_confidence", "confidence")) or 0.65
+    normalized["confidence"] = max(0.0, min(1.0, confidence))
+
+    rationale = _first_string(normalized, ("route_rationale", "rationale", "reason", "reasoning", "explanation"))
+    if rationale is None:
+        rationale = _first_string(deterministic_route, ("route_rationale", "rationale")) or "Local LLM returned a compact route label."
+    normalized["route_rationale"] = rationale
+
+    if not isinstance(normalized.get("secondary_signals"), list):
+        normalized["secondary_signals"] = []
+    if not isinstance(normalized.get("topic_terms"), list):
+        fallback_terms = normalized.get("topics") or normalized.get("keywords") or normalized.get("terms") or []
+        normalized["topic_terms"] = fallback_terms if isinstance(fallback_terms, list) else []
+    normalized["asks_for_evidence"] = bool(normalized.get("asks_for_evidence", True))
+    normalized["needs_next_action"] = bool(normalized.get("needs_next_action", query_class == "Next-action guidance"))
+    return normalized
+
+
+def _normalize_llm_answer_payload(payload: dict[str, Any], *, deterministic_result: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    answer_text = _first_string(normalized, ("answer_text", "answer", "summary", "response", "final_answer"))
+    if answer_text is None:
+        answer_text = _first_string(deterministic_result, ("answer_text", "answer")) or "The current visible memory does not provide enough evidence for a stronger answer."
+    normalized["answer_text"] = answer_text
+
+    why_this_answer = _first_string(normalized, ("why_this_answer", "why", "rationale", "reasoning", "grounded_reasoning", "confidence_rationale"))
+    if why_this_answer is None:
+        why_this_answer = _first_string(deterministic_result, ("why_this_answer", "rationale")) or "This wording is constrained to the deterministic evidence packet."
+    normalized["why_this_answer"] = why_this_answer
+
+    if not isinstance(normalized.get("recommended_next_actions"), list):
+        actions = normalized.get("next_actions") or normalized.get("actions") or deterministic_result.get("recommended_next_actions") or []
+        normalized["recommended_next_actions"] = actions if isinstance(actions, list) else []
+    if not isinstance(normalized.get("cited_evidence_ids"), list):
+        normalized["cited_evidence_ids"] = []
+    if not isinstance(normalized.get("cited_memory_ids"), list):
+        normalized["cited_memory_ids"] = []
+    return normalized
+
+
 def _compact_for_prompt(value: Any, *, depth: int = 0) -> Any:
     if depth > 4:
         return "[truncated]"
@@ -189,7 +296,8 @@ def _query_intent_system_prompt() -> str:
         "You are Izge's local, company-controlled query intent router. Classify the user's question into one of the "
         "fixed MVP reasoning modes only. Do not answer the question, retrieve evidence, invent facts, or create new "
         "memory. Your output only helps deterministic graph execution choose the route and topic focus. Return strict "
-        "JSON matching the schema."
+        "JSON matching the schema. Use these exact top-level keys: query_class, confidence, route_rationale, "
+        "secondary_signals, topic_terms, asks_for_evidence, needs_next_action."
     )
 
 
@@ -224,7 +332,8 @@ def classify_query_intent_with_local_llm(*, query_text: str, deterministic_route
     )
     try:
         parsed = run_structured_local_prompt(system_prompt=_query_intent_system_prompt(), user_prompt=user_prompt, schema=schema)
-        return LLMQueryIntent.model_validate(parsed)
+        normalized = _normalize_llm_query_intent_payload(parsed, deterministic_route=deterministic_route)
+        return LLMQueryIntent.model_validate(normalized)
     except ValidationError as exc:
         raise LocalLLMError("Local LLM query intent did not match the expected schema") from exc
 
@@ -233,7 +342,9 @@ def _query_answer_system_prompt() -> str:
     return (
         "You are Izge's local, company-controlled answer synthesis helper. Rewrite a final answer only from the "
         "deterministic evidence packet. Do not retrieve, infer hidden facts, invent citations, or alter the selected "
-        "query class. If evidence is thin, say so. Return strict JSON matching the schema."
+        "query class. If evidence is thin, say so. Return strict JSON matching the schema. Use these exact top-level "
+        "keys: answer_text, why_this_answer, recommended_next_actions, cited_evidence_ids, cited_memory_ids, "
+        "confidence_rationale."
     )
 
 
@@ -268,7 +379,8 @@ def synthesize_query_answer_with_local_llm(
     )
     try:
         parsed = run_structured_local_prompt(system_prompt=_query_answer_system_prompt(), user_prompt=user_prompt, schema=schema)
-        return LLMQueryAnswerSynthesis.model_validate(parsed)
+        normalized = _normalize_llm_answer_payload(parsed, deterministic_result=deterministic_result)
+        return LLMQueryAnswerSynthesis.model_validate(normalized)
     except ValidationError as exc:
         raise LocalLLMError("Local LLM query answer synthesis did not match the expected schema") from exc
 
