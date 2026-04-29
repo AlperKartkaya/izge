@@ -3576,3 +3576,64 @@ h3 {
     min-height: auto;
   }
 }
+
+/* Language toggle for the static website. */
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.language-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  background: rgba(216, 220, 221, 0.045);
+  color: var(--mist);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.language-toggle button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  transition: color 180ms var(--ease), text-shadow 180ms var(--ease);
+}
+
+.language-toggle button:hover,
+.language-toggle button:focus-visible,
+.language-toggle button.is-active {
+  color: var(--white);
+  text-shadow: 0 0 14px rgba(216, 220, 221, 0.24);
+  outline: 0;
+}
+
+.language-toggle span {
+  color: rgba(216, 220, 221, 0.28);
+}
+
+@media (max-width: 640px) {
+  .header-actions {
+    justify-self: end;
+    gap: 8px;
+  }
+
+  .header-actions .nav-cta {
+    display: inline-flex;
+    padding: 8px 9px;
+    font-size: 0.62rem;
+  }
+
+  .language-toggle {
+    padding: 8px 9px;
+    font-size: 0.62rem;
+  }
+}

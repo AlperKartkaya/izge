@@ -37,7 +37,14 @@
         <a href="#boundary">Boundary</a>
         <a href="#modes">Modes</a>
       </nav>
-      <a class="nav-cta" href="https://app.izge.dev">TRY DEMO</a>
+      <div class="header-actions">
+        <a class="nav-cta" href="https://app.izge.dev">TRY DEMO</a>
+        <div class="language-toggle" role="group" aria-label="Language selector">
+          <button type="button" data-lang-toggle="en" aria-pressed="true">EN</button>
+          <span aria-hidden="true">/</span>
+          <button type="button" data-lang-toggle="tr" aria-pressed="false">TR</button>
+        </div>
+      </div>
     </header>
 
     <main id="top">
@@ -337,7 +344,7 @@
           <article class="boundary-card deployment" data-reveal>
             <span>Deployment stance</span>
             <h3>Demo now. Customer-controlled target.</h3>
-            <p><strong>app.izge.dev</strong> is the jury/pilot surface. The customer target is self-hosted or customer-controlled storage, backend, and local/private inference.</p>
+            <p data-i18n-html="boundary.deployment.copy"><strong>app.izge.dev</strong> is the jury/pilot surface. The customer target is self-hosted or customer-controlled storage, backend, and local/private inference.</p>
           </article>
         </div>
 
@@ -458,7 +465,7 @@
       <section id="contact" class="final-cta scene scene-rise" aria-labelledby="cta-title">
         <div data-reveal>
           <p class="kicker">Izge</p>
-          <h2 id="cta-title">Enter the memory system and inspect the reasoning path.</h2>
+          <h2 id="cta-title">Build memory that survives the next meeting.</h2>
           <p>
             For product and roadmap teams entering the phase where forgotten rationale becomes strategic drag.
           </p>
@@ -494,13 +501,14 @@
         <section>
           <h3>Access</h3>
           <a href="https://app.izge.dev">TRY DEMO</a>
-          <a href="mailto:hello@izge.dev?subject=Izge%20MVP%20brief">Request MVP brief</a>
-          <a href="mailto:hello@izge.dev?subject=Izge%20demo%20scenario">Share demo scenario</a>
+          <a href="mailto:alperkartkaya@gmail.com?subject=Izge%20contact">Contact us</a>
+          <a href="mailto:alperkartkaya@gmail.com?subject=Izge%20MVP%20brief">Request MVP brief</a>
+          <a href="mailto:alperkartkaya@gmail.com?subject=Izge%20demo%20scenario">Share demo scenario</a>
         </section>
         <section>
           <h3>Trust</h3>
           <a href="#boundary">Local-first posture</a>
-          <a href="mailto:security@izge.dev?subject=Izge%20security%20question">Security contact</a>
+          <a href="mailto:alperkartkaya@gmail.com?subject=Izge%20security%20question">Security contact</a>
           <span>Evidence-linked outputs</span>
           <span>Deterministic authority</span>
         </section>
@@ -519,6 +527,7 @@
       </div>
     </footer>
 
+    <script src="./i18n.js" defer></script>
     <script src="./memory-field.js" defer></script>
   </body>
 </html>

@@ -85,6 +85,7 @@ RSYNC_RSH="ssh ${SSH_OPTS[*]}"
 
 if [[ "$SKIP_LOCAL_CHECKS" -eq 0 ]]; then
   log "Running local preflight checks"
+  node --check website/i18n.js
   node --check website/memory-field.js
   python3 - <<'PY'
 from html.parser import HTMLParser
