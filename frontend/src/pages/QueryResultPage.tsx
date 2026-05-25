@@ -32,6 +32,12 @@ function stepTitle(stepKind: string): string {
       return 'Grounding'
     case 'seed_selection':
       return 'Seed selection'
+    case 'bounded_orchestration':
+      return 'Bounded orchestration'
+    case 'context_assembly':
+      return 'Typed context packet'
+    case 'provenance_verification':
+      return 'Provenance verification'
     case 'evidence_selection':
       return 'Evidence selection'
     case 'answer_composition':
@@ -498,6 +504,13 @@ export function QueryResultPage() {
                     const contradictionPairs = readRecordArray(payload, 'contradiction_pairs')
                     const staleAssumptions = readRecordArray(payload, 'stale_assumptions')
                     const supportingEvidence = readRecordArray(payload, 'supporting_evidence')
+                    const orchestrationStages = readRecordArray(payload, 'stages')
+                    const retrievalRecipe = readRecordArray(payload, 'retrieval_recipe')
+                    const selectedMemory = readRecordArray(payload, 'selected_memory')
+                    const selectedEvidencePacket = readRecordArray(payload, 'selected_evidence')
+                    const evidenceBudget = readRecord(payload, 'evidence_budget')
+                    const metrics = readRecord(payload, 'metrics')
+                    const verifierChecks = readRecord(payload, 'checks')
                     const sectionCounts = payload.section_counts as Record<string, unknown> | undefined
                     const stepAnswerSynthesis = readRecord(payload, 'answer_synthesis')
                     const stepSynthesisStatus = stepAnswerSynthesis ? readRecordField(stepAnswerSynthesis, 'status') : 'Unavailable'
@@ -512,6 +525,71 @@ export function QueryResultPage() {
                         {readRecordField(payload, 'route_source') !== 'Unavailable' ? <p className="table-secondary">Route source: {routeSourceLabel(readRecordField(payload, 'route_source'))}</p> : null}
                         {readStringArray(payload, 'topic_terms').length > 0 ? <p className="table-secondary">Topic terms: {readStringArray(payload, 'topic_terms').join(', ')}</p> : null}
                         {readStringArray(payload, 'secondary_signals').length > 0 ? <p className="table-secondary">Secondary signals: {readStringArray(payload, 'secondary_signals').join(', ')}</p> : null}
+                        {readRecordField(payload, 'schema_version') !== 'Unavailable' ? <p className="table-secondary">Trace schema: {readRecordField(payload, 'schema_version')}</p> : null}
+                        {readRecordField(payload, 'context_packet_id') !== 'Unavailable' ? <p className="table-secondary">Context packet: {readRecordField(payload, 'context_packet_id')}</p> : null}
+                        {readRecordField(payload, 'verifier_status') !== 'Unavailable' ? <p className="table-secondary">Verifier status: {formatLabel(readRecordField(payload, 'verifier_status'))}</p> : null}
+
+                        {orchestrationStages.length > 0 ? (
+                          <div className="stack-sm">
+                            <p className="section-label">Bounded stage plan</p>
+                            {orchestrationStages.map((item) => (
+                              <article key={readRecordField(item, 'stage_key')} className="panel-subtle stack-sm">
+                                <div className="timeline-card-head">
+                                  <p className="table-secondary">{formatLabel(readRecordField(item, 'stage_key'))}</p>
+                                  <StatusBadge value={formatLabel(readRecordField(item, 'status'))} />
+                                </div>
+                                <p className="muted-copy">{readRecordField(item, 'reason')}</p>
+                                <p className="table-secondary">Authority: {formatLabel(readRecordField(item, 'authority_level'))} · Outputs: {String(item.output_count ?? 0)}</p>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {retrievalRecipe.length > 0 ? (
+                          <div className="stack-sm">
+                            <p className="section-label">Retrieval recipe</p>
+                            {retrievalRecipe.map((item) => (
+                              <p key={readRecordField(item, 'stage')} className="table-secondary">
+                                {formatLabel(readRecordField(item, 'stage'))}: {String(item.selected_count ?? 0)} / {String(item.candidate_count ?? 0)} selected · omitted {String(item.omitted_count ?? 0)}
+                              </p>
+                            ))}
+                            {evidenceBudget ? (
+                              <p className="table-secondary">
+                                Evidence budget: {String(evidenceBudget.selected_evidence_count ?? 0)} / {String(evidenceBudget.max_selected_evidence ?? 0)} selected · {evidenceBudget.within_budget === true ? 'within budget' : 'outside budget'}
+                              </p>
+                            ) : null}
+                            {metrics ? (
+                              <p className="table-secondary">
+                                Trace payload: {String(metrics.trace_payload_bytes ?? 0)} bytes · assembly {String(metrics.context_assembly_ms ?? 0)} ms
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {selectedMemory.length > 0 || selectedEvidencePacket.length > 0 ? (
+                          <div className="stack-sm">
+                            <p className="section-label">Typed packet contents</p>
+                            {selectedMemory.length > 0 ? <p className="table-secondary">Memory objects: {selectedMemory.map((item) => readRecordField(item, 'title_or_label')).join(', ')}</p> : null}
+                            {selectedEvidencePacket.length > 0 ? (
+                              <p className="table-secondary">
+                                Evidence IDs: {selectedEvidencePacket.map((item) => firstAvailable(readRecordField(item, 'chunk_id'), readRecordField(item, 'artifact_id'))).join(', ')}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {verifierChecks ? (
+                          <div className="stack-sm">
+                            <p className="section-label">Verifier checks</p>
+                            <p className="table-secondary">Status: {formatLabel(readRecordField(payload, 'status'))}</p>
+                            <p className="table-secondary">
+                              {Object.entries(verifierChecks)
+                                .map(([key, value]) => `${formatLabel(key)}: ${value === true ? 'pass' : 'check'}`)
+                                .join(' · ')}
+                            </p>
+                            {readRecordField(payload, 'authority_boundary') !== 'Unavailable' ? <p className="muted-copy">{readRecordField(payload, 'authority_boundary')}</p> : null}
+                          </div>
+                        ) : null}
 
                         {supportingNodes.length > 0 ? (
                           <div className="stack-sm">

@@ -582,6 +582,28 @@ class OrchestrationBlueprintRead(BaseModel):
     current_reflection: dict[str, Any]
 
 
+class OrchestrationStageRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    stage_run_id: str
+    query_run_id: str
+    workspace_id: str
+    stage_key: str
+    status: str
+    authority_level: str
+    verifier_status: str | None = None
+    input_refs: dict[str, Any]
+    output_summary: dict[str, Any]
+    created_at: datetime
+
+
+class OrchestrationStageRunsRead(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    query_run_id: str | None = None
+    runs: list[OrchestrationStageRunRead]
+
+
 class AuditEventRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

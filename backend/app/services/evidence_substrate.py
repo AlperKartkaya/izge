@@ -15,6 +15,7 @@ from app.models import (
     Constraint,
     Decision,
     GraphEdge,
+    OrchestrationStageRun,
     Outcome,
     QueryRun,
     QueryTraceStep,
@@ -149,10 +150,10 @@ def _database_blueprint() -> list[dict[str, Any]]:
         },
         {
             "layer": "5. Signals and traces",
-            "table_names": ["signals", "query_runs", "query_trace_steps", "audit_events"],
+            "table_names": ["signals", "query_runs", "query_trace_steps", "orchestration_stage_runs", "audit_events"],
             "purpose": "Durable proactive findings, query packets, orchestration trace, and governance audit.",
             "write_path": "Ingestion/query generates signals and trace events after deterministic evidence selection.",
-            "read_path": "Dashboard, signal detail, query result trace, audit page, orchestration page.",
+            "read_path": "Dashboard, signal detail, query result trace, orchestration stage-run ledger, audit page, orchestration page.",
             "organization_rule": "Every AI-assisted or orchestration stage must leave a trace showing input evidence, proposed output, and deterministic acceptance gate.",
         },
     ]
@@ -394,8 +395,8 @@ ORCHESTRATION_STAGE_CATALOG: list[dict[str, Any]] = [
         "outputs": ["accepted output", "rejected output", "uncertainty notes"],
         "deterministic_gate": "No trusted output without source artifact/chunk provenance and permission/review clearance.",
         "authority_level": "final_gate",
-        "current_reflection": "permission redaction, review filtering, query trace, and audit events",
-        "status": "planned_as_explicit_stage",
+        "current_reflection": "provenance_verification query trace step plus permission redaction, review filtering, and audit events",
+        "status": "implemented_as_explicit_trace_stage",
     },
 ]
 
@@ -403,6 +404,7 @@ ORCHESTRATION_STAGE_CATALOG: list[dict[str, Any]] = [
 def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
     if user.role == "Admin":
         trace_step_query = select(QueryTraceStep.step_kind, func.count()).where(QueryTraceStep.workspace_id == user.workspace_id)
+        stage_run_query = select(OrchestrationStageRun.stage_key, func.count()).where(OrchestrationStageRun.workspace_id == user.workspace_id)
         query_count_query = select(func.count()).select_from(QueryRun).where(QueryRun.workspace_id == user.workspace_id)
         signal_count_query = select(func.count()).select_from(Signal).where(Signal.workspace_id == user.workspace_id, Signal.status == "active")
         artifact_count_query = select(func.count()).select_from(Artifact).where(Artifact.workspace_id == user.workspace_id)
@@ -416,6 +418,10 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
         trace_step_query = select(QueryTraceStep.step_kind, func.count()).where(
             QueryTraceStep.workspace_id == user.workspace_id,
             QueryTraceStep.query_run_id.in_(visible_query_ids),
+        )
+        stage_run_query = select(OrchestrationStageRun.stage_key, func.count()).where(
+            OrchestrationStageRun.workspace_id == user.workspace_id,
+            OrchestrationStageRun.query_run_id.in_(visible_query_ids),
         )
         query_count_query = select(func.count()).select_from(QueryRun).where(
             QueryRun.workspace_id == user.workspace_id,
@@ -432,6 +438,12 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
         str(step_kind): int(count)
         for step_kind, count in db.execute(
             trace_step_query.group_by(QueryTraceStep.step_kind)
+        ).all()
+    }
+    stage_run_counts = {
+        str(stage_key): int(count)
+        for stage_key, count in db.execute(
+            stage_run_query.group_by(OrchestrationStageRun.stage_key)
         ).all()
     }
     query_count = int(db.scalar(query_count_query) or 0)
@@ -460,5 +472,28 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
             "query_run_count": query_count,
             "active_signal_count": signal_count,
             "trace_step_counts": trace_counts,
+            "stage_run_count": sum(stage_run_counts.values()),
+            "stage_run_counts": stage_run_counts,
         },
+    }
+
+
+def list_orchestration_stage_runs(db: Session, user: User, *, query_run_id: str | None = None, limit: int = 80) -> dict[str, Any]:
+    query = select(OrchestrationStageRun).where(OrchestrationStageRun.workspace_id == user.workspace_id)
+    if query_run_id is not None:
+        query = query.where(OrchestrationStageRun.query_run_id == query_run_id)
+
+    if user.role != "Admin":
+        visible_query_ids = select(QueryRun.query_run_id).where(
+            QueryRun.workspace_id == user.workspace_id,
+            QueryRun.created_by == user.user_id,
+        )
+        query = query.where(OrchestrationStageRun.query_run_id.in_(visible_query_ids))
+
+    runs = db.scalars(query.order_by(OrchestrationStageRun.created_at.desc()).limit(limit)).all()
+    return {
+        "workspace_id": user.workspace_id,
+        "generated_at": datetime.utcnow(),
+        "query_run_id": query_run_id,
+        "runs": runs,
     }

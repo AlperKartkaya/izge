@@ -4,13 +4,14 @@ import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatLabel, formatPercent } from '../lib/format'
-import type { OrchestrationBlueprintRead, ScenarioImpactRead } from '../lib/types'
+import type { OrchestrationBlueprintRead, OrchestrationStageRunsRead, ScenarioImpactRead } from '../lib/types'
 
 const DEFAULT_SCENARIO = 'What changes if the company accelerates self-serve onboarding for enterprise expansion next quarter?'
 
 export function OrchestrationPage() {
   const { session } = useAuth()
   const [blueprint, setBlueprint] = useState<OrchestrationBlueprintRead | null>(null)
+  const [stageRuns, setStageRuns] = useState<OrchestrationStageRunsRead | null>(null)
   const [scenarioText, setScenarioText] = useState(DEFAULT_SCENARIO)
   const [scenarioResult, setScenarioResult] = useState<ScenarioImpactRead | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -24,9 +25,13 @@ export function OrchestrationPage() {
         return
       }
       try {
-        const payload = await api.getOrchestrationBlueprint(session.token)
+        const [payload, runsPayload] = await Promise.all([
+          api.getOrchestrationBlueprint(session.token),
+          api.listOrchestrationStageRuns(session.token, 40),
+        ])
         if (!cancelled) {
           setBlueprint(payload)
+          setStageRuns(runsPayload)
         }
       } catch (caughtError) {
         if (!cancelled) {
@@ -74,6 +79,7 @@ export function OrchestrationPage() {
         <MetricCard label="Execution model" value={blueprint ? formatLabel(blueprint.execution_model) : '—'} />
         <MetricCard label="Stages" value={blueprint?.stage_catalog.length ?? '—'} />
         <MetricCard label="Query runs" value={String(reflection.query_run_count ?? '—')} />
+        <MetricCard label="Stage runs" value={String(reflection.stage_run_count ?? stageRuns?.runs.length ?? '—')} />
         <MetricCard label="Active signals" value={String(reflection.active_signal_count ?? '—')} />
       </section>
 
@@ -118,6 +124,29 @@ export function OrchestrationPage() {
             {blueprint.spawn_policy.map((rule) => <p key={rule} className="evidence-block">{rule}</p>)}
           </div>
         ) : null}
+      </Panel>
+
+      <Panel title="Recent stage-run ledger" description="Persisted bounded stage executions from query runs. This is the replayable audit layer that future sub-agents will write through.">
+        {stageRuns && stageRuns.runs.length > 0 ? (
+          <div className="stack-sm">
+            {stageRuns.runs.slice(0, 12).map((run) => (
+              <article key={run.stage_run_id} className="panel-subtle stack-sm">
+                <div className="timeline-card-head">
+                  <div>
+                    <p className="section-label">{formatLabel(run.stage_key)}</p>
+                    <p className="table-primary">{run.query_run_id}</p>
+                  </div>
+                  <StatusBadge value={formatLabel(run.status)} />
+                </div>
+                <p className="table-secondary">Authority: {formatLabel(run.authority_level)} · Verifier: {run.verifier_status ? formatLabel(run.verifier_status) : 'Unavailable'}</p>
+                <p className="muted-copy">Context packet: {String(run.input_refs.context_packet_id ?? 'not recorded')}</p>
+                <p className="evidence-block">{String(run.output_summary.reason ?? 'No stage summary recorded.')}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No stage runs yet" description="Submit a query to create replayable bounded orchestration stage-run records." />
+        )}
       </Panel>
 
       <Panel title="Bounded scenario support" description="Ask what known assumptions, commitments, constraints, decisions, or outcomes should be reviewed if a scenario changes. This is impact lookup, not unsupported forecasting.">

@@ -15,6 +15,7 @@ import type {
   ScenarioImpactRead,
   TemporalGraphRead,
   OrchestrationBlueprintRead,
+  OrchestrationStageRunsRead,
   MemoryFilesystemRead,
   NextActionSignalItem,
   QueryResult,
@@ -264,6 +265,10 @@ export const api = {
 
   getOrchestrationBlueprint(token: string) {
     return request<OrchestrationBlueprintRead>('/evidence-substrate/orchestration', { token })
+  },
+
+  listOrchestrationStageRuns(token: string, limit = 40) {
+    return request<OrchestrationStageRunsRead>(`/evidence-substrate/orchestration/runs?limit=${limit}`, { token })
   },
 
   getTemporalGraph(token: string, limit = 80) {

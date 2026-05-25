@@ -19,6 +19,7 @@ from app.models import (
     Decision,
     GraphEdge,
     GraphNode,
+    OrchestrationStageRun,
     Outcome,
     QueryRun,
     QueryTraceStep,
@@ -45,6 +46,11 @@ from app.services.llm_reasoning import (
     synthesize_query_answer_with_local_llm,
 )
 from app.services.permissions import artifact_is_visible_to_user
+from app.services.query_context import (
+    build_bounded_orchestration_payload,
+    build_context_packet,
+    build_provenance_verifier_result,
+)
 
 STOPWORDS = {
     "a",
@@ -2322,15 +2328,30 @@ def _persist_query_trace_steps(
 
     graph_evidence_count = sum(1 for item in supporting_evidence if item.evidence_kind == "graph")
     search_fallback_count = sum(1 for item in supporting_evidence if item.evidence_kind != "graph")
-    contradiction_stage_active = query_run.query_class in {"Contradiction analysis", "Next-action guidance"}
-    drift_stage_active = query_run.query_class in {"Assumption drift", "Next-action guidance"}
-    guidance_stage_active = query_run.query_class == "Next-action guidance"
+    context_packet = build_context_packet(
+        packet_id=f"{query_run.query_run_id}:context",
+        query_class=query_run.query_class,
+        supporting_nodes=supporting_nodes,
+        supporting_evidence=supporting_evidence,
+        permissions_limited=permissions_limited,
+        hidden_artifact_count=hidden_artifact_count,
+        rejected_artifact_count=rejected_artifact_count,
+    )
+    verifier_result = build_provenance_verifier_result(
+        context_packet=context_packet,
+        uncertainty_notes=uncertainty_notes,
+    )
 
-    def stage_status(*, active: bool, output_count: int) -> str:
-        if not active:
-            return "skipped"
-        return "completed" if output_count > 0 else "completed_empty"
-
+    bounded_orchestration_payload = build_bounded_orchestration_payload(
+        query_class=query_run.query_class,
+        context_packet=context_packet,
+        verifier_result=verifier_result,
+        contradiction_count=len(contradictions),
+        drift_count=len(stale_assumptions),
+        guidance_count=len(recommended_next_actions),
+    )
+    context_packet_payload = context_packet.to_payload()
+    verifier_payload = verifier_result.to_payload()
     trace_payloads: list[tuple[str, dict[str, Any]]] = [
         (
             "route_decision",
@@ -2338,54 +2359,7 @@ def _persist_query_trace_steps(
         ),
         (
             "bounded_orchestration",
-            {
-                "execution_model": "bounded_stage_orchestration",
-                "stages": [
-                    {
-                        "stage_key": "orchestrator_plan",
-                        "status": "completed",
-                        "authority_level": "proposal_only",
-                        "output_count": 1,
-                        "reason": f"Routed to {query_run.query_class}.",
-                    },
-                    {
-                        "stage_key": "evidence_indexer",
-                        "status": "completed",
-                        "authority_level": "deterministic_gate",
-                        "output_count": len(supporting_evidence),
-                        "reason": "Permission/review filters and evidence selection were evaluated for this query.",
-                    },
-                    {
-                        "stage_key": "contradiction_interrogator",
-                        "status": stage_status(active=contradiction_stage_active, output_count=len(contradictions)),
-                        "authority_level": "deterministic_reasoning",
-                        "output_count": len(contradictions),
-                        "reason": "Primary for contradiction/next-action modes; skipped for modes that do not require conflict interrogation.",
-                    },
-                    {
-                        "stage_key": "assumption_drift_interrogator",
-                        "status": stage_status(active=drift_stage_active, output_count=len(stale_assumptions)),
-                        "authority_level": "deterministic_reasoning",
-                        "output_count": len(stale_assumptions),
-                        "reason": "Primary for drift/next-action modes; skipped for modes that do not require drift interrogation.",
-                    },
-                    {
-                        "stage_key": "guidance_planner",
-                        "status": stage_status(active=guidance_stage_active, output_count=len(recommended_next_actions)),
-                        "authority_level": "deterministic_reasoning_then_optional_wording",
-                        "output_count": len(recommended_next_actions),
-                        "reason": "Only active for next-action guidance queries.",
-                    },
-                    {
-                        "stage_key": "provenance_verifier",
-                        "status": "completed",
-                        "authority_level": "final_gate",
-                        "output_count": len(supporting_evidence),
-                        "reason": "Accepted the answer with selected evidence or explicit uncertainty notes.",
-                    },
-                ],
-                "trust_rule": "Stage outputs remain proposals until selected evidence, permission scope, and provenance are accepted by deterministic gates.",
-            },
+            bounded_orchestration_payload,
         ),
         (
             "seed_selection",
@@ -2397,40 +2371,11 @@ def _persist_query_trace_steps(
         ),
         (
             "context_assembly",
-            {
-                "mode": query_run.query_class,
-                "permission_filter": {
-                    "permissions_limited": permissions_limited,
-                    "hidden_artifact_count": hidden_artifact_count,
-                    "rejected_omitted_count": rejected_artifact_count,
-                },
-                "retrieval_recipe": [
-                    {
-                        "stage": "graph_seed",
-                        "candidate_count": len(supporting_nodes),
-                        "selected_count": len(supporting_nodes),
-                        "omitted_count": 0,
-                        "ranking_basis": ["memory type", "topic overlap", "graph linkage", "recency"],
-                    },
-                    {
-                        "stage": "evidence_selection",
-                        "candidate_count": len(supporting_evidence),
-                        "selected_count": len(supporting_evidence),
-                        "omitted_count": hidden_artifact_count + rejected_artifact_count,
-                        "ranking_basis": ["permission/review scope", "graph evidence first", "FTS fallback only when graph evidence is insufficient"],
-                    },
-                ],
-                "selected_evidence_ids": [item.chunk_id or item.artifact_id for item in supporting_evidence],
-                "omitted_reasons": [
-                    {"reason": "permission_hidden", "count": hidden_artifact_count},
-                    {"reason": "review_rejected", "count": rejected_artifact_count},
-                ],
-                "metrics": {
-                    "selected_evidence_count": len(supporting_evidence),
-                    "trace_payload_bytes": 0,
-                    "context_assembly_ms": 0,
-                },
-            },
+            context_packet_payload,
+        ),
+        (
+            "provenance_verification",
+            verifier_payload,
         ),
         (
             "evidence_selection",
@@ -2477,6 +2422,34 @@ def _persist_query_trace_steps(
             )
         )
 
+    for stage in bounded_orchestration_payload.get("stages", []):
+        if not isinstance(stage, dict):
+            continue
+        stage_key = str(stage.get("stage_key") or "unknown_stage")
+        db.add(
+            OrchestrationStageRun(
+                query_run_id=query_run.query_run_id,
+                workspace_id=query_run.workspace_id,
+                stage_key=stage_key,
+                status=str(stage.get("status") or "unknown"),
+                authority_level=str(stage.get("authority_level") or "unspecified"),
+                verifier_status=verifier_result.status,
+                input_refs={
+                    "context_packet_id": context_packet.packet_id,
+                    "query_class": query_run.query_class,
+                    "schema_version": "orchestration_stage_run_input.v1",
+                },
+                output_summary={
+                    "schema_version": "orchestration_stage_run_output.v1",
+                    "output_count": int(stage.get("output_count") or 0),
+                    "reason": str(stage.get("reason") or ""),
+                    "verifier_status": verifier_result.status,
+                    "verifier_checks": verifier_payload.get("checks", {}),
+                    "trusted_write_allowed": False,
+                },
+            )
+        )
+
 
 def _filter_trace_payload(payload: dict[str, Any], visible_artifact_ids: set[str]) -> dict[str, Any]:
     filtered = dict(payload)
@@ -2513,6 +2486,44 @@ def _filter_trace_payload(payload: dict[str, Any], visible_artifact_ids: set[str
         kept = [item for item in original if item.get("artifact_id") in visible_artifact_ids]
         omitted_count += len(original) - len(kept)
         filtered["supporting_evidence"] = kept
+
+    if isinstance(filtered.get("selected_memory"), list):
+        original = [item for item in filtered["selected_memory"] if isinstance(item, dict)]
+        kept = [item for item in original if item.get("source_artifact_id") in visible_artifact_ids]
+        omitted_count += len(original) - len(kept)
+        filtered["selected_memory"] = kept
+        if isinstance(filtered.get("evidence_budget"), dict):
+            filtered["evidence_budget"] = {
+                **filtered["evidence_budget"],
+                "selected_memory_count": len(kept),
+                "packet_memory_count": len(kept),
+            }
+        if isinstance(filtered.get("metrics"), dict):
+            filtered["metrics"] = {
+                **filtered["metrics"],
+                "selected_memory_count": len(kept),
+                "packet_memory_count": len(kept),
+            }
+
+    if isinstance(filtered.get("selected_evidence"), list):
+        original = [item for item in filtered["selected_evidence"] if isinstance(item, dict)]
+        kept = [item for item in original if item.get("artifact_id") in visible_artifact_ids]
+        omitted_count += len(original) - len(kept)
+        filtered["selected_evidence"] = kept
+        filtered["selected_evidence_ids"] = [item.get("chunk_id") or item.get("artifact_id") for item in kept]
+        if isinstance(filtered.get("evidence_budget"), dict):
+            filtered["evidence_budget"] = {
+                **filtered["evidence_budget"],
+                "selected_evidence_count": len(kept),
+                "packet_evidence_count": len(kept),
+                "within_budget": len(kept) <= int(filtered["evidence_budget"].get("max_selected_evidence", 12)),
+            }
+        if isinstance(filtered.get("metrics"), dict):
+            filtered["metrics"] = {
+                **filtered["metrics"],
+                "selected_evidence_count": len(kept),
+                "packet_evidence_count": len(kept),
+            }
 
     if omitted_count:
         filtered["omitted_items"] = omitted_count

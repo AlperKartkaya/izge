@@ -68,12 +68,13 @@ Rules:
 
 ### 6. Signals, traces, and governance
 
-Tables: `signals`, `query_runs`, `query_trace_steps`, `audit_events`
+Tables: `signals`, `query_runs`, `query_trace_steps`, `orchestration_stage_runs`, `audit_events`
 
 Rules:
 
 - Signals are durable proactive findings from evidence-backed memory, not generic alerts.
-- Query traces must show route decision, bounded orchestration, typed context assembly, evidence selection, answer composition, and uncertainty.
+- Query traces must show route decision, bounded orchestration, typed context assembly, provenance verification, evidence selection, answer composition, and uncertainty.
+- Orchestration stage runs persist the replayable stage ledger for each bounded query execution without exposing raw source paths or hidden artifact content.
 - Audit events prove who uploaded, reviewed, queried, and changed governance state.
 
 ## Bounded orchestration contract
@@ -105,6 +106,10 @@ Every sub-agent/stage packet should include:
 - `output_schema`
 - `max_items`
 - `uncertainty_policy`
+
+The current query runtime now persists this as a `context_packet.v1` trace payload with a paired `provenance_verifier.v1` result. That keeps future sub-agents bounded to selected evidence instead of granting broad database authority.
+
+Each query also writes `orchestration_stage_runs` rows for the bounded stages. Those rows hold packet IDs, stage status, authority level, verifier status, and safe output summaries so the Orchestrate page can replay what happened without granting direct source-file access.
 
 Every stage response should include:
 
@@ -177,7 +182,7 @@ In addition to the original lineage, contradiction, drift, next-action, proactiv
 
 - memory file-system roots, database blueprint, organization guide, safe logical locators, downstream counts, and absence of raw source paths;
 - temporal knowledge graph occurrences, claim-family keys, evidence-backed links, and absence of raw source paths;
-- bounded orchestration traces, context assembly traces, truthful stage statuses, spawn policy, and scoped reflection counts;
+- bounded orchestration traces, typed context packet traces, provenance-verification traces, persisted stage-run ledgers, truthful stage statuses, spawn policy, and scoped reflection counts;
 - bounded scenario support with evidence-backed impacted memory and explicit “not unsupported forecasting” uncertainty;
 - member redaction across memory file-system, temporal graph, scenario impact, and orchestration aggregate endpoints.
 
@@ -186,7 +191,7 @@ In addition to the original lineage, contradiction, drift, next-action, proactiv
 ### Phase 1 — retrieval substrate hardening
 
 - Add explicit chunk-neighbor traversal for context windows.
-- Record token estimates and retrieval latency in `context_assembly` trace payloads.
+- Extend the typed `context_assembly` packet with token estimates and retrieval latency once the first latency budget is defined.
 - Add tests that verify rejected/restricted artifacts cannot enter memory FS, temporal graph, scenario impact, or query traces.
 
 ### Phase 2 — temporal KG persistence

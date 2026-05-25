@@ -228,6 +228,10 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         request("/api/evidence-substrate/orchestration", headers={"Authorization": f"Bearer {member_token}"}),
         "member orchestration blueprint",
     )
+    member_stage_runs = expect_object(
+        request("/api/evidence-substrate/orchestration/runs", headers={"Authorization": f"Bearer {member_token}"}),
+        "member orchestration stage runs",
+    )
     member_scenario = expect_object(
         request(
             "/api/scenario/impact",
@@ -260,9 +264,12 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "memory_filesystem": member_filesystem,
         "temporal_graph": member_temporal_graph,
         "orchestration": member_orchestration,
+        "orchestration_stage_runs": member_stage_runs,
         "scenario_impact": member_scenario,
     }
     member_trace_counts = member_orchestration.get("current_reflection", {}).get("trace_step_counts", {})
+    member_stage_run_counts = member_orchestration.get("current_reflection", {}).get("stage_run_counts", {})
+    member_stage_run_items = member_stage_runs.get("runs", [])
     checks = {
         "restricted_artifact_detail_forbidden": artifact_detail_status == 403,
         "restricted_artifact_signals_forbidden": artifact_signals_status == 403,
@@ -307,8 +314,17 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "orchestration_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["orchestration"], restricted_artifact_id=restricted_artifact_id
         ),
+        "orchestration_stage_runs_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["orchestration_stage_runs"], restricted_artifact_id=restricted_artifact_id
+        ),
         "orchestration_member_query_scoped": member_orchestration.get("current_reflection", {}).get("query_run_count") == 1,
         "orchestration_member_trace_scoped": sum(int(count) for count in member_trace_counts.values()) == len(trace.get("steps", [])),
+        "orchestration_member_stage_runs_scoped": sum(int(count) for count in member_stage_run_counts.values()) == len(member_stage_run_items),
+        "orchestration_member_stage_runs_match_query": all(
+            item.get("query_run_id") == result["query_run_id"]
+            for item in member_stage_run_items
+            if isinstance(item, dict)
+        ),
     }
     return {
         "restricted_artifact_id": restricted_artifact_id,
@@ -404,6 +420,11 @@ def run_eval() -> dict[str, Any]:
             request(f"/api/query/{result['query_run_id']}/trace", headers={"Authorization": f"Bearer {token}"}),
             f"query trace for {spec['name']}",
         )
+        stage_runs = expect_object(
+            request(f"/api/evidence-substrate/orchestration/runs?query_run_id={result['query_run_id']}", headers={"Authorization": f"Bearer {token}"}),
+            f"orchestration stage runs for {spec['name']}",
+        )
+        stage_run_items = [item for item in stage_runs.get("runs", []) if isinstance(item, dict)]
         trace_steps = trace.get("steps", [])
         trace_step_by_kind = {
             str(step.get("step_kind")): step.get("payload", {})
@@ -420,6 +441,8 @@ def run_eval() -> dict[str, Any]:
         expected_drift_status = {"completed", "completed_empty"} if query_class in {"Assumption drift", "Next-action guidance"} else {"skipped"}
         expected_guidance_status = {"completed", "completed_empty"} if query_class == "Next-action guidance" else {"skipped"}
         context_assembly_payload = trace_step_by_kind.get("context_assembly", {})
+        provenance_verification_payload = trace_step_by_kind.get("provenance_verification", {})
+        context_packet_id = context_assembly_payload.get("packet_id")
         contradiction_top = result.get("contradictions", [{}])[0] if result.get("contradictions") else {}
         drift_top = result.get("stale_assumptions", [{}])[0] if result.get("stale_assumptions") else {}
         top_item = contradiction_top if spec["name"] == "contradiction" else drift_top
@@ -483,6 +506,25 @@ def run_eval() -> dict[str, Any]:
             ),
             "trace_context_has_permission_filter": isinstance(context_assembly_payload.get("permission_filter"), dict),
             "trace_context_has_retrieval_recipe": bool(context_assembly_payload.get("retrieval_recipe")),
+            "trace_context_is_typed_packet": context_assembly_payload.get("schema_version") == "context_packet.v1"
+            and context_assembly_payload.get("packet_type") == "query_context_packet",
+            "trace_context_has_selected_evidence_contract": isinstance(context_assembly_payload.get("selected_evidence"), list)
+            and isinstance(context_assembly_payload.get("evidence_budget"), dict),
+            "trace_context_has_replay_contract": isinstance(context_assembly_payload.get("replay_contract"), dict)
+            and context_assembly_payload.get("replay_contract", {}).get("trusted_write_allowed") is False,
+            "trace_context_budget_respected": context_assembly_payload.get("evidence_budget", {}).get("within_budget") is True,
+            "trace_has_provenance_verification": provenance_verification_payload.get("schema_version") == "provenance_verifier.v1"
+            and provenance_verification_payload.get("status") in {"passed", "passed_with_gaps"},
+            "trace_orchestration_links_context_packet": trace_step_by_kind.get("bounded_orchestration", {}).get("context_packet_id") == context_packet_id
+            and trace_step_by_kind.get("bounded_orchestration", {}).get("verifier_status") == provenance_verification_payload.get("status"),
+            "stage_runs_persisted": len(stage_run_items) >= len(orchestration_stages),
+            "stage_runs_match_query": all(item.get("query_run_id") == result["query_run_id"] for item in stage_run_items),
+            "stage_runs_have_verifier_status": all(item.get("verifier_status") in {"passed", "passed_with_gaps"} for item in stage_run_items),
+            "stage_runs_do_not_allow_trusted_writes": all(
+                item.get("output_summary", {}).get("trusted_write_allowed") is False
+                for item in stage_run_items
+            ),
+            "stage_runs_omit_raw_source_paths": "source_path" not in json.dumps(stage_runs, sort_keys=True, default=str),
             "trace_omits_raw_source_paths": "source_path" not in json.dumps(trace, sort_keys=True, default=str),
         }
         results.append(
@@ -506,6 +548,10 @@ def run_eval() -> dict[str, Any]:
         request("/api/evidence-substrate/orchestration", headers={"Authorization": f"Bearer {token}"}),
         "orchestration blueprint",
     )
+    orchestration_stage_runs = expect_object(
+        request("/api/evidence-substrate/orchestration/runs?limit=200", headers={"Authorization": f"Bearer {token}"}),
+        "orchestration stage runs",
+    )
     temporal_graph = expect_object(
         request("/api/graph/temporal?limit=120", headers={"Authorization": f"Bearer {token}"}),
         "temporal graph",
@@ -527,6 +573,8 @@ def run_eval() -> dict[str, Any]:
     filesystem_artifacts = memory_filesystem.get("artifacts", [])
     filesystem_text = json.dumps(memory_filesystem, sort_keys=True, default=str)
     trace_step_counts = orchestration_blueprint.get("current_reflection", {}).get("trace_step_counts", {})
+    stage_run_counts = orchestration_blueprint.get("current_reflection", {}).get("stage_run_counts", {})
+    stage_run_items = [item for item in orchestration_stage_runs.get("runs", []) if isinstance(item, dict)]
     temporal_occurrences = temporal_graph.get("occurrences", [])
     temporal_links = temporal_graph.get("links", [])
     scenario_items = scenario_impact.get("impacted_memory", [])
@@ -563,6 +611,15 @@ def run_eval() -> dict[str, Any]:
                 "has_spawn_policy": bool(orchestration_blueprint.get("spawn_policy")),
                 "reflects_context_assembly_traces": int(trace_step_counts.get("context_assembly", 0)) >= len(EXPECTED["queries"]),
                 "reflects_bounded_orchestration_traces": int(trace_step_counts.get("bounded_orchestration", 0)) >= len(EXPECTED["queries"]),
+                "reflects_provenance_verification_traces": int(trace_step_counts.get("provenance_verification", 0)) >= len(EXPECTED["queries"]),
+                "reflects_persisted_stage_runs": sum(int(count) for count in stage_run_counts.values()) >= len(EXPECTED["queries"]) * 6,
+                "stage_run_endpoint_has_runs": len(stage_run_items) >= len(EXPECTED["queries"]) * 6,
+                "stage_runs_have_safe_schema": all(
+                    item.get("input_refs", {}).get("schema_version") == "orchestration_stage_run_input.v1"
+                    and item.get("output_summary", {}).get("schema_version") == "orchestration_stage_run_output.v1"
+                    for item in stage_run_items
+                ),
+                "stage_runs_do_not_expose_raw_source_paths": "source_path" not in json.dumps(orchestration_stage_runs, sort_keys=True, default=str),
             },
         },
         "temporal_knowledge_graph": {

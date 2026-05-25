@@ -473,6 +473,26 @@ export interface OrchestrationBlueprintRead {
   current_reflection: Record<string, unknown>
 }
 
+export interface OrchestrationStageRunRead {
+  stage_run_id: string
+  query_run_id: string
+  workspace_id: string
+  stage_key: string
+  status: string
+  authority_level: string
+  verifier_status: string | null
+  input_refs: Record<string, unknown>
+  output_summary: Record<string, unknown>
+  created_at: string
+}
+
+export interface OrchestrationStageRunsRead {
+  workspace_id: string
+  generated_at: string
+  query_run_id: string | null
+  runs: OrchestrationStageRunRead[]
+}
+
 export interface TemporalGraphOccurrence {
   occurrence_id: string
   memory_type: string
@@ -523,4 +543,3 @@ export interface ScenarioImpactRead {
   recommended_questions: string[]
   uncertainty_notes: string[]
 }
-

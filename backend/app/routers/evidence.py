@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import User
-from app.schemas.api import MemoryFilesystemRead, OrchestrationBlueprintRead
-from app.services.evidence_substrate import build_memory_filesystem, build_orchestration_blueprint
+from app.schemas.api import MemoryFilesystemRead, OrchestrationBlueprintRead, OrchestrationStageRunsRead
+from app.services.evidence_substrate import build_memory_filesystem, build_orchestration_blueprint, list_orchestration_stage_runs
 
 router = APIRouter(prefix="/evidence-substrate", tags=["evidence-substrate"])
 
@@ -18,3 +18,13 @@ def get_memory_filesystem(current_user: User = Depends(get_current_user), db: Se
 @router.get("/orchestration", response_model=OrchestrationBlueprintRead)
 def get_orchestration_blueprint(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> OrchestrationBlueprintRead:
     return OrchestrationBlueprintRead(**build_orchestration_blueprint(db, current_user))
+
+
+@router.get("/orchestration/runs", response_model=OrchestrationStageRunsRead)
+def get_orchestration_stage_runs(
+    query_run_id: str | None = None,
+    limit: int = Query(default=80, ge=1, le=200),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> OrchestrationStageRunsRead:
+    return OrchestrationStageRunsRead(**list_orchestration_stage_runs(db, current_user, query_run_id=query_run_id, limit=limit))

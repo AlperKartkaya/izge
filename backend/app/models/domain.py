@@ -192,6 +192,21 @@ class QueryTraceStep(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class OrchestrationStageRun(Base):
+    __tablename__ = "orchestration_stage_runs"
+
+    stage_run_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("osr"))
+    query_run_id: Mapped[str] = mapped_column(ForeignKey("query_runs.query_run_id"), nullable=False, index=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    stage_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    authority_level: Mapped[str] = mapped_column(String(64), nullable=False)
+    verifier_status: Mapped[str | None] = mapped_column(String(32), index=True)
+    input_refs: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    output_summary: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class Signal(Base, TimestampMixin):
     __tablename__ = "signals"
 
