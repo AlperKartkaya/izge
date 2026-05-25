@@ -96,8 +96,8 @@ class ContextPacket:
                 "trusted_write_allowed": False,
             },
         }
-        if self.trace_payload_bytes == 0:
-            payload["metrics"]["trace_payload_bytes"] = len(json.dumps(payload, sort_keys=True, default=str))
+        if self.trace_payload_bytes <= 0:
+            payload["metrics"]["trace_payload_bytes"] = stable_payload_size_bytes(payload)
         return payload
 
 
@@ -163,6 +163,7 @@ def build_context_packet(
     permissions_limited: bool,
     hidden_artifact_count: int,
     rejected_artifact_count: int,
+    context_assembly_ms: int = 0,
 ) -> ContextPacket:
     permission_filter = PermissionFilter(
         permissions_limited=permissions_limited,
@@ -203,7 +204,25 @@ def build_context_packet(
         ],
         selected_evidence_count=len(supporting_evidence),
         selected_memory_count=len(supporting_nodes),
+        context_assembly_ms=max(0, int(context_assembly_ms)),
     )
+
+
+def stable_payload_size_bytes(payload: dict[str, Any]) -> int:
+    """Return a self-consistent serialized size for a payload that records its own byte count."""
+
+    size = 0
+    metrics = payload.get("metrics")
+    if not isinstance(metrics, dict):
+        return len(json.dumps(payload, sort_keys=True, default=str).encode("utf-8"))
+    for _ in range(4):
+        metrics["trace_payload_bytes"] = size
+        next_size = len(json.dumps(payload, sort_keys=True, default=str).encode("utf-8"))
+        if next_size == size:
+            return size
+        size = next_size
+    metrics["trace_payload_bytes"] = size
+    return size
 
 
 def build_provenance_verifier_result(*, context_packet: ContextPacket, uncertainty_notes: Sequence[str]) -> ProvenanceVerifierResult:

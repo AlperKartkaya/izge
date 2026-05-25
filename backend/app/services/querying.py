@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import hashlib
 import re
+from time import perf_counter
 from typing import Any
 
 from sqlalchemy import delete, func, select, text
@@ -50,6 +51,7 @@ from app.services.query_context import (
     build_bounded_orchestration_payload,
     build_context_packet,
     build_provenance_verifier_result,
+    stable_payload_size_bytes,
 )
 
 STOPWORDS = {
@@ -2318,6 +2320,7 @@ def _persist_query_trace_steps(
     permissions_limited: bool,
     hidden_artifact_count: int,
     rejected_artifact_count: int,
+    context_assembly_ms: int,
 ) -> None:
     supporting_nodes = result_data.get("supporting_nodes", [])
     supporting_evidence = result_data.get("supporting_evidence", [])
@@ -2336,6 +2339,7 @@ def _persist_query_trace_steps(
         permissions_limited=permissions_limited,
         hidden_artifact_count=hidden_artifact_count,
         rejected_artifact_count=rejected_artifact_count,
+        context_assembly_ms=context_assembly_ms,
     )
     verifier_result = build_provenance_verifier_result(
         context_packet=context_packet,
@@ -2527,6 +2531,10 @@ def _filter_trace_payload(payload: dict[str, Any], visible_artifact_ids: set[str
 
     if omitted_count:
         filtered["omitted_items"] = omitted_count
+    metrics = filtered.get("metrics")
+    if isinstance(metrics, dict) and "trace_payload_bytes" in metrics:
+        filtered["metrics"] = {**metrics, "trace_payload_bytes": 0}
+        filtered["metrics"]["trace_payload_bytes"] = stable_payload_size_bytes(filtered)
     return filtered
 
 
@@ -2595,6 +2603,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
     hidden_artifact_count = max(len(all_workspace_artifacts) - len(visible_artifacts), 0)
     rejected_artifact_count = max(len(visible_artifacts) - len(trusted_visible_artifacts), 0)
 
+    context_assembly_started_at = perf_counter()
     if query_class == "Contradiction analysis":
         result_data = _contradiction_result(db, actor, query_text)
     elif query_class == "Assumption drift":
@@ -2605,6 +2614,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         result_data = _lineage_result(db, actor, query_text)
     if rejected_artifact_count and "Some visible evidence was excluded because an admin marked its source artifact rejected." not in result_data["uncertainty_notes"]:
         result_data["uncertainty_notes"].append("Some visible evidence was excluded because an admin marked its source artifact rejected.")
+    context_assembly_ms = max(0, round((perf_counter() - context_assembly_started_at) * 1000))
     result_data = _apply_optional_llm_answer_synthesis(query_text=query_text, query_class=query_class, result_data=result_data)
 
     query_run = QueryRun(
@@ -2647,6 +2657,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         permissions_limited=permissions_limited,
         hidden_artifact_count=hidden_artifact_count,
         rejected_artifact_count=rejected_artifact_count,
+        context_assembly_ms=context_assembly_ms,
     )
     db.commit()
     log_event(

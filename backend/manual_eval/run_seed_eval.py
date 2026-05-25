@@ -442,6 +442,7 @@ def run_eval() -> dict[str, Any]:
         expected_guidance_status = {"completed", "completed_empty"} if query_class == "Next-action guidance" else {"skipped"}
         context_assembly_payload = trace_step_by_kind.get("context_assembly", {})
         provenance_verification_payload = trace_step_by_kind.get("provenance_verification", {})
+        context_metrics = context_assembly_payload.get("metrics", {}) if isinstance(context_assembly_payload, dict) else {}
         context_packet_id = context_assembly_payload.get("packet_id")
         contradiction_top = result.get("contradictions", [{}])[0] if result.get("contradictions") else {}
         drift_top = result.get("stale_assumptions", [{}])[0] if result.get("stale_assumptions") else {}
@@ -513,6 +514,12 @@ def run_eval() -> dict[str, Any]:
             "trace_context_has_replay_contract": isinstance(context_assembly_payload.get("replay_contract"), dict)
             and context_assembly_payload.get("replay_contract", {}).get("trusted_write_allowed") is False,
             "trace_context_budget_respected": context_assembly_payload.get("evidence_budget", {}).get("within_budget") is True,
+            "trace_context_records_measured_metrics": isinstance(context_metrics.get("trace_payload_bytes"), int)
+            and context_metrics.get("trace_payload_bytes", 0) > 0
+            and isinstance(context_metrics.get("context_assembly_ms"), int)
+            and context_metrics.get("context_assembly_ms", -1) >= 0,
+            "trace_context_payload_byte_count_matches": context_metrics.get("trace_payload_bytes")
+            == len(json.dumps(context_assembly_payload, sort_keys=True, default=str).encode("utf-8")),
             "trace_has_provenance_verification": provenance_verification_payload.get("schema_version") == "provenance_verifier.v1"
             and provenance_verification_payload.get("status") in {"passed", "passed_with_gaps"},
             "trace_orchestration_links_context_packet": trace_step_by_kind.get("bounded_orchestration", {}).get("context_packet_id") == context_packet_id

@@ -111,6 +111,8 @@ The current query runtime now persists this as a `context_packet.v1` trace paylo
 
 Each query also writes `orchestration_stage_runs` rows for the bounded stages. Those rows hold packet IDs, stage status, authority level, verifier status, and safe output summaries so the Orchestrate page can replay what happened without granting direct source-file access.
 
+Startup bootstrap now creates the additive demo tables/columns and fails loudly if the critical portable-memory schema is incomplete (`artifacts`, `query_runs`, `query_trace_steps`, and `orchestration_stage_runs`). That protects existing company databases from silently missing the stage ledger; destructive or shape-changing migrations still need explicit versioned migration tooling.
+
 Every stage response should include:
 
 - structured findings,
@@ -216,7 +218,7 @@ In addition to the original lineage, contradiction, drift, next-action, proactiv
 ### Phase 5 — company deployment hardening
 
 - Add backup/restore commands for the Docker volume.
-- Add migration tooling before changing table shapes.
+- Promote startup schema readiness checks into explicit versioned migrations before changing, renaming, or dropping table shapes.
 - Add HTTPS and auth hardening for customer-controlled deployments.
 - Add documented one-command seed/eval smoke checks inside Docker.
 
