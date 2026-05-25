@@ -23,6 +23,7 @@ import type {
   QueryTraceRead,
   SignalDetail,
   SignalRead,
+  TargetReadinessRead,
   TokenResponse,
   UserRead,
   UserRole,
@@ -266,6 +267,10 @@ export const api = {
 
   getOrchestrationBlueprint(token: string) {
     return request<OrchestrationBlueprintRead>('/evidence-substrate/orchestration', { token })
+  },
+
+  getTargetReadiness(token: string) {
+    return request<TargetReadinessRead>('/evidence-substrate/readiness', { token })
   },
 
   listOrchestrationStageRuns(token: string, limit = 40) {

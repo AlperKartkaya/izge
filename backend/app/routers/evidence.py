@@ -4,8 +4,13 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import User
-from app.schemas.api import MemoryFilesystemRead, OrchestrationBlueprintRead, OrchestrationStageRunsRead
-from app.services.evidence_substrate import build_memory_filesystem, build_orchestration_blueprint, list_orchestration_stage_runs
+from app.schemas.api import MemoryFilesystemRead, OrchestrationBlueprintRead, OrchestrationStageRunsRead, TargetReadinessRead
+from app.services.evidence_substrate import (
+    build_memory_filesystem,
+    build_orchestration_blueprint,
+    build_target_readiness,
+    list_orchestration_stage_runs,
+)
 
 router = APIRouter(prefix="/evidence-substrate", tags=["evidence-substrate"])
 
@@ -28,3 +33,8 @@ def get_orchestration_stage_runs(
     db: Session = Depends(get_db),
 ) -> OrchestrationStageRunsRead:
     return OrchestrationStageRunsRead(**list_orchestration_stage_runs(db, current_user, query_run_id=query_run_id, limit=limit))
+
+
+@router.get("/readiness", response_model=TargetReadinessRead)
+def get_target_readiness(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> TargetReadinessRead:
+    return TargetReadinessRead(**build_target_readiness(db, current_user))

@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models import (
     Artifact,
     ArtifactChunk,
@@ -23,6 +24,7 @@ from app.models import (
     User,
 )
 from app.services.permissions import artifact_is_visible_to_user
+from app.services.scenario_support import SCENARIO_TEMPLATES, TEMPLATE_CATALOG_VERSION
 
 MEMORY_MODELS = [
     ("decision", Decision),
@@ -496,4 +498,378 @@ def list_orchestration_stage_runs(db: Session, user: User, *, query_run_id: str 
         "generated_at": datetime.utcnow(),
         "query_run_id": query_run_id,
         "runs": runs,
+    }
+
+
+def _count_rows(db: Session, model: Any, *criteria: Any) -> int:
+    return int(db.scalar(select(func.count()).select_from(model).where(*criteria)) or 0)
+
+
+def _visible_artifacts_for_readiness(db: Session, user: User) -> list[Artifact]:
+    artifacts = db.scalars(
+        select(Artifact).where(Artifact.workspace_id == user.workspace_id).order_by(Artifact.created_at.desc())
+    ).all()
+    return [artifact for artifact in artifacts if artifact_is_visible_to_user(db, artifact, user)]
+
+
+def _query_scope_counts(db: Session, user: User) -> dict[str, int]:
+    if user.role == "Admin":
+        query_count = _count_rows(db, QueryRun, QueryRun.workspace_id == user.workspace_id)
+        trace_step_count = _count_rows(db, QueryTraceStep, QueryTraceStep.workspace_id == user.workspace_id)
+        stage_run_count = _count_rows(db, OrchestrationStageRun, OrchestrationStageRun.workspace_id == user.workspace_id)
+        context_packet_count = _count_rows(
+            db,
+            QueryTraceStep,
+            QueryTraceStep.workspace_id == user.workspace_id,
+            QueryTraceStep.step_kind == "context_assembly",
+        )
+        provenance_count = _count_rows(
+            db,
+            QueryTraceStep,
+            QueryTraceStep.workspace_id == user.workspace_id,
+            QueryTraceStep.step_kind == "provenance_verification",
+        )
+        orchestration_trace_count = _count_rows(
+            db,
+            QueryTraceStep,
+            QueryTraceStep.workspace_id == user.workspace_id,
+            QueryTraceStep.step_kind == "bounded_orchestration",
+        )
+        return {
+            "query_run_count": query_count,
+            "trace_step_count": trace_step_count,
+            "stage_run_count": stage_run_count,
+            "context_packet_count": context_packet_count,
+            "provenance_verification_count": provenance_count,
+            "bounded_orchestration_trace_count": orchestration_trace_count,
+        }
+
+    scoped_query_ids = select(QueryRun.query_run_id).where(QueryRun.workspace_id == user.workspace_id, QueryRun.created_by == user.user_id).scalar_subquery()
+    query_count = _count_rows(db, QueryRun, QueryRun.workspace_id == user.workspace_id, QueryRun.created_by == user.user_id)
+    trace_step_count = _count_rows(
+        db,
+        QueryTraceStep,
+        QueryTraceStep.workspace_id == user.workspace_id,
+        QueryTraceStep.query_run_id.in_(scoped_query_ids),
+    )
+    stage_run_count = _count_rows(
+        db,
+        OrchestrationStageRun,
+        OrchestrationStageRun.workspace_id == user.workspace_id,
+        OrchestrationStageRun.query_run_id.in_(scoped_query_ids),
+    )
+    context_packet_count = _count_rows(
+        db,
+        QueryTraceStep,
+        QueryTraceStep.workspace_id == user.workspace_id,
+        QueryTraceStep.query_run_id.in_(scoped_query_ids),
+        QueryTraceStep.step_kind == "context_assembly",
+    )
+    provenance_count = _count_rows(
+        db,
+        QueryTraceStep,
+        QueryTraceStep.workspace_id == user.workspace_id,
+        QueryTraceStep.query_run_id.in_(scoped_query_ids),
+        QueryTraceStep.step_kind == "provenance_verification",
+    )
+    orchestration_trace_count = _count_rows(
+        db,
+        QueryTraceStep,
+        QueryTraceStep.workspace_id == user.workspace_id,
+        QueryTraceStep.query_run_id.in_(scoped_query_ids),
+        QueryTraceStep.step_kind == "bounded_orchestration",
+    )
+    return {
+        "query_run_count": query_count,
+        "trace_step_count": trace_step_count,
+        "stage_run_count": stage_run_count,
+        "context_packet_count": context_packet_count,
+        "provenance_verification_count": provenance_count,
+        "bounded_orchestration_trace_count": orchestration_trace_count,
+    }
+
+
+def _workspace_snapshot(db: Session, user: User) -> dict[str, Any]:
+    visible_artifacts = _visible_artifacts_for_readiness(db, user)
+    usable_artifacts = [artifact for artifact in visible_artifacts if artifact.review_status != "rejected"]
+    visible_artifact_ids = [artifact.artifact_id for artifact in visible_artifacts]
+    usable_artifact_ids = [artifact.artifact_id for artifact in usable_artifacts]
+
+    memory_counts = {
+        memory_type: _count_rows(db, model, model.workspace_id == user.workspace_id, model.source_artifact_id.in_(usable_artifact_ids))
+        for memory_type, model in MEMORY_MODELS
+    }
+    signal_criteria = [Signal.workspace_id == user.workspace_id, Signal.status == "active"]
+    if user.role != "Admin":
+        signal_criteria.append(Signal.source_artifact_id.in_(usable_artifact_ids))
+
+    settings = get_settings()
+    query_counts = _query_scope_counts(db, user)
+    local_llm_feature_flags = {
+        "extraction": settings.local_llm_enabled,
+        "query_routing": settings.llm_query_routing_enabled,
+        "answer_synthesis": settings.llm_answer_synthesis_enabled,
+        "signal_explanation": settings.llm_signal_explanation_enabled,
+    }
+    enabled_llm_features = sum(1 for enabled in local_llm_feature_flags.values() if enabled)
+
+    return {
+        "visible_artifact_count": len(visible_artifacts),
+        "usable_artifact_count": len(usable_artifacts),
+        "reviewed_artifact_count": sum(1 for artifact in visible_artifacts if artifact.review_status == "reviewed"),
+        "pending_review_artifact_count": sum(1 for artifact in visible_artifacts if artifact.review_status in {"submitted", "needs_review"}),
+        "rejected_artifact_count": sum(1 for artifact in visible_artifacts if artifact.review_status == "rejected"),
+        "indexed_chunk_count": _count_rows(db, ArtifactChunk, ArtifactChunk.artifact_id.in_(usable_artifact_ids)),
+        "memory_counts": memory_counts,
+        "memory_object_count": sum(memory_counts.values()),
+        "graph_edge_count": _count_rows(db, GraphEdge, GraphEdge.workspace_id == user.workspace_id, GraphEdge.evidence_artifact_id.in_(usable_artifact_ids)),
+        "active_signal_count": _count_rows(db, Signal, *signal_criteria),
+        "scenario_template_count": len(SCENARIO_TEMPLATES),
+        "scenario_template_catalog_version": TEMPLATE_CATALOG_VERSION,
+        "local_llm_features_enabled": enabled_llm_features,
+        "local_llm_feature_flags": local_llm_feature_flags,
+        **query_counts,
+    }
+
+
+def _proof_signal(label: str, value: str | int | float | bool, route: str | None = None) -> dict[str, Any]:
+    if isinstance(value, bool):
+        rendered = "yes" if value else "no"
+    else:
+        rendered = str(value)
+    return {"label": label, "value": rendered, "route": route}
+
+
+def _score_counts(areas: list[dict[str, Any]]) -> dict[str, int]:
+    counts: Counter[str] = Counter(str(area["status"]) for area in areas)
+    return {status: counts.get(status, 0) for status in ("implemented", "partial", "planned")}
+
+
+def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
+    snapshot = _workspace_snapshot(db, user)
+    stage_count = len(ORCHESTRATION_STAGE_CATALOG)
+    implemented_stage_count = sum(
+        1 for stage in ORCHESTRATION_STAGE_CATALOG if str(stage.get("status", "")).startswith("implemented")
+    )
+    partial_stage_count = sum(
+        1 for stage in ORCHESTRATION_STAGE_CATALOG if "partial" in str(stage.get("status", ""))
+    )
+    enabled_llm_features = int(snapshot["local_llm_features_enabled"])
+    local_llm_label = "configured" if enabled_llm_features else "deterministic fallback"
+
+    areas: list[dict[str, Any]] = [
+        {
+            "area_key": "evidence_substrate_fast_retrieval",
+            "title": "Evidence substrate / fast retrieval foundation",
+            "status": "implemented",
+            "score": 0.92,
+            "promise": "Artifacts enter as evidence roots, become ordered chunks, and are filtered by permissions and review state before retrieval or reasoning.",
+            "demo_reflection": "The demo exposes this as a memory file-system with safe artifact locators, checksums, chunk counts, memory coverage, trust boundaries, and organization guidance.",
+            "evidence_routes": ["/api/evidence-substrate/filesystem", "/api/artifacts", "/api/ingestion/run"],
+            "demo_surfaces": ["/memory-filesystem", "/artifacts", "/ingestion"],
+            "proof_signals": [
+                _proof_signal("Visible artifacts", snapshot["visible_artifact_count"], "/api/evidence-substrate/filesystem"),
+                _proof_signal("Indexed chunks", snapshot["indexed_chunk_count"], "/api/evidence-substrate/filesystem"),
+                _proof_signal("Usable artifacts", snapshot["usable_artifact_count"], "/api/artifacts"),
+            ],
+            "remaining_work": [
+                "Add explicit chunk-neighbor traversal and latency/token budget metrics.",
+                "Promote current startup schema checks into versioned migration tooling before destructive table changes.",
+            ],
+            "risks": ["Retrieval is deterministic and inspectable, but not yet tuned against broad real-company corpora."],
+        },
+        {
+            "area_key": "temporal_knowledge_graph",
+            "title": "Temporal knowledge graph",
+            "status": "partial",
+            "score": 0.72,
+            "promise": "Decisions, assumptions, constraints, outcomes, and commitments should become time-aware claim occurrences with evidence-backed relationships.",
+            "demo_reflection": "The current graph persists typed memory nodes and evidence-backed edges, then exposes a temporal read model for claim family, status, and relationship inspection.",
+            "evidence_routes": ["/api/graph/summary", "/api/graph/temporal", "/api/graph/neighborhood/{memory_type}/{memory_id}"],
+            "demo_surfaces": ["/graph", "/memory/:memoryType/:memoryId"],
+            "proof_signals": [
+                _proof_signal("Memory objects", snapshot["memory_object_count"], "/api/graph/summary"),
+                _proof_signal("Graph edges", snapshot["graph_edge_count"], "/api/graph/summary"),
+                _proof_signal("Memory types", len([count for count in snapshot["memory_counts"].values() if count]), "/api/graph/summary"),
+            ],
+            "remaining_work": [
+                "Add explicit claim-family and claim-occurrence tables after the read model remains stable.",
+                "Persist validity windows and status-transition history instead of deriving them only from current rows and edges.",
+            ],
+            "risks": ["Temporal semantics are visible and test-covered as a read model, but not yet a first-class persisted KG schema."],
+        },
+        {
+            "area_key": "typed_context_assembly",
+            "title": "Typed context assembly",
+            "status": "implemented",
+            "score": 0.88,
+            "promise": "Answers should be assembled from typed memory objects, selected evidence, omitted reasons, permissions, review state, and uncertainty—not raw documents handed to an LLM.",
+            "demo_reflection": "Query traces expose context_packet.v1, selected evidence, replay contracts, budget metrics, and provenance verification before answer composition.",
+            "evidence_routes": ["/api/query", "/api/query/{query_run_id}/trace"],
+            "demo_surfaces": ["/query", "/query/:queryRunId"],
+            "proof_signals": [
+                _proof_signal("Query runs", snapshot["query_run_count"], "/api/query"),
+                _proof_signal("Context packets", snapshot["context_packet_count"], "/api/query/{query_run_id}/trace"),
+                _proof_signal("Provenance verifier traces", snapshot["provenance_verification_count"], "/api/query/{query_run_id}/trace"),
+            ],
+            "remaining_work": [
+                "Extract a shared ContextPacket schema used by query, scenario, and future stage packets.",
+                "Add more packet-size and omission-reason regressions for large workspaces.",
+            ],
+            "risks": ["The packet contract is strong for current query/scenario surfaces, but not yet shared as a single schema module."],
+        },
+        {
+            "area_key": "bounded_internal_orchestration",
+            "title": "Bounded internal orchestration",
+            "status": "partial",
+            "score": 0.78,
+            "promise": "An orchestrator may divide work into specialist stages, but every stage must receive a typed context packet and return cited output through deterministic gates.",
+            "demo_reflection": "The Orchestrate page shows a bounded stage catalog, spawn policy, current runtime boundary, and a persisted stage-run ledger for query executions.",
+            "evidence_routes": ["/api/evidence-substrate/orchestration", "/api/evidence-substrate/orchestration/runs"],
+            "demo_surfaces": ["/orchestration", "/query/:queryRunId"],
+            "proof_signals": [
+                _proof_signal("Stage catalog", stage_count, "/api/evidence-substrate/orchestration"),
+                _proof_signal("Implemented stages", implemented_stage_count, "/api/evidence-substrate/orchestration"),
+                _proof_signal("Partial stages", partial_stage_count, "/api/evidence-substrate/orchestration"),
+                _proof_signal("Persisted stage runs", snapshot["stage_run_count"], "/api/evidence-substrate/orchestration/runs"),
+            ],
+            "remaining_work": [
+                "Execute independent stages concurrently only after their inputs are proven independent.",
+                "Store richer sub-agent output payloads and replay summaries without granting unrestricted database authority.",
+            ],
+            "risks": ["The current implementation is intentionally single-process; true multi-agent execution remains behind the provenance gate."],
+        },
+        {
+            "area_key": "contradiction_drift_next_actions",
+            "title": "Contradiction, assumption drift, and next-action intelligence",
+            "status": "implemented",
+            "score": 0.9,
+            "promise": "Izge should surface contradictions, assumptions that decayed, supersession/continuity, and grounded next actions with evidence.",
+            "demo_reflection": "Dashboard, Graph, Ingestion, Signal Detail, and Query Result surfaces all expose durable signal counts, evidence, memory refs, uncertainty, and recommended actions.",
+            "evidence_routes": ["/api/contradictions", "/api/assumptions/stale", "/api/next-actions", "/api/signals"],
+            "demo_surfaces": ["/", "/graph", "/signals/:signalId", "/ingestion"],
+            "proof_signals": [
+                _proof_signal("Active signals", snapshot["active_signal_count"], "/api/signals"),
+                _proof_signal("Trace steps", snapshot["trace_step_count"], "/api/query/{query_run_id}/trace"),
+                _proof_signal("Open commitments", snapshot["memory_counts"].get("commitment", 0), "/api/graph/summary"),
+            ],
+            "remaining_work": [
+                "Add more real-company fixtures beyond the current product-roadmap seed.",
+                "Keep evaluation focused on grounded answer quality, not generic analytics-card growth.",
+            ],
+            "risks": ["Signal quality is strongest where artifacts follow the current evidence structure and topic overlap conventions."],
+        },
+        {
+            "area_key": "private_ai_evidence_discipline",
+            "title": "Private AI assistance with evidence discipline",
+            "status": "partial",
+            "score": 0.7 if enabled_llm_features else 0.62,
+            "promise": "Private/local inference may assist extraction, routing, wording, and signal explanation while deterministic graph logic remains the authority.",
+            "demo_reflection": "The backend has feature flags, health/smoke endpoints, deterministic fallback, answer trace boundaries, and provenance verification so AI wording cannot become trusted memory by itself.",
+            "evidence_routes": ["/api/system/llm-status", "/api/system/llm-smoke", "/api/query/{query_run_id}/trace"],
+            "demo_surfaces": ["/admin", "/query/:queryRunId"],
+            "proof_signals": [
+                _proof_signal("LLM mode", local_llm_label, "/api/system/llm-status"),
+                _proof_signal("Enabled AI feature flags", enabled_llm_features, "/api/system/llm-status"),
+                _proof_signal("Provenance verifier traces", snapshot["provenance_verification_count"], "/api/query/{query_run_id}/trace"),
+            ],
+            "remaining_work": [
+                "Run and record deployment-specific local/private LLM smoke evidence for the actual customer machine.",
+                "Add answer-quality evaluator fixtures that compare meaningful responses against cited evidence.",
+            ],
+            "risks": ["If local LLM features are disabled or the model is absent, Izge remains deterministic but cannot demonstrate private inference assistance live."],
+        },
+        {
+            "area_key": "demo_ui_storytelling",
+            "title": "Demo UI / storytelling",
+            "status": "implemented",
+            "score": 0.88,
+            "promise": "The demo should make memory organization, graph reasoning, orchestration, evidence, and scenario support visible rather than hidden in backend internals.",
+            "demo_reflection": "Primary nav now covers Command Board, Evidence, Build, Interrogate, Graph, Memory FS, Orchestrate, and this Readiness page.",
+            "evidence_routes": [
+                "/api/evidence-substrate/filesystem",
+                "/api/graph/temporal",
+                "/api/evidence-substrate/orchestration",
+                "/api/scenario/impact",
+                "/api/evidence-substrate/readiness",
+            ],
+            "demo_surfaces": ["/", "/memory-filesystem", "/graph", "/orchestration", "/readiness"],
+            "proof_signals": [
+                _proof_signal("Visible demo surfaces", 5, "/readiness"),
+                _proof_signal("Scenario templates", snapshot["scenario_template_count"], "/api/scenario/templates"),
+                _proof_signal("Target score route", "available", "/api/evidence-substrate/readiness"),
+            ],
+            "remaining_work": [
+                "Add a one-click scripted demo runbook that starts from clean seed data and records the path.",
+                "Add per-company onboarding copy that separates operator setup from viewer storytelling.",
+            ],
+            "risks": ["The UI is now explicit, but browser QA should remain part of every visible demo pass."],
+        },
+        {
+            "area_key": "bounded_scenario_support",
+            "title": "Bounded scenario support",
+            "status": "partial",
+            "score": 0.82,
+            "promise": "Scenario questions should identify known assumptions, commitments, constraints, decisions, and outcomes needing review without fabricating forecasts.",
+            "demo_reflection": "The Orchestrate page calls a template-guided impact endpoint that returns impacted memory, selected evidence, candidate snapshots, deterministic ranking, and follow-up questions.",
+            "evidence_routes": ["/api/scenario/templates", "/api/scenario/impact"],
+            "demo_surfaces": ["/orchestration"],
+            "proof_signals": [
+                _proof_signal("Scenario templates", snapshot["scenario_template_count"], "/api/scenario/templates"),
+                _proof_signal("Template catalog", snapshot["scenario_template_catalog_version"], "/api/scenario/templates"),
+                _proof_signal("Forecasting allowed", "no", "/api/scenario/impact"),
+            ],
+            "remaining_work": [
+                "Persist scenario packet runs so deterministic summaries can be compared over time.",
+                "Add evaluator fixtures for unsupported-forecast refusal and broader company scenario lenses.",
+            ],
+            "risks": ["This is impact lookup, not simulation; expansion should stay bounded to evidence-backed memory."],
+        },
+        {
+            "area_key": "portable_runtime",
+            "title": "Portable runtime for any company machine",
+            "status": "partial",
+            "score": 0.8,
+            "promise": "Docker Compose should start backend, frontend, persisted database/storage, and proxy on a clean company-controlled machine.",
+            "demo_reflection": "The project includes Compose runtime, persisted volumes, generated bootstrap admin credentials, backup/restore scripts, and a Docker smoke evaluation path.",
+            "evidence_routes": ["/health", "/api/evidence-substrate/readiness"],
+            "demo_surfaces": ["Docker Compose runtime", "frontend proxy", "backend health"],
+            "proof_signals": [
+                _proof_signal("Portable smoke gate", "documented"),
+                _proof_signal("Persisted workspace volume", "yes"),
+                _proof_signal("Bootstrap credentials file", "generated on first run"),
+            ],
+            "remaining_work": [
+                "Add CI automation around the Docker smoke eval.",
+                "Add HTTPS and stronger auth hardening guidance for production customer-controlled deployments.",
+            ],
+            "risks": ["Portable local runtime is implemented; production hardening still needs deployment-specific security work."],
+        },
+    ]
+
+    target_score = round(sum(float(area["score"]) for area in areas) / len(areas), 4)
+    return {
+        "workspace_id": user.workspace_id,
+        "generated_at": datetime.utcnow(),
+        "schema_version": "target_readiness.v1",
+        "target_score": target_score,
+        "status_counts": _score_counts(areas),
+        "current_workspace_snapshot": snapshot,
+        "areas": areas,
+        "next_best_passes": [
+            "Persist scenario packet runs and compare replay summaries over time under current permissions.",
+            "Promote the temporal read model into claim-family and claim-occurrence tables with validity windows.",
+            "Introduce true concurrent sub-agent execution only behind typed context packets and deterministic provenance verification.",
+            "Automate Docker smoke eval and local/private LLM smoke evidence in CI or deployment runbooks.",
+        ],
+        "evaluator_gate": {
+            "name": "company_portable_memory_system_seed_eval",
+            "command": "cd backend && .venv/bin/python -m manual_eval.run_isolated_seed_eval",
+            "required_checks": [
+                "readiness_endpoint_has_all_target_areas",
+                "readiness_areas_have_evidence_routes_and_demo_surfaces",
+                "readiness_omits_host_storage_locations",
+                "readiness_tracks_remaining_work",
+            ],
+        },
     }

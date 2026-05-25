@@ -493,6 +493,44 @@ export interface OrchestrationStageRunsRead {
   runs: OrchestrationStageRunRead[]
 }
 
+export type ReadinessAreaStatus = 'implemented' | 'partial' | 'planned'
+
+export interface TargetReadinessProofSignal {
+  label: string
+  value: string
+  route: string | null
+}
+
+export interface TargetReadinessAreaRead {
+  area_key: string
+  title: string
+  status: ReadinessAreaStatus
+  score: number
+  promise: string
+  demo_reflection: string
+  evidence_routes: string[]
+  demo_surfaces: string[]
+  proof_signals: TargetReadinessProofSignal[]
+  remaining_work: string[]
+  risks: string[]
+}
+
+export interface TargetReadinessRead {
+  workspace_id: string
+  generated_at: string
+  schema_version: 'target_readiness.v1'
+  target_score: number
+  status_counts: Record<ReadinessAreaStatus, number>
+  current_workspace_snapshot: Record<string, unknown>
+  areas: TargetReadinessAreaRead[]
+  next_best_passes: string[]
+  evaluator_gate: {
+    name: string
+    command: string
+    required_checks: string[]
+  }
+}
+
 export interface TemporalGraphOccurrence {
   occurrence_id: string
   memory_type: string

@@ -729,6 +729,41 @@ class OrchestrationStageRunsRead(BaseModel):
     runs: list[OrchestrationStageRunRead]
 
 
+ReadinessAreaStatus = Literal["implemented", "partial", "planned"]
+
+
+class TargetReadinessProofSignal(BaseModel):
+    label: str
+    value: str
+    route: str | None = None
+
+
+class TargetReadinessAreaRead(BaseModel):
+    area_key: str
+    title: str
+    status: ReadinessAreaStatus
+    score: float = Field(ge=0, le=1)
+    promise: str
+    demo_reflection: str
+    evidence_routes: list[str]
+    demo_surfaces: list[str]
+    proof_signals: list[TargetReadinessProofSignal]
+    remaining_work: list[str]
+    risks: list[str] = Field(default_factory=list)
+
+
+class TargetReadinessRead(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    schema_version: Literal["target_readiness.v1"]
+    target_score: float = Field(ge=0, le=1)
+    status_counts: dict[str, int]
+    current_workspace_snapshot: dict[str, Any]
+    areas: list[TargetReadinessAreaRead]
+    next_best_passes: list[str]
+    evaluator_gate: dict[str, Any]
+
+
 class AuditEventRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

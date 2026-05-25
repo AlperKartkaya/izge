@@ -10,6 +10,7 @@ const primaryNavigation = [
   { to: '/graph', label: 'Graph' },
   { to: '/memory-filesystem', label: 'Memory FS' },
   { to: '/orchestration', label: 'Orchestrate' },
+  { to: '/readiness', label: 'Readiness' },
 ]
 
 export function AppShell() {

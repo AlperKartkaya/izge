@@ -69,6 +69,10 @@ def contains_any_fragment(value: str, fragments: list[str]) -> bool:
     return any(fragment.lower() in lowered for fragment in fragments)
 
 
+def is_bounded_score(value: Any) -> bool:
+    return isinstance(value, (int, float)) and 0 <= float(value) <= 1
+
+
 def upload_seed(token: str) -> dict[str, dict[str, Any]]:
     headers = {"Authorization": f"Bearer {token}"}
     uploaded: dict[str, dict[str, Any]] = {}
@@ -242,6 +246,10 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         request("/api/evidence-substrate/orchestration/runs", headers={"Authorization": f"Bearer {member_token}"}),
         "member orchestration stage runs",
     )
+    member_readiness = expect_object(
+        request("/api/evidence-substrate/readiness", headers={"Authorization": f"Bearer {member_token}"}),
+        "member target readiness",
+    )
     member_scenario = expect_object(
         request(
             "/api/scenario/impact",
@@ -275,6 +283,7 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "temporal_graph": member_temporal_graph,
         "orchestration": member_orchestration,
         "orchestration_stage_runs": member_stage_runs,
+        "target_readiness": member_readiness,
         "scenario_impact": member_scenario,
     }
     member_trace_counts = member_orchestration.get("current_reflection", {}).get("trace_step_counts", {})
@@ -326,6 +335,9 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         ),
         "orchestration_stage_runs_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["orchestration_stage_runs"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "target_readiness_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["target_readiness"], restricted_artifact_id=restricted_artifact_id
         ),
         "orchestration_member_query_scoped": member_orchestration.get("current_reflection", {}).get("query_run_count") == 1,
         "orchestration_member_trace_scoped": sum(int(count) for count in member_trace_counts.values()) == len(trace.get("steps", [])),
@@ -569,6 +581,10 @@ def run_eval() -> dict[str, Any]:
         request("/api/evidence-substrate/orchestration/runs?limit=200", headers={"Authorization": f"Bearer {token}"}),
         "orchestration stage runs",
     )
+    target_readiness = expect_object(
+        request("/api/evidence-substrate/readiness", headers={"Authorization": f"Bearer {token}"}),
+        "target readiness",
+    )
     temporal_graph = expect_object(
         request("/api/graph/temporal?limit=120", headers={"Authorization": f"Bearer {token}"}),
         "temporal graph",
@@ -596,6 +612,11 @@ def run_eval() -> dict[str, Any]:
     trace_step_counts = orchestration_blueprint.get("current_reflection", {}).get("trace_step_counts", {})
     stage_run_counts = orchestration_blueprint.get("current_reflection", {}).get("stage_run_counts", {})
     stage_run_items = [item for item in orchestration_stage_runs.get("runs", []) if isinstance(item, dict)]
+    readiness_areas = [item for item in target_readiness.get("areas", []) if isinstance(item, dict)]
+    readiness_area_keys = {str(item.get("area_key")) for item in readiness_areas}
+    readiness_status_counts = target_readiness.get("status_counts", {})
+    readiness_snapshot = target_readiness.get("current_workspace_snapshot", {})
+    readiness_text = json.dumps(target_readiness, sort_keys=True, default=str)
     temporal_occurrences = temporal_graph.get("occurrences", [])
     temporal_links = temporal_graph.get("links", [])
     scenario_items = scenario_impact.get("impacted_memory", [])
@@ -689,6 +710,60 @@ def run_eval() -> dict[str, Any]:
                     for item in stage_run_items
                 ),
                 "stage_runs_do_not_expose_raw_source_paths": "source_path" not in json.dumps(orchestration_stage_runs, sort_keys=True, default=str),
+            },
+        },
+        "target_readiness": {
+            "target_score": target_readiness.get("target_score"),
+            "area_count": len(readiness_areas),
+            "checks": {
+                "readiness_endpoint_has_all_target_areas": {
+                    "evidence_substrate_fast_retrieval",
+                    "temporal_knowledge_graph",
+                    "typed_context_assembly",
+                    "bounded_internal_orchestration",
+                    "contradiction_drift_next_actions",
+                    "private_ai_evidence_discipline",
+                    "demo_ui_storytelling",
+                    "bounded_scenario_support",
+                    "portable_runtime",
+                }.issubset(readiness_area_keys),
+                "readiness_target_score_bounded": is_bounded_score(target_readiness.get("target_score")),
+                "readiness_areas_have_evidence_routes_and_demo_surfaces": all(
+                    item.get("evidence_routes") and item.get("demo_surfaces") for item in readiness_areas
+                ),
+                "readiness_areas_have_status_score_and_remaining_work": all(
+                    item.get("status") in {"implemented", "partial", "planned"}
+                    and is_bounded_score(item.get("score"))
+                    and isinstance(item.get("remaining_work"), list)
+                    for item in readiness_areas
+                ),
+                "readiness_areas_have_proof_signals": all(item.get("proof_signals") for item in readiness_areas),
+                "readiness_status_counts_match_area_statuses": sum(int(value) for value in readiness_status_counts.values()) == len(readiness_areas),
+                "readiness_reflects_workspace_counts": int(readiness_snapshot.get("visible_artifact_count", 0)) >= len(uploaded_artifacts)
+                and int(readiness_snapshot.get("memory_object_count", 0)) > 0
+                and int(readiness_snapshot.get("stage_run_count", 0)) >= len(EXPECTED["queries"]) * 6,
+                "readiness_names_required_future_gaps": contains_all_fragments(
+                    readiness_text,
+                    [
+                        "claim-occurrence",
+                        "concurrent sub-agent",
+                        "local/private LLM smoke",
+                        "Docker smoke eval",
+                    ],
+                ),
+                "readiness_links_website_promises_to_demo": contains_all_fragments(
+                    readiness_text,
+                    [
+                        "memory file-system",
+                        "bounded stage catalog",
+                        "scenario",
+                        "private/local inference",
+                    ],
+                ),
+                "readiness_omits_raw_source_paths": "source_path" not in readiness_text,
+                "readiness_has_next_best_passes": len(target_readiness.get("next_best_passes", [])) >= 3,
+                "readiness_evaluator_gate_names_seed_eval": "manual_eval.run_isolated_seed_eval"
+                in json.dumps(target_readiness.get("evaluator_gate", {}), sort_keys=True, default=str),
             },
         },
         "temporal_knowledge_graph": {

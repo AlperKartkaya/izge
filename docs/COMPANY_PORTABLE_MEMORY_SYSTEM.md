@@ -187,6 +187,7 @@ LLM features remain opt-in through the existing `IZGE_LOCAL_LLM_ENABLED`, routin
 - **Memory FS** — shows artifacts, safe logical locators, chunk/memory/signal counts, trust boundaries, database organization, and step-by-step company setup guidance.
 - **Graph** — includes a temporal knowledge graph panel showing claim occurrences and temporal edge count.
 - **Orchestrate** — shows bounded stage catalog, spawn policy, current runtime boundary, trace reflection counts, and bounded scenario impact lookup.
+- **Readiness** — maps the website/PRD promises to current demo proof, scores target coverage, shows workspace counts, and ranks remaining implementation gaps.
 - **Query traces** — include typed context assembly and bounded orchestration trace steps.
 
 ## Bounded scenario templates
@@ -226,8 +227,22 @@ In addition to the original lineage, contradiction, drift, next-action, proactiv
 - memory file-system roots, database blueprint, organization guide, safe logical locators, downstream counts, and absence of raw source paths;
 - temporal knowledge graph occurrences, claim-family keys, evidence-backed links, and absence of raw source paths;
 - bounded orchestration traces, typed context packet traces, provenance-verification traces, persisted stage-run ledgers, truthful stage statuses, spawn policy, and scoped reflection counts;
+- target readiness coverage across evidence substrate, temporal KG, typed context, bounded orchestration, evidence-backed intelligence, private AI discipline, UI storytelling, bounded scenarios, and Docker portability;
 - bounded scenario support with all template probes, catalog endpoint alignment, typed scenario context packets, deterministic replay identity, evidence-backed impacted memory, and explicit “not unsupported forecasting” uncertainty;
-- member redaction across memory file-system, temporal graph, scenario impact, and orchestration aggregate endpoints.
+- member redaction across memory file-system, temporal graph, scenario impact, orchestration aggregate endpoints, and target readiness.
+
+## Target readiness score
+
+`/api/evidence-substrate/readiness` is the visible “how close are we?” contract. It is intentionally read-only and derived from current workspace evidence plus explicit target-area definitions.
+
+The response includes:
+
+- `target_score` — average readiness across implemented, partial, and planned areas;
+- `areas[]` — each website/PRD promise, current demo reflection, proof routes, UI surfaces, proof signals, remaining work, and risk notes;
+- `current_workspace_snapshot` — safe counts for artifacts, chunks, memory objects, graph edges, signals, query traces, stage runs, scenario templates, and local/private AI feature flags;
+- `next_best_passes` — the implementation order that keeps evidence substrate and provenance gates ahead of multi-agent runtime expansion.
+
+This endpoint deliberately does not claim the future multi-agent runtime is complete. It marks the current orchestration as bounded and single-process while ranking true concurrent sub-agent execution, persisted claim occurrences, scenario-run history, Docker/LLM smoke automation, and production deployment hardening as remaining work.
 
 ## Future implementation plan
 

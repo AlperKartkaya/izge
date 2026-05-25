@@ -14,6 +14,7 @@ import { QueryPage } from './pages/QueryPage'
 import { QueryResultPage } from './pages/QueryResultPage'
 import { SignalDetailPage } from './pages/SignalDetailPage'
 import { SignInPage } from './pages/SignInPage'
+import { TargetReadinessPage } from './pages/TargetReadinessPage'
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
         <Route path="graph" element={<GraphPage />} />
         <Route path="memory-filesystem" element={<MemoryFilesystemPage />} />
         <Route path="orchestration" element={<OrchestrationPage />} />
+        <Route path="readiness" element={<TargetReadinessPage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users" element={<AdminPage />} />
         <Route path="audit" element={<AuditPage />} />
