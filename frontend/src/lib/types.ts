@@ -529,6 +529,7 @@ export interface ScenarioImpactItem {
   memory_id: string
   title_or_label: string
   impact_reason: string
+  matched_terms: string[]
   source_artifact_id: string
   source_artifact_title: string
   source_chunk_id: string | null
@@ -536,8 +537,130 @@ export interface ScenarioImpactItem {
   evidence_excerpt: string
 }
 
+export interface ScenarioTemplateRead {
+  template_key: string
+  title: string
+  confidence_score: number
+  matched_terms: string[]
+  review_lens: string[]
+  example_prompts: string[]
+}
+
+export interface ScenarioTemplateCatalogItem {
+  template_catalog_version: string
+  template_key: string
+  title: string
+  keywords: string[]
+  review_lens: string[]
+  example_prompts: string[]
+}
+
+export interface ScenarioMemoryRef {
+  memory_type: string
+  memory_id: string
+  title_or_label: string
+  source_artifact_id: string
+  source_chunk_id: string | null
+  confidence_score: number
+  matched_terms: string[]
+  ranking_key: string[]
+}
+
+export interface ScenarioEvidenceRef {
+  artifact_id: string
+  artifact_title: string
+  artifact_review_status: string
+  chunk_id: string | null
+  excerpt: string
+  excerpt_hash: string
+}
+
+export interface ScenarioCandidateSnapshotItem extends ScenarioMemoryRef {
+  evidence_excerpt_hash: string
+  source_artifact_review_status: string
+}
+
+export interface ScenarioOmittedReason {
+  reason: 'permission_hidden_or_rejected' | 'scenario_budget'
+  count: number
+}
+
+export interface ScenarioEvidenceBudget {
+  max_impacted_memory: number
+  selected_memory_count: number
+  candidate_memory_count: number
+  selected_artifact_count: number
+  visible_artifact_count: number
+  within_budget: boolean
+}
+
+export type ScenarioRankingScoreComponentName = 'matched_scenario_terms' | 'selected_template_confidence_boost'
+export type ScenarioRankingSortField = 'confidence_score' | 'memory_type' | 'source_artifact_id' | 'source_chunk_id' | 'memory_id'
+export type ScenarioDeterministicInput =
+  | 'scenario_text_hash'
+  | 'classifier_version'
+  | 'template_catalog_version'
+  | 'ranking_recipe'
+  | 'candidate_snapshot_hash'
+  | 'current_user_artifact_permissions'
+
+export interface ScenarioRankingScoreComponent {
+  name: ScenarioRankingScoreComponentName
+  weight: number
+  direction: 'asc' | 'desc'
+}
+
+export interface ScenarioRankingSort {
+  field: ScenarioRankingSortField
+  direction: 'asc' | 'desc'
+  null_value?: string | null
+}
+
+export interface ScenarioRankingRecipe {
+  recipe_version: 'scenario_ranking_recipe.v1'
+  score_components: ScenarioRankingScoreComponent[]
+  primary_sort: ScenarioRankingSort
+  tie_breakers: ScenarioRankingSort[]
+}
+
+export interface ScenarioReplayContract {
+  deterministic_inputs: ScenarioDeterministicInput[]
+  input_snapshot_hash: string
+  candidate_snapshot_hash: string
+  selection_recipe: ScenarioRankingRecipe
+  replay_mode: 'deterministic_selection_summary'
+  replay_requires_current_permissions: boolean
+  trusted_write_allowed: false
+  forecasting_allowed: false
+}
+
+export interface ScenarioContextPacketRead {
+  schema_version: 'scenario_context_packet.v1'
+  packet_type: 'bounded_scenario_impact'
+  packet_id: string
+  scenario_text_hash: string
+  classifier_version: string
+  template_catalog_version: string
+  ranking_recipe: ScenarioRankingRecipe
+  candidate_snapshot_hash: string
+  input_snapshot_hash: string
+  selected_template_key: string
+  scenario_terms: string[]
+  selected_memory_ids: string[]
+  selected_memory_refs: ScenarioMemoryRef[]
+  candidate_memory_snapshot: ScenarioCandidateSnapshotItem[]
+  selected_artifact_ids: string[]
+  selected_evidence_refs: ScenarioEvidenceRef[]
+  omitted_reasons: ScenarioOmittedReason[]
+  evidence_budget: ScenarioEvidenceBudget
+  replay_contract: ScenarioReplayContract
+}
+
 export interface ScenarioImpactRead {
   scenario_text: string
+  scenario_template: ScenarioTemplateRead
+  candidate_templates: ScenarioTemplateRead[]
+  scenario_packet: ScenarioContextPacketRead
   answer_text: string
   impacted_memory: ScenarioImpactItem[]
   recommended_questions: string[]

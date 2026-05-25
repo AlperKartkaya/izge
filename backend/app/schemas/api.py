@@ -483,11 +483,133 @@ class ScenarioImpactRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=25)
 
 
+class ScenarioTemplateRead(BaseModel):
+    template_key: str
+    title: str
+    confidence_score: float
+    matched_terms: list[str]
+    review_lens: list[str]
+    example_prompts: list[str]
+
+
+class ScenarioTemplateCatalogItem(BaseModel):
+    template_catalog_version: str
+    template_key: str
+    title: str
+    keywords: list[str]
+    review_lens: list[str]
+    example_prompts: list[str]
+
+
+class ScenarioMemoryRef(BaseModel):
+    memory_type: str
+    memory_id: str
+    title_or_label: str
+    source_artifact_id: str
+    source_chunk_id: str | None
+    confidence_score: float
+    matched_terms: list[str]
+    ranking_key: list[str]
+
+
+class ScenarioEvidenceRef(BaseModel):
+    artifact_id: str
+    artifact_title: str
+    artifact_review_status: str
+    chunk_id: str | None
+    excerpt: str
+    excerpt_hash: str
+
+
+class ScenarioCandidateSnapshotItem(ScenarioMemoryRef):
+    evidence_excerpt_hash: str
+    source_artifact_review_status: str
+
+
+class ScenarioOmittedReason(BaseModel):
+    reason: Literal["permission_hidden_or_rejected", "scenario_budget"]
+    count: int = Field(ge=0)
+
+
+class ScenarioEvidenceBudget(BaseModel):
+    max_impacted_memory: int = Field(ge=1)
+    selected_memory_count: int = Field(ge=0)
+    candidate_memory_count: int = Field(ge=0)
+    selected_artifact_count: int = Field(ge=0)
+    visible_artifact_count: int = Field(ge=0)
+    within_budget: bool
+
+
+ScenarioRankingScoreComponentName = Literal["matched_scenario_terms", "selected_template_confidence_boost"]
+ScenarioRankingSortField = Literal["confidence_score", "memory_type", "source_artifact_id", "source_chunk_id", "memory_id"]
+ScenarioDeterministicInput = Literal[
+    "scenario_text_hash",
+    "classifier_version",
+    "template_catalog_version",
+    "ranking_recipe",
+    "candidate_snapshot_hash",
+    "current_user_artifact_permissions",
+]
+
+
+class ScenarioRankingScoreComponent(BaseModel):
+    name: ScenarioRankingScoreComponentName
+    weight: float
+    direction: Literal["asc", "desc"]
+
+
+class ScenarioRankingSort(BaseModel):
+    field: ScenarioRankingSortField
+    direction: Literal["asc", "desc"]
+    null_value: str | None = None
+
+
+class ScenarioRankingRecipe(BaseModel):
+    recipe_version: Literal["scenario_ranking_recipe.v1"]
+    score_components: list[ScenarioRankingScoreComponent]
+    primary_sort: ScenarioRankingSort
+    tie_breakers: list[ScenarioRankingSort]
+
+
+class ScenarioReplayContract(BaseModel):
+    deterministic_inputs: list[ScenarioDeterministicInput]
+    input_snapshot_hash: str
+    candidate_snapshot_hash: str
+    selection_recipe: ScenarioRankingRecipe
+    replay_mode: Literal["deterministic_selection_summary"]
+    replay_requires_current_permissions: bool
+    trusted_write_allowed: Literal[False] = False
+    forecasting_allowed: Literal[False] = False
+
+
+class ScenarioContextPacketRead(BaseModel):
+    schema_version: Literal["scenario_context_packet.v1"]
+    packet_type: Literal["bounded_scenario_impact"]
+    packet_id: str
+    scenario_text_hash: str
+    classifier_version: str
+    template_catalog_version: str
+    ranking_recipe: ScenarioRankingRecipe
+    candidate_snapshot_hash: str
+    input_snapshot_hash: str
+    selected_template_key: str
+    scenario_terms: list[str]
+    selected_memory_ids: list[str]
+    selected_memory_refs: list[ScenarioMemoryRef]
+    candidate_memory_snapshot: list[ScenarioCandidateSnapshotItem]
+    selected_artifact_ids: list[str]
+    selected_evidence_refs: list[ScenarioEvidenceRef]
+    omitted_reasons: list[ScenarioOmittedReason]
+    evidence_budget: ScenarioEvidenceBudget
+    replay_contract: ScenarioReplayContract
+
+
 class ScenarioImpactItem(BaseModel):
     memory_type: str
     memory_id: str
     title_or_label: str
     impact_reason: str
+    matched_terms: list[str] = Field(default_factory=list)
     source_artifact_id: str
     source_artifact_title: str
     source_chunk_id: str | None = None
@@ -497,6 +619,9 @@ class ScenarioImpactItem(BaseModel):
 
 class ScenarioImpactRead(BaseModel):
     scenario_text: str
+    scenario_template: ScenarioTemplateRead
+    candidate_templates: list[ScenarioTemplateRead]
+    scenario_packet: ScenarioContextPacketRead
     answer_text: str
     impacted_memory: list[ScenarioImpactItem]
     recommended_questions: list[str]

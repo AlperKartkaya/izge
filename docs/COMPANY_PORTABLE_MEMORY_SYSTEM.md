@@ -189,6 +189,23 @@ LLM features remain opt-in through the existing `IZGE_LOCAL_LLM_ENABLED`, routin
 - **Orchestrate** — shows bounded stage catalog, spawn policy, current runtime boundary, trace reflection counts, and bounded scenario impact lookup.
 - **Query traces** — include typed context assembly and bounded orchestration trace steps.
 
+## Bounded scenario templates
+
+Scenario support is now a template-guided impact lookup. It classifies the scenario into one of these bounded lenses, then returns only evidence-backed memory objects and review questions:
+
+- **Launch acceleration or delay** — launch, rollout, onboarding, activation, adoption, and enterprise-pipeline changes.
+- **Pricing or packaging change** — pricing, packaging, monetization, plan, tier, discount, and revenue changes.
+- **Platform migration or architecture shift** — migration, infrastructure, database, backend, vendor, and integration changes.
+- **Compliance, security, or audit requirement** — security approval, compliance, privacy, legal, audit, and regulatory-risk changes.
+- **Org, ownership, or staffing change** — owner, team, reorg, support, staffing, process, and handoff changes.
+
+The demo UI reads template prompts from `/api/scenario/templates` so the visible company lenses stay aligned with the backend catalog. Every scenario response includes a `scenario_context_packet.v1` with:
+
+- packet id derived from scenario hash, input snapshot, classifier version, template-catalog version, structured deterministic ranking recipe, selected memory IDs, candidate snapshot hash, and budget limit;
+- primary template plus candidate template lenses when a scenario spans multiple domains;
+- selected memory refs, permission-filtered candidate memory snapshot refs, selected evidence refs, selected artifact IDs, omission reasons, and evidence budget;
+- a deterministic-selection replay contract that disallows forecasting and trusted writes.
+
 ## Evaluation coverage
 
 The isolated seed evaluation is the current portability/readiness gate:
@@ -209,7 +226,7 @@ In addition to the original lineage, contradiction, drift, next-action, proactiv
 - memory file-system roots, database blueprint, organization guide, safe logical locators, downstream counts, and absence of raw source paths;
 - temporal knowledge graph occurrences, claim-family keys, evidence-backed links, and absence of raw source paths;
 - bounded orchestration traces, typed context packet traces, provenance-verification traces, persisted stage-run ledgers, truthful stage statuses, spawn policy, and scoped reflection counts;
-- bounded scenario support with evidence-backed impacted memory and explicit “not unsupported forecasting” uncertainty;
+- bounded scenario support with all template probes, catalog endpoint alignment, typed scenario context packets, deterministic replay identity, evidence-backed impacted memory, and explicit “not unsupported forecasting” uncertainty;
 - member redaction across memory file-system, temporal graph, scenario impact, and orchestration aggregate endpoints.
 
 ## Future implementation plan
@@ -248,6 +265,6 @@ In addition to the original lineage, contradiction, drift, next-action, proactiv
 
 ### Phase 6 — scenario support expansion
 
-- Add scenario templates for launch, pricing, platform migration, compliance, and org-change questions.
+- Persist scenario packet runs so deterministic-selection summaries can be compared across time and replayed under current permissions.
 - Keep outputs bounded to impacted memory and review questions unless trusted evidence supports stronger recommendations.
 - Add evaluator fixtures for unsupported-forecast refusal behavior.

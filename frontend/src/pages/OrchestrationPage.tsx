@@ -4,14 +4,15 @@ import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatLabel, formatPercent } from '../lib/format'
-import type { OrchestrationBlueprintRead, OrchestrationStageRunsRead, ScenarioImpactRead } from '../lib/types'
+import type { OrchestrationBlueprintRead, OrchestrationStageRunsRead, ScenarioImpactRead, ScenarioTemplateCatalogItem } from '../lib/types'
 
-const DEFAULT_SCENARIO = 'What changes if the company accelerates self-serve onboarding for enterprise expansion next quarter?'
+const DEFAULT_SCENARIO = 'Which evidence-backed memory should be reviewed if the company accelerates self-serve onboarding for enterprise expansion next quarter?'
 
 export function OrchestrationPage() {
   const { session } = useAuth()
   const [blueprint, setBlueprint] = useState<OrchestrationBlueprintRead | null>(null)
   const [stageRuns, setStageRuns] = useState<OrchestrationStageRunsRead | null>(null)
+  const [scenarioTemplates, setScenarioTemplates] = useState<ScenarioTemplateCatalogItem[]>([])
   const [scenarioText, setScenarioText] = useState(DEFAULT_SCENARIO)
   const [scenarioResult, setScenarioResult] = useState<ScenarioImpactRead | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -25,13 +26,15 @@ export function OrchestrationPage() {
         return
       }
       try {
-        const [payload, runsPayload] = await Promise.all([
+        const [payload, runsPayload, templatesPayload] = await Promise.all([
           api.getOrchestrationBlueprint(session.token),
           api.listOrchestrationStageRuns(session.token, 40),
+          api.listScenarioTemplates(session.token),
         ])
         if (!cancelled) {
           setBlueprint(payload)
           setStageRuns(runsPayload)
+          setScenarioTemplates(templatesPayload)
         }
       } catch (caughtError) {
         if (!cancelled) {
@@ -53,6 +56,7 @@ export function OrchestrationPage() {
     }
     setIsScenarioRunning(true)
     setError(null)
+    setScenarioResult(null)
     try {
       const result = await api.runScenarioImpact(session.token, scenarioText, 10)
       setScenarioResult(result)
@@ -63,7 +67,20 @@ export function OrchestrationPage() {
     }
   }
 
+  const updateScenarioText = (value: string) => {
+    setScenarioText(value)
+    setScenarioResult(null)
+    setError(null)
+  }
+
   const reflection = blueprint?.current_reflection ?? {}
+  const templatePrompts = scenarioTemplates
+    .map((template) => ({
+      key: template.template_key,
+      title: template.title,
+      prompt: template.example_prompts[0] ?? template.review_lens[0],
+    }))
+    .filter((template) => template.prompt)
 
   return (
     <div className="stack-xl">
@@ -150,10 +167,21 @@ export function OrchestrationPage() {
       </Panel>
 
       <Panel title="Bounded scenario support" description="Ask what known assumptions, commitments, constraints, decisions, or outcomes should be reviewed if a scenario changes. This is impact lookup, not unsupported forecasting.">
+        <div className="stack-sm">
+          <p className="section-label">Company scenario templates</p>
+          <div className="signal-grid">
+            {templatePrompts.map((template) => (
+              <button key={template.key} type="button" className="prompt-card" onClick={() => updateScenarioText(template.prompt)}>
+                <span className="section-label">{template.title}</span>
+                {template.prompt}
+              </button>
+            ))}
+          </div>
+        </div>
         <form className="form-grid" onSubmit={handleScenario}>
           <label className="field">
             <span className="field-label">Scenario</span>
-            <textarea value={scenarioText} onChange={(event) => setScenarioText(event.target.value)} rows={4} required />
+            <textarea value={scenarioText} onChange={(event) => updateScenarioText(event.target.value)} rows={4} required />
           </label>
           <button type="submit" className="primary-button" disabled={isScenarioRunning}>{isScenarioRunning ? 'Checking scenario…' : 'Run bounded scenario impact'}</button>
         </form>
@@ -161,6 +189,25 @@ export function OrchestrationPage() {
         {scenarioResult ? (
           <div className="stack-md">
             <p className="evidence-block">{scenarioResult.answer_text}</p>
+            <div className="panel-subtle stack-sm">
+              <div className="timeline-card-head">
+                <div>
+                  <p className="section-label">Scenario lens</p>
+                  <p className="table-primary">{scenarioResult.scenario_template.title}</p>
+                </div>
+                <StatusBadge value={formatPercent(scenarioResult.scenario_template.confidence_score)} />
+              </div>
+              <p className="table-secondary">Matched terms: {scenarioResult.scenario_template.matched_terms.length ? scenarioResult.scenario_template.matched_terms.join(', ') : 'general memory review'}</p>
+              <p className="muted-copy">
+                Packet: {scenarioResult.scenario_packet.schema_version} · {scenarioResult.scenario_packet.packet_id} · selected memory {scenarioResult.scenario_packet.evidence_budget.selected_memory_count} · candidate snapshot {scenarioResult.scenario_packet.candidate_memory_snapshot.length} · artifacts {scenarioResult.scenario_packet.evidence_budget.selected_artifact_count}
+              </p>
+              <p className="muted-copy">
+                Replay: {scenarioResult.scenario_packet.replay_contract.replay_mode} · writes {scenarioResult.scenario_packet.replay_contract.trusted_write_allowed ? 'allowed' : 'blocked'} · forecasting {scenarioResult.scenario_packet.replay_contract.forecasting_allowed ? 'allowed' : 'blocked'}
+              </p>
+              {scenarioResult.candidate_templates.length > 1 ? (
+                <p className="table-secondary">Also matched: {scenarioResult.candidate_templates.slice(1).map((template) => template.title).join(', ')}</p>
+              ) : null}
+            </div>
             {scenarioResult.uncertainty_notes.map((note) => <p key={note} className="muted-copy">{note}</p>)}
             {scenarioResult.impacted_memory.length === 0 ? (
               <EmptyState title="No impact path found" description="Add more artifacts or ask a scenario closer to current memory." />
@@ -173,6 +220,7 @@ export function OrchestrationPage() {
                       <p className="table-secondary">Confidence {formatPercent(item.confidence_score)}</p>
                     </div>
                     <p className="table-secondary">{formatLabel(item.memory_type)} · {item.source_artifact_title}</p>
+                    <p className="table-secondary">Matched evidence terms: {item.matched_terms.join(', ') || 'scenario topic'}</p>
                     <p className="muted-copy">{item.impact_reason}</p>
                     <p className="evidence-block">{item.evidence_excerpt}</p>
                     <Link className="text-button" to={`/memory/${item.memory_type}/${item.memory_id}`}>Open memory object</Link>

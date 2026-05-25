@@ -13,6 +13,7 @@ import type {
   LocalLLMStatusRead,
   MemoryDetail,
   ScenarioImpactRead,
+  ScenarioTemplateCatalogItem,
   TemporalGraphRead,
   OrchestrationBlueprintRead,
   OrchestrationStageRunsRead,
@@ -281,6 +282,10 @@ export const api = {
       token,
       body: JSON.stringify({ scenario_text: scenarioText, limit }),
     })
+  },
+
+  listScenarioTemplates(token: string) {
+    return request<ScenarioTemplateCatalogItem[]>('/scenario/templates', { token })
   },
 
   runLocalLLMSmoke(token: string) {
