@@ -164,6 +164,23 @@ LLM features remain opt-in through the existing `IZGE_LOCAL_LLM_ENABLED`, routin
 - **Orchestrate** — shows bounded stage catalog, spawn policy, current runtime boundary, trace reflection counts, and bounded scenario impact lookup.
 - **Query traces** — include typed context assembly and bounded orchestration trace steps.
 
+## Evaluation coverage
+
+The isolated seed evaluation is the current portability/readiness gate:
+
+```bash
+cd backend
+.venv/bin/python -m manual_eval.run_isolated_seed_eval
+```
+
+In addition to the original lineage, contradiction, drift, next-action, proactive-signal, review-governance, and permission-redaction checks, the eval now verifies:
+
+- memory file-system roots, database blueprint, organization guide, safe logical locators, downstream counts, and absence of raw source paths;
+- temporal knowledge graph occurrences, claim-family keys, evidence-backed links, and absence of raw source paths;
+- bounded orchestration traces, context assembly traces, truthful stage statuses, spawn policy, and scoped reflection counts;
+- bounded scenario support with evidence-backed impacted memory and explicit “not unsupported forecasting” uncertainty;
+- member redaction across memory file-system, temporal graph, scenario impact, and orchestration aggregate endpoints.
+
 ## Future implementation plan
 
 ### Phase 1 — retrieval substrate hardening

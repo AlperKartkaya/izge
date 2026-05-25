@@ -216,6 +216,27 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
     )
     member_next_actions = expect_list(request("/api/next-actions", headers={"Authorization": f"Bearer {member_token}"}), "member next actions")
     member_signals = expect_list(request("/api/signals", headers={"Authorization": f"Bearer {member_token}"}), "member persisted signals")
+    member_filesystem = expect_object(
+        request("/api/evidence-substrate/filesystem", headers={"Authorization": f"Bearer {member_token}"}),
+        "member memory filesystem",
+    )
+    member_temporal_graph = expect_object(
+        request("/api/graph/temporal?limit=80", headers={"Authorization": f"Bearer {member_token}"}),
+        "member temporal graph",
+    )
+    member_orchestration = expect_object(
+        request("/api/evidence-substrate/orchestration", headers={"Authorization": f"Bearer {member_token}"}),
+        "member orchestration blueprint",
+    )
+    member_scenario = expect_object(
+        request(
+            "/api/scenario/impact",
+            method="POST",
+            data=json.dumps({"scenario_text": "launch risk memo onboarding timing", "limit": 5}).encode(),
+            headers=member_headers,
+        ),
+        "member scenario impact",
+    )
     admin_signals = expect_list(request("/api/signals", headers={"Authorization": f"Bearer {admin_token}"}), "admin persisted signals")
     restricted_signal = next((signal for signal in admin_signals if signal.get("source_artifact_id") == restricted_artifact_id), None)
     restricted_signal_detail_status = None
@@ -236,7 +257,12 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "trace": trace,
         "next_actions": member_next_actions,
         "signals": member_signals,
+        "memory_filesystem": member_filesystem,
+        "temporal_graph": member_temporal_graph,
+        "orchestration": member_orchestration,
+        "scenario_impact": member_scenario,
     }
+    member_trace_counts = member_orchestration.get("current_reflection", {}).get("trace_step_counts", {})
     checks = {
         "restricted_artifact_detail_forbidden": artifact_detail_status == 403,
         "restricted_artifact_signals_forbidden": artifact_signals_status == 403,
@@ -269,6 +295,20 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "artifact_list_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["artifact_list"], restricted_artifact_id=restricted_artifact_id
         ),
+        "memory_filesystem_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["memory_filesystem"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "temporal_graph_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["temporal_graph"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "scenario_impact_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["scenario_impact"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "orchestration_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["orchestration"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "orchestration_member_query_scoped": member_orchestration.get("current_reflection", {}).get("query_run_count") == 1,
+        "orchestration_member_trace_scoped": sum(int(count) for count in member_trace_counts.values()) == len(trace.get("steps", [])),
     }
     return {
         "restricted_artifact_id": restricted_artifact_id,
@@ -360,6 +400,26 @@ def run_eval() -> dict[str, Any]:
             request("/api/query", method="POST", data=json.dumps({"query_text": spec["query"]}).encode(), headers=auth_headers),
             f"query result for {spec['name']}",
         )
+        trace = expect_object(
+            request(f"/api/query/{result['query_run_id']}/trace", headers={"Authorization": f"Bearer {token}"}),
+            f"query trace for {spec['name']}",
+        )
+        trace_steps = trace.get("steps", [])
+        trace_step_by_kind = {
+            str(step.get("step_kind")): step.get("payload", {})
+            for step in trace_steps
+            if isinstance(step, dict)
+        }
+        orchestration_stages = {
+            str(stage.get("stage_key")): str(stage.get("status"))
+            for stage in trace_step_by_kind.get("bounded_orchestration", {}).get("stages", [])
+            if isinstance(stage, dict)
+        }
+        query_class = result["query_class"]
+        expected_contradiction_status = {"completed", "completed_empty"} if query_class in {"Contradiction analysis", "Next-action guidance"} else {"skipped"}
+        expected_drift_status = {"completed", "completed_empty"} if query_class in {"Assumption drift", "Next-action guidance"} else {"skipped"}
+        expected_guidance_status = {"completed", "completed_empty"} if query_class == "Next-action guidance" else {"skipped"}
+        context_assembly_payload = trace_step_by_kind.get("context_assembly", {})
         contradiction_top = result.get("contradictions", [{}])[0] if result.get("contradictions") else {}
         drift_top = result.get("stale_assumptions", [{}])[0] if result.get("stale_assumptions") else {}
         top_item = contradiction_top if spec["name"] == "contradiction" else drift_top
@@ -414,6 +474,16 @@ def run_eval() -> dict[str, Any]:
                 isinstance(item.get("source_artifact_review_status"), str) and item.get("source_artifact_review_status")
                 for item in result.get("supporting_nodes", [])
             ),
+            "trace_has_context_assembly": "context_assembly" in trace_step_by_kind,
+            "trace_has_bounded_orchestration": "bounded_orchestration" in trace_step_by_kind,
+            "trace_stage_statuses_truthful": (
+                orchestration_stages.get("contradiction_interrogator") in expected_contradiction_status
+                and orchestration_stages.get("assumption_drift_interrogator") in expected_drift_status
+                and orchestration_stages.get("guidance_planner") in expected_guidance_status
+            ),
+            "trace_context_has_permission_filter": isinstance(context_assembly_payload.get("permission_filter"), dict),
+            "trace_context_has_retrieval_recipe": bool(context_assembly_payload.get("retrieval_recipe")),
+            "trace_omits_raw_source_paths": "source_path" not in json.dumps(trace, sort_keys=True, default=str),
         }
         results.append(
             {
@@ -428,7 +498,109 @@ def run_eval() -> dict[str, Any]:
             }
         )
 
+    memory_filesystem = expect_object(
+        request("/api/evidence-substrate/filesystem", headers={"Authorization": f"Bearer {token}"}),
+        "memory filesystem",
+    )
+    orchestration_blueprint = expect_object(
+        request("/api/evidence-substrate/orchestration", headers={"Authorization": f"Bearer {token}"}),
+        "orchestration blueprint",
+    )
+    temporal_graph = expect_object(
+        request("/api/graph/temporal?limit=120", headers={"Authorization": f"Bearer {token}"}),
+        "temporal graph",
+    )
+    scenario_impact = expect_object(
+        request(
+            "/api/scenario/impact",
+            method="POST",
+            data=json.dumps(
+                {
+                    "scenario_text": "enterprise expansion self-serve onboarding launch security approval activation risk",
+                    "limit": 8,
+                }
+            ).encode(),
+            headers=auth_headers,
+        ),
+        "scenario impact",
+    )
+    filesystem_artifacts = memory_filesystem.get("artifacts", [])
+    filesystem_text = json.dumps(memory_filesystem, sort_keys=True, default=str)
+    trace_step_counts = orchestration_blueprint.get("current_reflection", {}).get("trace_step_counts", {})
+    temporal_occurrences = temporal_graph.get("occurrences", [])
+    temporal_links = temporal_graph.get("links", [])
+    scenario_items = scenario_impact.get("impacted_memory", [])
+
     standalone = {
+        "memory_filesystem": {
+            "artifact_count": len(filesystem_artifacts),
+            "root_count": len(memory_filesystem.get("roots", [])),
+            "checks": {
+                "has_memory_roots": len(memory_filesystem.get("roots", [])) >= 4,
+                "has_seed_artifacts": len(filesystem_artifacts) >= len(uploaded_artifacts),
+                "has_database_blueprint": len(memory_filesystem.get("database_blueprint", [])) >= 5,
+                "has_organization_guide": len(memory_filesystem.get("organization_guide", [])) >= 6,
+                "artifacts_have_safe_logical_locators": all(
+                    str(artifact.get("storage_locator", "")).startswith("artifact://") for artifact in filesystem_artifacts
+                ),
+                "artifacts_have_downstream_counts": all(
+                    isinstance(artifact.get("chunk_count"), int) and isinstance(artifact.get("memory_counts"), dict)
+                    for artifact in filesystem_artifacts
+                ),
+                "does_not_expose_raw_source_paths": "source_path" not in filesystem_text,
+            },
+        },
+        "orchestration_blueprint": {
+            "stage_count": len(orchestration_blueprint.get("stage_catalog", [])),
+            "checks": {
+                "uses_bounded_execution_model": orchestration_blueprint.get("execution_model") == "bounded_stage_orchestration",
+                "has_expected_stage_catalog": len(orchestration_blueprint.get("stage_catalog", [])) >= 8,
+                "has_provenance_verifier_stage": any(
+                    stage.get("stage_key") == "provenance_verifier"
+                    for stage in orchestration_blueprint.get("stage_catalog", [])
+                    if isinstance(stage, dict)
+                ),
+                "has_spawn_policy": bool(orchestration_blueprint.get("spawn_policy")),
+                "reflects_context_assembly_traces": int(trace_step_counts.get("context_assembly", 0)) >= len(EXPECTED["queries"]),
+                "reflects_bounded_orchestration_traces": int(trace_step_counts.get("bounded_orchestration", 0)) >= len(EXPECTED["queries"]),
+            },
+        },
+        "temporal_knowledge_graph": {
+            "occurrence_count": len(temporal_occurrences),
+            "link_count": len(temporal_links),
+            "checks": {
+                "has_occurrences": bool(temporal_occurrences),
+                "has_evidence_backed_links": bool(temporal_links)
+                and all(link.get("evidence_artifact_id") and link.get("evidence_chunk_id") for link in temporal_links),
+                "occurrences_have_status": all(bool(occurrence.get("status")) for occurrence in temporal_occurrences),
+                "occurrences_have_claim_family": all(bool(occurrence.get("claim_family_key")) for occurrence in temporal_occurrences),
+                "links_reference_visible_occurrences": {
+                    link.get("from_occurrence_id")
+                    for link in temporal_links
+                }.issubset({occurrence.get("occurrence_id") for occurrence in temporal_occurrences})
+                and {
+                    link.get("to_occurrence_id")
+                    for link in temporal_links
+                }.issubset({occurrence.get("occurrence_id") for occurrence in temporal_occurrences}),
+                "does_not_expose_raw_source_paths": "source_path" not in json.dumps(temporal_graph, sort_keys=True, default=str),
+            },
+        },
+        "bounded_scenario_support": {
+            "impact_count": len(scenario_items),
+            "checks": {
+                "finds_evidence_backed_impacts": bool(scenario_items),
+                "items_have_memory_and_source_refs": all(
+                    item.get("memory_type") and item.get("memory_id") and item.get("source_artifact_id")
+                    for item in scenario_items
+                ),
+                "items_have_evidence_excerpt": all(bool(item.get("evidence_excerpt")) for item in scenario_items),
+                "answer_is_bounded_not_forecast": any(
+                    "bounded scenario support" in str(note).lower() and "not an unsupported forecast" in str(note).lower()
+                    for note in scenario_impact.get("uncertainty_notes", [])
+                ),
+                "recommends_followup_questions": len(scenario_impact.get("recommended_questions", [])) >= 3,
+            },
+        },
         "contradictions": {
             "count": len(contradiction_list),
             "top_pair": f"{contradiction_list[0].get('from_title')} -> {contradiction_list[0].get('to_title')}" if contradiction_list else None,
