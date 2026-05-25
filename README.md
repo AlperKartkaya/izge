@@ -101,6 +101,22 @@ docker compose up --build
 
 Then open `http://localhost:8080`. The backend remains available at `http://localhost:8000`; credentials are generated into the persisted Docker volume at `/data/bootstrap_admin_credentials.json` when `IZGE_DEFAULT_ADMIN_PASSWORD` is empty.
 
+Run the Docker-contained demo smoke evaluation before handing the system to a new company:
+
+```bash
+scripts/docker-smoke-eval.sh
+```
+
+Back up and restore the persisted company memory volume with:
+
+```bash
+scripts/docker-backup.sh
+docker compose down
+scripts/docker-restore.sh backups/<backup-file>.tar.gz --force
+```
+
+The backup contains SQLite, uploaded artifact storage, pasted-text storage, and bootstrap credentials. Restore is intentionally explicit and refuses to run while Compose services are active unless `IZGE_RESTORE_ALLOW_RUNNING=1` is set.
+
 ### Marketing website
 
 ```bash

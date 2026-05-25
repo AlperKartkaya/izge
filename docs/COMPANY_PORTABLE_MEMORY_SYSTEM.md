@@ -156,6 +156,24 @@ The Docker volume `izge_data` stores:
 
 Because `IZGE_DEFAULT_ADMIN_PASSWORD` is empty in `docker-compose.yml`, the backend generates a bootstrap admin password and writes it to the persisted credentials file on first run.
 
+### Company operator commands
+
+Use these commands when moving the same company memory system across machines or before risky maintenance:
+
+```bash
+# Prove the backend image can run the full seed/evidence/orchestration eval.
+scripts/docker-smoke-eval.sh
+
+# Export SQLite, uploaded artifacts, pasted text, and bootstrap credentials.
+scripts/docker-backup.sh
+
+# Restore only after stopping the app; --force is required by design.
+docker compose down
+scripts/docker-restore.sh backups/<backup-file>.tar.gz --force
+```
+
+Restore refuses to run while Compose services are active unless `IZGE_RESTORE_ALLOW_RUNNING=1` is set. Backups are written under `backups/`, which is intentionally ignored by git because the archive can contain company data and credentials.
+
 If using a local/private LLM on the host machine, point the backend at it with:
 
 ```yaml
@@ -178,6 +196,12 @@ The isolated seed evaluation is the current portability/readiness gate:
 ```bash
 cd backend
 .venv/bin/python -m manual_eval.run_isolated_seed_eval
+```
+
+The Docker equivalent is:
+
+```bash
+scripts/docker-smoke-eval.sh
 ```
 
 In addition to the original lineage, contradiction, drift, next-action, proactive-signal, review-governance, and permission-redaction checks, the eval now verifies:
@@ -217,10 +241,10 @@ In addition to the original lineage, contradiction, drift, next-action, proactiv
 
 ### Phase 5 — company deployment hardening
 
-- Add backup/restore commands for the Docker volume.
+- Add scheduled/off-host backup guidance on top of the manual Docker backup/restore commands.
 - Promote startup schema readiness checks into explicit versioned migrations before changing, renaming, or dropping table shapes.
 - Add HTTPS and auth hardening for customer-controlled deployments.
-- Add documented one-command seed/eval smoke checks inside Docker.
+- Add CI automation around the documented Docker smoke eval.
 
 ### Phase 6 — scenario support expansion
 

@@ -8,6 +8,7 @@
 *.local
 .env
 .env.*
+backups/
 
 # Python
 __pycache__/
