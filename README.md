@@ -90,6 +90,17 @@ npm run dev
 
 The Vite dev server starts at `http://localhost:5173`.
 
+
+### Docker Compose
+
+For a portable, company-controlled runtime with persisted SQLite and artifact storage:
+
+```bash
+docker compose up --build
+```
+
+Then open `http://localhost:8080`. The backend remains available at `http://localhost:8000`; credentials are generated into the persisted Docker volume at `/data/bootstrap_admin_credentials.json` when `IZGE_DEFAULT_ADMIN_PASSWORD` is empty.
+
 ### Marketing website
 
 ```bash
@@ -158,7 +169,7 @@ This launches a temporary backend, ingests the seed corpus, runs locked query cl
 Full specifications live in `docs/`. Start with `docs/README.md` for a guided index, or jump directly to:
 
 - **Product & scope** — `VISION_AND_POSITIONING.md`, `PRD.md`, `MVP_SCOPE.md`, `MVP_IMPLEMENTATION_CONTRACT.md`
-- **Architecture** — `SYSTEM_ARCHITECTURE.md`, `DOMAIN_MODEL.md`, `DECISION_GRAPH_SPEC.md`, `API_SPEC.md`
+- **Architecture** — `SYSTEM_ARCHITECTURE.md`, `DOMAIN_MODEL.md`, `DECISION_GRAPH_SPEC.md`, `API_SPEC.md`, `COMPANY_PORTABLE_MEMORY_SYSTEM.md`
 - **Deployment & security** — `DEPLOYMENT_MVP.md`, `SECURITY_GOVERNANCE.md`
 - **UX & evaluation** — `UI_UX_SPEC.md`, `TEST_PLAN.md`, `DEMO_SCRIPT.md`
 - **Demo data** — `demo/README.md`, `demo/DATA_SPEC.md`, `demo/SCENARIO_WIRING.md`

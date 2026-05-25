@@ -30,6 +30,7 @@ Keep these files at the root of `docs/` because project prompts and repo guidanc
 - `API_SPEC.md`
 - `SECURITY_GOVERNANCE.md`
 - `DEPLOYMENT_MVP.md`
+- `COMPANY_PORTABLE_MEMORY_SYSTEM.md`
 
 ### UX, evaluation, and implementation
 

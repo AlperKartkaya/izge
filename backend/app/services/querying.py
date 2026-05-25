@@ -2317,12 +2317,75 @@ def _persist_query_trace_steps(
     supporting_evidence = result_data.get("supporting_evidence", [])
     contradictions = result_data.get("contradictions", [])
     stale_assumptions = result_data.get("stale_assumptions", [])
+    recommended_next_actions = result_data.get("recommended_next_actions", [])
     uncertainty_notes = result_data.get("uncertainty_notes", [])
+
+    graph_evidence_count = sum(1 for item in supporting_evidence if item.evidence_kind == "graph")
+    search_fallback_count = sum(1 for item in supporting_evidence if item.evidence_kind != "graph")
+    contradiction_stage_active = query_run.query_class in {"Contradiction analysis", "Next-action guidance"}
+    drift_stage_active = query_run.query_class in {"Assumption drift", "Next-action guidance"}
+    guidance_stage_active = query_run.query_class == "Next-action guidance"
+
+    def stage_status(*, active: bool, output_count: int) -> str:
+        if not active:
+            return "skipped"
+        return "completed" if output_count > 0 else "completed_empty"
 
     trace_payloads: list[tuple[str, dict[str, Any]]] = [
         (
             "route_decision",
             _route_decision_trace_payload(route_decision),
+        ),
+        (
+            "bounded_orchestration",
+            {
+                "execution_model": "bounded_stage_orchestration",
+                "stages": [
+                    {
+                        "stage_key": "orchestrator_plan",
+                        "status": "completed",
+                        "authority_level": "proposal_only",
+                        "output_count": 1,
+                        "reason": f"Routed to {query_run.query_class}.",
+                    },
+                    {
+                        "stage_key": "evidence_indexer",
+                        "status": "completed",
+                        "authority_level": "deterministic_gate",
+                        "output_count": len(supporting_evidence),
+                        "reason": "Permission/review filters and evidence selection were evaluated for this query.",
+                    },
+                    {
+                        "stage_key": "contradiction_interrogator",
+                        "status": stage_status(active=contradiction_stage_active, output_count=len(contradictions)),
+                        "authority_level": "deterministic_reasoning",
+                        "output_count": len(contradictions),
+                        "reason": "Primary for contradiction/next-action modes; skipped for modes that do not require conflict interrogation.",
+                    },
+                    {
+                        "stage_key": "assumption_drift_interrogator",
+                        "status": stage_status(active=drift_stage_active, output_count=len(stale_assumptions)),
+                        "authority_level": "deterministic_reasoning",
+                        "output_count": len(stale_assumptions),
+                        "reason": "Primary for drift/next-action modes; skipped for modes that do not require drift interrogation.",
+                    },
+                    {
+                        "stage_key": "guidance_planner",
+                        "status": stage_status(active=guidance_stage_active, output_count=len(recommended_next_actions)),
+                        "authority_level": "deterministic_reasoning_then_optional_wording",
+                        "output_count": len(recommended_next_actions),
+                        "reason": "Only active for next-action guidance queries.",
+                    },
+                    {
+                        "stage_key": "provenance_verifier",
+                        "status": "completed",
+                        "authority_level": "final_gate",
+                        "output_count": len(supporting_evidence),
+                        "reason": "Accepted the answer with selected evidence or explicit uncertainty notes.",
+                    },
+                ],
+                "trust_rule": "Stage outputs remain proposals until selected evidence, permission scope, and provenance are accepted by deterministic gates.",
+            },
         ),
         (
             "seed_selection",
@@ -2333,12 +2396,49 @@ def _persist_query_trace_steps(
             },
         ),
         (
+            "context_assembly",
+            {
+                "mode": query_run.query_class,
+                "permission_filter": {
+                    "permissions_limited": permissions_limited,
+                    "hidden_artifact_count": hidden_artifact_count,
+                    "rejected_omitted_count": rejected_artifact_count,
+                },
+                "retrieval_recipe": [
+                    {
+                        "stage": "graph_seed",
+                        "candidate_count": len(supporting_nodes),
+                        "selected_count": len(supporting_nodes),
+                        "omitted_count": 0,
+                        "ranking_basis": ["memory type", "topic overlap", "graph linkage", "recency"],
+                    },
+                    {
+                        "stage": "evidence_selection",
+                        "candidate_count": len(supporting_evidence),
+                        "selected_count": len(supporting_evidence),
+                        "omitted_count": hidden_artifact_count + rejected_artifact_count,
+                        "ranking_basis": ["permission/review scope", "graph evidence first", "FTS fallback only when graph evidence is insufficient"],
+                    },
+                ],
+                "selected_evidence_ids": [item.chunk_id or item.artifact_id for item in supporting_evidence],
+                "omitted_reasons": [
+                    {"reason": "permission_hidden", "count": hidden_artifact_count},
+                    {"reason": "review_rejected", "count": rejected_artifact_count},
+                ],
+                "metrics": {
+                    "selected_evidence_count": len(supporting_evidence),
+                    "trace_payload_bytes": 0,
+                    "context_assembly_ms": 0,
+                },
+            },
+        ),
+        (
             "evidence_selection",
             {
                 "supporting_evidence": _evidence_trace_payload_items(supporting_evidence),
                 "selected_evidence_count": len(supporting_evidence),
-                "graph_evidence_count": sum(1 for item in supporting_evidence if item.evidence_kind == "graph"),
-                "search_fallback_count": sum(1 for item in supporting_evidence if item.evidence_kind != "graph"),
+                "graph_evidence_count": graph_evidence_count,
+                "search_fallback_count": search_fallback_count,
             },
         ),
         (

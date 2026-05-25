@@ -8,6 +8,8 @@ const primaryNavigation = [
   { to: '/ingestion', label: 'Build' },
   { to: '/query', label: 'Interrogate' },
   { to: '/graph', label: 'Graph' },
+  { to: '/memory-filesystem', label: 'Memory FS' },
+  { to: '/orchestration', label: 'Orchestrate' },
 ]
 
 export function AppShell() {

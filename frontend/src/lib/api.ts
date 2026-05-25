@@ -12,6 +12,10 @@ import type {
   LocalLLMSmokeRead,
   LocalLLMStatusRead,
   MemoryDetail,
+  ScenarioImpactRead,
+  TemporalGraphRead,
+  OrchestrationBlueprintRead,
+  MemoryFilesystemRead,
   NextActionSignalItem,
   QueryResult,
   QueryTraceRead,
@@ -251,6 +255,27 @@ export const api = {
 
   getLocalLLMStatus(token: string) {
     return request<LocalLLMStatusRead>('/system/llm-status', { token })
+  },
+
+
+  getMemoryFilesystem(token: string) {
+    return request<MemoryFilesystemRead>('/evidence-substrate/filesystem', { token })
+  },
+
+  getOrchestrationBlueprint(token: string) {
+    return request<OrchestrationBlueprintRead>('/evidence-substrate/orchestration', { token })
+  },
+
+  getTemporalGraph(token: string, limit = 80) {
+    return request<TemporalGraphRead>(`/graph/temporal?limit=${limit}`, { token })
+  },
+
+  runScenarioImpact(token: string, scenarioText: string, limit = 10) {
+    return request<ScenarioImpactRead>('/scenario/impact', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ scenario_text: scenarioText, limit }),
+    })
   },
 
   runLocalLLMSmoke(token: string) {

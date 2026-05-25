@@ -4,7 +4,16 @@ import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDate, formatDateTime, formatLabel, formatPercent } from '../lib/format'
-import type { AssumptionDriftItem, ContradictionItem, GraphNeighborhood, GraphSummary, GraphTimelineItem, NextActionSignalItem, SignalRead } from '../lib/types'
+import type {
+  AssumptionDriftItem,
+  ContradictionItem,
+  GraphNeighborhood,
+  GraphSummary,
+  GraphTimelineItem,
+  NextActionSignalItem,
+  SignalRead,
+  TemporalGraphRead,
+} from '../lib/types'
 
 export function GraphPage() {
   const { session } = useAuth()
@@ -15,6 +24,7 @@ export function GraphPage() {
   const [assumptionDrift, setAssumptionDrift] = useState<AssumptionDriftItem[]>([])
   const [nextActions, setNextActions] = useState<NextActionSignalItem[]>([])
   const [persistedSignals, setPersistedSignals] = useState<SignalRead[]>([])
+  const [temporalGraph, setTemporalGraph] = useState<TemporalGraphRead | null>(null)
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null)
   const [isNeighborhoodLoading, setIsNeighborhoodLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -28,13 +38,14 @@ export function GraphPage() {
       }
 
       try {
-        const [graphSummary, graphTimeline, contradictionList, assumptionList, actionList, signalList] = await Promise.all([
+        const [graphSummary, graphTimeline, contradictionList, assumptionList, actionList, signalList, temporalGraphPayload] = await Promise.all([
           api.getGraphSummary(session.token),
           api.getGraphTimeline(session.token),
           api.listContradictions(session.token),
           api.listAssumptionDrift(session.token),
           api.listNextActions(session.token),
           api.listSignals(session.token),
+          api.getTemporalGraph(session.token, 80),
         ])
 
         if (!cancelled) {
@@ -44,6 +55,7 @@ export function GraphPage() {
           setAssumptionDrift(assumptionList)
           setNextActions(actionList)
           setPersistedSignals(signalList)
+          setTemporalGraph(temporalGraphPayload)
           setSelectedMemoryId(graphTimeline.items[0]?.memory_id ?? null)
         }
       } catch (caughtError) {
@@ -118,7 +130,51 @@ export function GraphPage() {
         <MetricCard label="Relationship types" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} />
         <MetricCard label="Contradictions surfaced" value={contradictions.length} />
         <MetricCard label="Persisted signals" value={persistedSignals.length || nextActions.length} />
+        <MetricCard label="Temporal claims" value={temporalGraph?.occurrences.length ?? '—'} />
       </section>
+
+      <Panel
+        title="Temporal knowledge graph"
+        description="Claim occurrences are grouped across time so a company can see first-seen, active, contested, stale, and superseded memory instead of a flat document search result."
+      >
+        {temporalGraph && temporalGraph.occurrences.length > 0 ? (
+          <div className="stack-sm">
+            <dl className="meta-list compact-meta-list">
+              <div>
+                <dt>Visible occurrences</dt>
+                <dd>{temporalGraph.occurrences.length}</dd>
+              </div>
+              <div>
+                <dt>Temporal links</dt>
+                <dd>{temporalGraph.links.length}</dd>
+              </div>
+            </dl>
+            {temporalGraph.occurrences.slice(0, 8).map((occurrence) => (
+              <Link
+                key={occurrence.occurrence_id}
+                className="record-link panel-subtle"
+                to={`/memory/${occurrence.memory_type}/${occurrence.memory_id}`}
+              >
+                <div>
+                  <p className="table-primary">{occurrence.title_or_label}</p>
+                  <p className="table-secondary">
+                    {formatLabel(occurrence.status)} · {occurrence.memory_type} · {formatDateTime(occurrence.observed_at)}
+                  </p>
+                  <p className="muted-copy">
+                    {occurrence.source_artifact_title} · family {occurrence.claim_family_key}
+                  </p>
+                </div>
+                <span className="table-secondary">Confidence {formatPercent(occurrence.confidence_score)}</span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No temporal claim occurrences"
+            description="Run ingestion on company artifacts to populate time-aware decisions, assumptions, constraints, outcomes, and commitments."
+          />
+        )}
+      </Panel>
 
       <div className="two-column-layout wide-right-column">
         <Panel title="Timeline of remembered changes" description="Ordered memory cards make the product read like historical reconstruction, not graph wallpaper.">

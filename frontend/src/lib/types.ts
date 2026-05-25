@@ -394,3 +394,133 @@ export interface SessionState {
   expiresAt: string
   user: UserRead
 }
+export interface MemoryFilesystemRoot {
+  node_id: string
+  label: string
+  node_type: string
+  status: string
+  description: string
+  children_count: number
+  metadata: Record<string, unknown>
+}
+
+export interface MemoryFilesystemArtifact {
+  artifact_id: string
+  title: string
+  source_type: string
+  storage_locator: string
+  checksum_sha256: string | null
+  mime_type: string
+  visibility_scope: string
+  ingestion_status: string
+  review_status: string
+  created_at: string
+  updated_at: string
+  chunk_count: number
+  memory_counts: Record<string, number>
+  graph_edge_count: number
+  signal_count: number
+  organization_path: string[]
+  retrieval_state: string
+  trust_boundary: string
+  coverage_notes: string[]
+}
+
+export interface DatabaseBlueprintLayer {
+  layer: string
+  table_names: string[]
+  purpose: string
+  write_path: string
+  read_path: string
+  organization_rule: string
+}
+
+export interface OrganizationGuideStep {
+  step: string
+  title: string
+  description: string
+}
+
+export interface MemoryFilesystemRead {
+  workspace_id: string
+  generated_at: string
+  roots: MemoryFilesystemRoot[]
+  artifacts: MemoryFilesystemArtifact[]
+  database_blueprint: DatabaseBlueprintLayer[]
+  organization_guide: OrganizationGuideStep[]
+}
+
+export interface OrchestrationStageRead {
+  stage_key: string
+  title: string
+  agent_role: string
+  purpose: string
+  inputs: string[]
+  outputs: string[]
+  deterministic_gate: string
+  authority_level: string
+  current_reflection: string
+  status: string
+}
+
+export interface OrchestrationBlueprintRead {
+  workspace_id: string
+  generated_at: string
+  execution_model: string
+  current_runtime_note: string
+  stage_catalog: OrchestrationStageRead[]
+  spawn_policy: string[]
+  current_reflection: Record<string, unknown>
+}
+
+export interface TemporalGraphOccurrence {
+  occurrence_id: string
+  memory_type: string
+  memory_id: string
+  claim_family_key: string
+  title_or_label: string
+  observed_at: string
+  source_artifact_id: string
+  source_artifact_title: string
+  source_chunk_id: string | null
+  evidence_span: string | null
+  status: string
+  confidence_score: number
+}
+
+export interface TemporalGraphLink {
+  edge_id: string
+  edge_type: string
+  from_occurrence_id: string
+  to_occurrence_id: string
+  evidence_artifact_id: string | null
+  evidence_chunk_id: string | null
+  confidence_score: number
+}
+
+export interface TemporalGraphRead {
+  workspace_id: string
+  occurrences: TemporalGraphOccurrence[]
+  links: TemporalGraphLink[]
+}
+
+export interface ScenarioImpactItem {
+  memory_type: string
+  memory_id: string
+  title_or_label: string
+  impact_reason: string
+  source_artifact_id: string
+  source_artifact_title: string
+  source_chunk_id: string | null
+  confidence_score: number
+  evidence_excerpt: string
+}
+
+export interface ScenarioImpactRead {
+  scenario_text: string
+  answer_text: string
+  impacted_memory: ScenarioImpactItem[]
+  recommended_questions: string[]
+  uncertainty_notes: string[]
+}
+

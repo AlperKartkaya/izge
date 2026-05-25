@@ -7,7 +7,9 @@ import { AuditPage } from './pages/AuditPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { GraphPage } from './pages/GraphPage'
 import { IngestionPage } from './pages/IngestionPage'
+import { MemoryFilesystemPage } from './pages/MemoryFilesystemPage'
 import { MemoryDetailPage } from './pages/MemoryDetailPage'
+import { OrchestrationPage } from './pages/OrchestrationPage'
 import { QueryPage } from './pages/QueryPage'
 import { QueryResultPage } from './pages/QueryResultPage'
 import { SignalDetailPage } from './pages/SignalDetailPage'
@@ -33,6 +35,8 @@ function App() {
         <Route path="signals/:signalId" element={<SignalDetailPage />} />
         <Route path="memory/:memoryType/:memoryId" element={<MemoryDetailPage />} />
         <Route path="graph" element={<GraphPage />} />
+        <Route path="memory-filesystem" element={<MemoryFilesystemPage />} />
+        <Route path="orchestration" element={<OrchestrationPage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users" element={<AdminPage />} />
         <Route path="audit" element={<AuditPage />} />

@@ -944,17 +944,31 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
         db.commit()
         chunks = chunk_text(artifact_text)
         stored_chunks: list[ArtifactChunk] = []
+        chunk_step = max(get_settings().chunk_size - get_settings().chunk_overlap, 1)
         for index, chunk_text_value in enumerate(chunks, start=1):
+            char_start = (index - 1) * chunk_step
             chunk = ArtifactChunk(
                 artifact_id=artifact.artifact_id,
                 workspace_id=artifact.workspace_id,
                 sequence_number=index,
                 text=chunk_text_value,
-                chunk_metadata={"char_length": len(chunk_text_value)},
+                chunk_metadata={
+                    "char_length": len(chunk_text_value),
+                    "char_start": char_start,
+                    "char_end": char_start + len(chunk_text_value),
+                    "logical_locator": f"artifact://{artifact.artifact_id}/chunks/{index}",
+                    "coverage_status": "pending",
+                },
             )
             db.add(chunk)
             db.flush()
             stored_chunks.append(chunk)
+        for index, chunk in enumerate(stored_chunks):
+            chunk.chunk_metadata = {
+                **(chunk.chunk_metadata or {}),
+                "previous_chunk_id": stored_chunks[index - 1].chunk_id if index > 0 else None,
+                "next_chunk_id": stored_chunks[index + 1].chunk_id if index + 1 < len(stored_chunks) else None,
+            }
         _replace_fts_rows(db, artifact, stored_chunks)
 
         job.stage = "structured_extraction"
@@ -978,6 +992,7 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
                 "extraction_method": extraction_diagnostics.extraction_method,
                 "extraction_status": "completed",
                 "extracted_object_count": per_chunk_object_counts.get(chunk.sequence_number, 0),
+                "coverage_status": "covered" if per_chunk_object_counts.get(chunk.sequence_number, 0) else "no_memory_objects",
                 "fallback_reason": extraction_diagnostics.fallback_reason,
                 "chunk_excerpt": (chunk.text[:200] + "...") if len(chunk.text) > 200 else chunk.text,
             }

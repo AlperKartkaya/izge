@@ -447,6 +447,141 @@ class SignalDetail(SignalRead):
     intelligence_path: list[SignalIntelligenceStep] = Field(default_factory=list)
 
 
+class TemporalGraphOccurrence(BaseModel):
+    occurrence_id: str
+    memory_type: str
+    memory_id: str
+    claim_family_key: str
+    title_or_label: str
+    observed_at: datetime
+    source_artifact_id: str
+    source_artifact_title: str
+    source_chunk_id: str | None = None
+    evidence_span: str | None = None
+    status: str
+    confidence_score: float
+
+
+class TemporalGraphLink(BaseModel):
+    edge_id: str
+    edge_type: str
+    from_occurrence_id: str
+    to_occurrence_id: str
+    evidence_artifact_id: str | None = None
+    evidence_chunk_id: str | None = None
+    confidence_score: float
+
+
+class TemporalGraphRead(BaseModel):
+    workspace_id: str
+    occurrences: list[TemporalGraphOccurrence]
+    links: list[TemporalGraphLink]
+
+
+class ScenarioImpactRequest(BaseModel):
+    scenario_text: str = Field(min_length=3, max_length=4000)
+    limit: int = Field(default=10, ge=1, le=25)
+
+
+class ScenarioImpactItem(BaseModel):
+    memory_type: str
+    memory_id: str
+    title_or_label: str
+    impact_reason: str
+    source_artifact_id: str
+    source_artifact_title: str
+    source_chunk_id: str | None = None
+    confidence_score: float
+    evidence_excerpt: str
+
+
+class ScenarioImpactRead(BaseModel):
+    scenario_text: str
+    answer_text: str
+    impacted_memory: list[ScenarioImpactItem]
+    recommended_questions: list[str]
+    uncertainty_notes: list[str]
+
+
+class MemoryFilesystemRoot(BaseModel):
+    node_id: str
+    label: str
+    node_type: str
+    status: str
+    description: str
+    children_count: int
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MemoryFilesystemArtifact(BaseModel):
+    artifact_id: str
+    title: str
+    source_type: str
+    storage_locator: str
+    checksum_sha256: str | None = None
+    mime_type: str
+    visibility_scope: str
+    ingestion_status: str
+    review_status: str
+    created_at: datetime
+    updated_at: datetime
+    chunk_count: int
+    memory_counts: dict[str, int]
+    graph_edge_count: int
+    signal_count: int
+    organization_path: list[str]
+    retrieval_state: str
+    trust_boundary: str
+    coverage_notes: list[str] = Field(default_factory=list)
+
+
+class DatabaseBlueprintLayer(BaseModel):
+    layer: str
+    table_names: list[str]
+    purpose: str
+    write_path: str
+    read_path: str
+    organization_rule: str
+
+
+class OrganizationGuideStep(BaseModel):
+    step: str
+    title: str
+    description: str
+
+
+class MemoryFilesystemRead(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    roots: list[MemoryFilesystemRoot]
+    artifacts: list[MemoryFilesystemArtifact]
+    database_blueprint: list[DatabaseBlueprintLayer]
+    organization_guide: list[OrganizationGuideStep]
+
+
+class OrchestrationStageRead(BaseModel):
+    stage_key: str
+    title: str
+    agent_role: str
+    purpose: str
+    inputs: list[str]
+    outputs: list[str]
+    deterministic_gate: str
+    authority_level: str
+    current_reflection: str
+    status: str
+
+
+class OrchestrationBlueprintRead(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    execution_model: str
+    current_runtime_note: str
+    stage_catalog: list[OrchestrationStageRead]
+    spawn_policy: list[str]
+    current_reflection: dict[str, Any]
+
+
 class AuditEventRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

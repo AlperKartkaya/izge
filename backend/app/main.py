@@ -8,11 +8,13 @@ from app.db import SessionLocal
 from app.routers.analysis import router as analysis_router
 from app.routers.artifacts import router as artifacts_router
 from app.routers.audit import router as audit_router
+from app.routers.evidence import router as evidence_router
 from app.routers.auth import router as auth_router
 from app.routers.graph import router as graph_router
 from app.routers.ingestion import router as ingestion_router
 from app.routers.memory import router as memory_router
 from app.routers.query import router as query_router
+from app.routers.scenario import router as scenario_router
 from app.routers.signals import router as signals_router
 from app.routers.system import router as system_router
 from app.routers.users import router as users_router
@@ -50,3 +52,5 @@ app.include_router(graph_router, prefix=settings.api_prefix)
 app.include_router(memory_router, prefix=settings.api_prefix)
 app.include_router(analysis_router, prefix=settings.api_prefix)
 app.include_router(audit_router, prefix=settings.api_prefix)
+app.include_router(evidence_router, prefix=settings.api_prefix)
+app.include_router(scenario_router, prefix=settings.api_prefix)
