@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Izge Official Documentation</title>
+  <meta name="description" content="Official product, architecture, operations, and deployment documentation for Izge.">
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #111827;
+      --muted: #526071;
+      --subtle: #6b7280;
+      --line: #d9e2ec;
+      --soft-line: #edf2f7;
+      --panel: #ffffff;
+      --paper: #f7fafc;
+      --paper-2: #eef4f8;
+      --brand: #214a62;
+      --brand-2: #2f6f8f;
+      --brand-3: #123142;
+      --accent: #b7791f;
+      --green: #256d4f;
+      --red: #a03737;
+      --purple: #5c4f99;
+      --blue-soft: #e7f3f8;
+      --gold-soft: #fff7e6;
+      --green-soft: #eaf7ef;
+      --red-soft: #fff0f0;
+      --shadow: 0 18px 48px rgba(17, 24, 39, 0.10);
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 10px;
+      --max: 1180px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% -10%, rgba(47, 111, 143, 0.13), transparent 34rem),
+        linear-gradient(180deg, #f9fbfd 0%, #eef4f8 100%);
+      line-height: 1.65;
+    }
+    a { color: var(--brand-2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre, kbd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+    code {
+      background: #eef4f8;
+      border: 1px solid #dfe9f0;
+      border-radius: 7px;
+      padding: 0.12rem 0.35rem;
+      font-size: 0.92em;
+    }
+    pre {
+      margin: 1rem 0;
+      overflow-x: auto;
+      background: #0f1f2a;
+      color: #e6f3f7;
+      border-radius: 16px;
+      padding: 1.05rem 1.15rem;
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    pre code { background: transparent; border: 0; color: inherit; padding: 0; }
+    h1, h2, h3, h4 { color: var(--brand-3); line-height: 1.15; margin: 0 0 0.75rem; letter-spacing: -0.025em; }
+    h1 { font-size: clamp(2.5rem, 7vw, 5.6rem); }
+    h2 { font-size: clamp(1.9rem, 4vw, 3rem); padding-top: 2rem; }
+    h3 { font-size: 1.38rem; padding-top: 1rem; }
+    h4 { font-size: 1.05rem; letter-spacing: 0; }
+    p { margin: 0 0 1rem; }
+    ul, ol { padding-left: 1.25rem; margin: 0.4rem 0 1rem; }
+    li { margin: 0.25rem 0; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; background: var(--panel); border-radius: 14px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+    th, td { text-align: left; vertical-align: top; padding: 0.8rem 0.9rem; border-bottom: 1px solid var(--soft-line); }
+    th { background: #eaf2f7; color: var(--brand-3); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
+    tr:last-child td { border-bottom: 0; }
+    .page { max-width: var(--max); margin: 0 auto; padding: 2rem 1.25rem 5rem; }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 2rem;
+      align-items: stretch;
+      min-height: 80vh;
+      padding: 2.5rem 0 3.5rem;
+    }
+    .hero-card, .panel, .toc, .callout, .diagram-card, .metric-card {
+      background: rgba(255,255,255,0.92);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+    }
+    .hero-card { padding: clamp(1.5rem, 3vw, 3rem); display: flex; flex-direction: column; justify-content: space-between; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--brand-2); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.78rem; }
+    .hero-summary { font-size: clamp(1.15rem, 2vw, 1.45rem); color: #354253; max-width: 62ch; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.5rem; }
+    .pill { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid #c8d7e0; background: #f5fafc; color: #27384a; border-radius: 999px; padding: 0.45rem 0.75rem; font-weight: 700; font-size: 0.84rem; }
+    .hero-side { padding: 1.35rem; display: grid; gap: 1rem; }
+    .definition { padding: 1.2rem; background: #f7fbfd; border: 1px solid var(--line); border-radius: 18px; }
+    .definition strong { color: var(--brand-3); }
+    .not-list { display: grid; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
+    .not-list li { display: flex; gap: 0.5rem; align-items: flex-start; }
+    .not-list li::before { content: "×"; color: var(--red); font-weight: 900; }
+    .toc { padding: 1.2rem; position: static; }
+    .toc h2 { padding-top: 0; font-size: 1.2rem; }
+    .toc ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.35rem 0.9rem; padding-left: 1.2rem; font-size: 0.94rem; }
+    .section { margin: 2rem 0 3.5rem; }
+    .panel { padding: clamp(1.15rem, 2.5vw, 2rem); margin: 1rem 0; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+    .metric-card { padding: 1rem; box-shadow: none; }
+    .metric-card strong { display: block; font-size: 1.35rem; color: var(--brand-3); }
+    .metric-card span { color: var(--muted); font-size: 0.92rem; }
+    .callout { padding: 1rem 1.1rem; box-shadow: none; border-radius: var(--radius-md); }
+    .callout.info { background: var(--blue-soft); border-color: #b9d8e6; }
+    .callout.warn { background: var(--gold-soft); border-color: #f0d49a; }
+    .callout.good { background: var(--green-soft); border-color: #b7dfc7; }
+    .callout.danger { background: var(--red-soft); border-color: #e6b8b8; }
+    .caption { color: var(--subtle); font-size: 0.92rem; margin-top: 0.45rem; }
+    .diagram-card { padding: 1rem; margin: 1rem 0 1.4rem; overflow: hidden; }
+    .diagram-card h3 { padding-top: 0; }
+    .diagram { width: 100%; height: auto; display: block; background: #fbfdff; border: 1px solid var(--soft-line); border-radius: 18px; }
+    .diagram text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #123142; }
+    .node { fill: #ffffff; stroke: #bdd0dc; stroke-width: 1.4; }
+    .node-blue { fill: #e7f3f8; stroke: #8cc2d8; }
+    .node-green { fill: #eaf7ef; stroke: #83c69e; }
+    .node-gold { fill: #fff7e6; stroke: #d3a23d; }
+    .node-red { fill: #fff0f0; stroke: #cf8c8c; }
+    .node-purple { fill: #f2efff; stroke: #a59be0; }
+    .arrow { stroke: #547083; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    .arrow-soft { stroke: #9aacb8; stroke-width: 1.6; fill: none; marker-end: url(#arrowSoft); }
+    .small { font-size: 12px; fill: #526071; }
+    .label { font-size: 15px; font-weight: 800; }
+    .tiny { font-size: 10.5px; fill: #526071; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0 1rem; }
+    .tag { background: #eef4f8; border: 1px solid #d9e2ec; color: #27384a; border-radius: 999px; padding: 0.22rem 0.55rem; font-size: 0.8rem; font-weight: 700; }
+    .split { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 1.2rem; align-items: start; }
+    .timeline { counter-reset: step; display: grid; gap: 0.8rem; }
+    .timeline-item { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 1rem 1rem 1rem 3.25rem; }
+    .timeline-item::before { counter-increment: step; content: counter(step); position: absolute; left: 1rem; top: 1rem; width: 1.65rem; height: 1.65rem; border-radius: 999px; background: var(--brand); color: #fff; display: grid; place-items: center; font-weight: 900; font-size: 0.86rem; }
+    .status { display: inline-flex; align-items: center; gap: 0.35rem; border-radius: 999px; padding: 0.22rem 0.55rem; font-weight: 800; font-size: 0.78rem; }
+    .status.ready { background: var(--green-soft); color: var(--green); border: 1px solid #b7dfc7; }
+    .status.boundary { background: var(--gold-soft); color: #8a5a00; border: 1px solid #f0d49a; }
+    .status.locked { background: var(--red-soft); color: var(--red); border: 1px solid #e6b8b8; }
+    details { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 0.9rem 1rem; margin: 0.7rem 0; }
+    summary { cursor: pointer; font-weight: 850; color: var(--brand-3); }
+    .kbd { border: 1px solid #c8d7e0; border-bottom-width: 2px; background: #fff; border-radius: 7px; padding: 0.12rem 0.35rem; font-size: 0.84rem; }
+    .footer { color: var(--muted); border-top: 1px solid var(--line); padding-top: 2rem; margin-top: 4rem; }
+    @media (max-width: 980px) {
+      .hero, .split { grid-template-columns: 1fr; }
+      .toc { position: static; }
+      .grid-3, .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 680px) {
+      .page { padding: 1rem 0.75rem 3rem; }
+      .grid-2, .grid-3, .grid-4, .toc ol { grid-template-columns: 1fr; }
+      th, td { display: block; width: 100%; }
+      th { border-bottom: 0; }
+      tr { display: block; border-bottom: 1px solid var(--soft-line); }
+      tr:last-child { border-bottom: 0; }
+    }
+    @media print {
+      body { background: #fff; }
+      .toc { position: static; box-shadow: none; }
+      .hero { min-height: auto; }
+      .hero-card, .panel, .toc, .callout, .diagram-card, .metric-card { box-shadow: none; }
+      a { color: inherit; text-decoration: underline; }
+      .section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero" id="top">
+      <div class="hero-card">
+        <div>
+          <div class="eyebrow">Official Documentation</div>
+          <h1>Izge</h1>
+          <p class="hero-summary">A local-first institutional memory and decision intelligence system for reconstructing organizational decisions, detecting contradictions and assumption drift, and producing evidence-backed next actions.</p>
+          <div class="hero-meta" aria-label="Document metadata">
+            <span class="pill">Version: implementation-aligned MVP</span>
+            <span class="pill">Last updated: 2026-05-26</span>
+            <span class="pill">Standalone HTML</span>
+            <span class="pill">No external assets</span>
+          </div>
+        </div>
+        <div class="callout info" style="margin-top: 2rem;">
+          <strong>Primary rule:</strong> Izge is not generic search, chat over files, or generic AI SaaS. It is an inspectable memory system whose answers must remain grounded in artifacts, typed memory objects, graph relations, permissions, and provenance.
+        </div>
+      </div>
+      <aside class="hero-side hero-card" aria-label="Definition and non-goals">
+        <div class="definition">
+          <h2 style="padding-top:0;font-size:1.35rem;">One-sentence definition</h2>
+          <p><strong>Izge reconstructs what an organization decided, why it decided it, what assumptions and constraints shaped the decision, what later contradicted it, what drifted, and what teams should do next.</strong></p>
+        </div>
+        <div class="definition">
+          <h2 style="padding-top:0;font-size:1.35rem;">Izge is not</h2>
+          <ul class="not-list">
+            <li>internal search with a nicer interface</li>
+            <li>chat over files or generic RAG</li>
+            <li>a PM copilot that invents roadmap advice</li>
+            <li>a generic agent-memory framework</li>
+            <li>generic multi-tenant AI SaaS as the core product identity</li>
+          </ul>
+        </div>
+      </aside>
+    </header>
+
+    <nav class="toc" aria-labelledby="toc-title">
+      <h2 id="toc-title">Contents</h2>
+      <ol>
+        <li><a href="#product">Product contract</a></li>
+        <li><a href="#concepts">Core concepts</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#evidence-substrate">Evidence substrate</a></li>
+        <li><a href="#knowledge-graph">Temporal knowledge graph</a></li>
+        <li><a href="#orchestration">Orchestration and worker</a></li>
+        <li><a href="#ai-boundary">AI and LLM boundary</a></li>
+        <li><a href="#governance">Security and governance</a></li>
+        <li><a href="#api">API reference</a></li>
+        <li><a href="#operations">Operations and deployment</a></li>
+        <li><a href="#evaluation">Evaluation</a></li>
+        <li><a href="#onboarding">Company onboarding</a></li>
+        <li><a href="#roadmap">Roadmap and risks</a></li>
+        <li><a href="#glossary">Glossary</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section class="section" id="product">
+        <h2>1. Product contract</h2>
+        <div class="grid-3">
+          <div class="metric-card"><strong>Memory before magic</strong><span>Raw documents are preserved, but typed memory and graph relations are the reasoning substrate.</span></div>
+          <div class="metric-card"><strong>Evidence before eloquence</strong><span>Every important answer should expose supporting artifacts, chunks, memory objects, and uncertainty.</span></div>
+          <div class="metric-card"><strong>Governance before speed</strong><span>Permissions, review status, and audit trails constrain every retrieval and answer surface.</span></div>
+        </div>
+
+        <div class="panel">
+          <h3>Primary users</h3>
+          <div class="grid-2">
+            <div>
+              <h4>Admin</h4>
+              <p>Prepares and governs the memory: uploads or reviews artifacts, manages users, inspects ingestion state, monitors signals, verifies readiness, and manages database/storage visibility.</p>
+            </div>
+            <div>
+              <h4>Member</h4>
+              <p>Contributes artifacts and asks evidence-backed questions. Members only see artifacts, evidence, signals, and derived outputs that their permissions allow.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Core use cases</h3>
+          <ol>
+            <li><strong>Decision lineage:</strong> explain what was decided, why, and which assumptions, constraints, outcomes, and commitments shaped it.</li>
+            <li><strong>Contradiction analysis:</strong> identify conflicts between old and new decisions, plans, commitments, or assumptions.</li>
+            <li><strong>Assumption drift:</strong> detect assumptions that have weakened, reversed, expired, or become unsupported by later evidence.</li>
+            <li><strong>Next-action guidance:</strong> recommend a grounded follow-up action based on unresolved memory tensions.</li>
+            <li><strong>Proactive ingestion:</strong> evaluate new artifacts against prior memory immediately after processing.</li>
+            <li><strong>Continuity and anti-duplication:</strong> surface prior relevant work before teams repeat work that already happened.</li>
+          </ol>
+        </div>
+
+        <div class="panel">
+          <h3>Promise-to-surface mapping</h3>
+          <table>
+            <thead><tr><th>Promise</th><th>Implemented product surface</th><th>Evidence discipline</th></tr></thead>
+            <tbody>
+              <tr><td>Local-first company memory</td><td>Docker/local runtime, SQLite database, persisted artifact storage, private LLM gateway options</td><td>Database and storage locations visible to Admin through <code>/admin/data</code></td></tr>
+              <tr><td>Decision reconstruction</td><td>Query, query result, graph, memory object detail, traces</td><td>Answers cite memory objects, evidence refs, and trace steps</td></tr>
+              <tr><td>Contradiction and drift detection</td><td>Dashboard, Graph, Signals, Query results, proactive ingestion outputs</td><td>Signals are linked to supporting memory/evidence and review status</td></tr>
+              <tr><td>Agentic file-system / retrieval</td><td>Memory FS and Data pages</td><td>Logical locators, chunk counts, memory counts, checksums, and immutable source references</td></tr>
+              <tr><td>Bounded orchestration</td><td>Jobs / Orchestrate page, stage runs, DB-backed queue</td><td>Typed packets, worker leases, result schemas, provenance verifier</td></tr>
+              <tr><td>Governed AI assistance</td><td>LLM readiness, traces, deterministic fallback</td><td>Local/private gateway, schema validation, permission-aware prompts, fail-closed behavior</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="concepts">
+        <h2>2. Core concepts</h2>
+        <div class="grid-3">
+          <div class="panel"><h3>Workspace</h3><p>The company or pilot boundary. Data, users, artifacts, memory objects, signals, jobs, and audit events are scoped to a workspace.</p></div>
+          <div class="panel"><h3>Artifact</h3><p>A source document or pasted text item. It has a checksum, source type, visibility policy, review status, uploader, and immutable source bytes.</p></div>
+          <div class="panel"><h3>Artifact chunk</h3><p>An ordered retrieval leaf under an artifact. Chunks support FTS retrieval and evidence selection but must be permission and review filtered before reasoning.</p></div>
+          <div class="panel"><h3>Memory object</h3><p>A structured interpretation extracted from artifacts: Decision, Assumption, Constraint, Outcome, or Commitment.</p></div>
+          <div class="panel"><h3>Graph relation</h3><p>A typed, evidence-aware relation between memory objects, such as <code>BASED_ON</code>, <code>CONTRADICTS</code>, or <code>SUPERSEDES</code>.</p></div>
+          <div class="panel"><h3>Signal</h3><p>A durable proactive finding: contradiction, assumption drift, continuity overlap, supersession, or next action.</p></div>
+          <div class="panel"><h3>Query run</h3><p>A persisted reasoning request with selected evidence, trace steps, stage runs, answer packet, and uncertainty notes.</p></div>
+          <div class="panel"><h3>Scenario run</h3><p>A bounded impact-analysis packet over known memory. It identifies what to review; it does not forecast the future.</p></div>
+          <div class="panel"><h3>Orchestration job</h3><p>A DB-backed asynchronous task with a bounded payload, lease, worker ownership, terminal result, and rejection path for unsafe requests.</p></div>
+        </div>
+      </section>
+
+      <section class="section" id="architecture">
+        <h2>3. System architecture</h2>
+        <p>Izge is organized as layered product architecture rather than a monolithic chatbot. The interface calls FastAPI routes; application services enforce auth, permissions, evidence selection, graph reasoning, job management, and audit; persistence is SQLite plus filesystem artifact roots; optional LLM assistance is bounded behind local/private configuration flags.</p>
+
+        <div class="diagram-card">
+          <h3>High-level runtime architecture</h3>
+          <svg class="diagram" viewBox="0 0 1120 650" role="img" aria-label="High-level runtime architecture diagram">
+            <defs>
+              <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#547083"></path></marker>
+              <marker id="arrowSoft" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#9aacb8"></path></marker>
+            </defs>
+            <rect x="30" y="35" width="1060" height="585" rx="28" fill="#f8fbfd" stroke="#d9e2ec"/>
+            <text x="55" y="75" class="label">Company-controlled Izge runtime</text>
+            <rect x="70" y="120" width="230" height="110" rx="18" class="node-blue"/>
+            <text x="95" y="155" class="label">React Frontend</text>
+            <text x="95" y="180" class="small">Dashboard · Artifacts · Query</text>
+            <text x="95" y="202" class="small">Graph · Memory FS · Data</text>
+
+            <rect x="430" y="110" width="260" height="130" rx="18" class="node"/>
+            <text x="455" y="145" class="label">FastAPI Backend</text>
+            <text x="455" y="170" class="small">Auth · Routes · Validation</text>
+            <text x="455" y="192" class="small">Workspace and role enforcement</text>
+            <text x="455" y="214" class="small">Audit and API contracts</text>
+
+            <rect x="815" y="110" width="230" height="130" rx="18" class="node-green"/>
+            <text x="840" y="145" class="label">Local/private LLM</text>
+            <text x="840" y="170" class="small">Optional bounded assistance</text>
+            <text x="840" y="192" class="small">Schema validation</text>
+            <text x="840" y="214" class="small">Fail-closed fallback</text>
+
+            <rect x="85" y="315" width="210" height="110" rx="18" class="node-gold"/>
+            <text x="110" y="350" class="label">Ingestion</text>
+            <text x="110" y="375" class="small">Upload/paste · parse</text>
+            <text x="110" y="397" class="small">chunk · extract</text>
+
+            <rect x="335" y="315" width="220" height="110" rx="18" class="node-purple"/>
+            <text x="360" y="350" class="label">Memory + Graph</text>
+            <text x="360" y="375" class="small">Decisions · assumptions</text>
+            <text x="360" y="397" class="small">Edges · temporal links</text>
+
+            <rect x="595" y="315" width="220" height="110" rx="18" class="node-red"/>
+            <text x="620" y="350" class="label">Reasoning</text>
+            <text x="620" y="375" class="small">Lineage · contradiction</text>
+            <text x="620" y="397" class="small">drift · next actions</text>
+
+            <rect x="855" y="315" width="190" height="110" rx="18" class="node"/>
+            <text x="880" y="350" class="label">Worker daemon</text>
+            <text x="880" y="375" class="small">Claims DB jobs</text>
+            <text x="880" y="397" class="small">leases · terminal results</text>
+
+            <rect x="165" y="510" width="255" height="80" rx="18" class="node"/>
+            <text x="190" y="545" class="label">SQLite database</text>
+            <text x="190" y="570" class="small">memory · graph · jobs · audit</text>
+
+            <rect x="520" y="510" width="255" height="80" rx="18" class="node"/>
+            <text x="545" y="545" class="label">Filesystem storage</text>
+            <text x="545" y="570" class="small">uploaded sources · pasted text</text>
+
+            <path d="M300 175 C350 175 380 175 430 175" class="arrow"/>
+            <path d="M690 175 C740 175 765 175 815 175" class="arrow-soft"/>
+            <path d="M555 240 L210 315" class="arrow"/>
+            <path d="M300 370 L335 370" class="arrow"/>
+            <path d="M555 370 L595 370" class="arrow"/>
+            <path d="M815 370 L855 370" class="arrow-soft"/>
+            <path d="M445 425 L320 510" class="arrow"/>
+            <path d="M705 425 L655 510" class="arrow"/>
+            <path d="M950 425 L775 535" class="arrow"/>
+            <path d="M190 425 L240 510" class="arrow"/>
+          </svg>
+          <p class="caption">The LLM is an optional assistance boundary. The database, graph, permissions, selected evidence, and verifier remain authoritative.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Backend layers</h3>
+            <ol>
+              <li><strong>Interface layer:</strong> app pages and admin/member flows.</li>
+              <li><strong>Application layer:</strong> API routing, sessions, roles, query lifecycle, signal surfacing.</li>
+              <li><strong>Intake layer:</strong> upload, paste, parse, chunk, ingestion state.</li>
+              <li><strong>Extraction layer:</strong> memory object creation with evidence spans.</li>
+              <li><strong>Graph layer:</strong> typed relationships, temporal continuity, contradictions, supersession.</li>
+              <li><strong>Reasoning layer:</strong> lineage, contradiction, drift, next action, scenario impact.</li>
+              <li><strong>Governance layer:</strong> permission filtering, review status, audit.</li>
+              <li><strong>Infrastructure layer:</strong> SQLite, filesystem, Docker, worker, local/private LLM gateway.</li>
+            </ol>
+          </div>
+          <div class="panel">
+            <h3>Frontend surfaces</h3>
+            <ul>
+              <li><strong>Dashboard:</strong> operational workspace overview and active signals.</li>
+              <li><strong>Artifacts / Ingestion:</strong> contribution, review, processing state.</li>
+              <li><strong>Questions / Results:</strong> evidence-backed query workflow.</li>
+              <li><strong>Graph:</strong> memory graph and temporal relationships.</li>
+              <li><strong>Memory FS:</strong> logical memory organization and artifact roots.</li>
+              <li><strong>Jobs:</strong> bounded orchestration stage catalog and queue visibility.</li>
+              <li><strong>Readiness:</strong> PRD/website promise coverage mapped to evidence.</li>
+              <li><strong>Data:</strong> database and artifact storage management.</li>
+              <li><strong>Audit / Users:</strong> governance and role management.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="evidence-substrate">
+        <h2>4. Evidence substrate and internal file system</h2>
+        <p>The evidence substrate is Izge’s internal agentic file system. It is not a folder tree only; it is the combination of immutable source roots, ordered retrieval leaves, typed memory objects, graph links, signals, jobs, traces, and audit records.</p>
+
+        <div class="diagram-card">
+          <h3>Artifact-to-answer pipeline</h3>
+          <svg class="diagram" viewBox="0 0 1120 420" role="img" aria-label="Artifact to answer pipeline diagram">
+            <defs><marker id="arrow2" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#547083"></path></marker></defs>
+            <rect x="40" y="65" width="130" height="86" rx="16" class="node-blue"/><text x="65" y="100" class="label">Artifact</text><text x="65" y="124" class="small">upload/paste</text>
+            <rect x="220" y="65" width="130" height="86" rx="16" class="node-gold"/><text x="250" y="100" class="label">Store</text><text x="245" y="124" class="small">checksum root</text>
+            <rect x="400" y="65" width="130" height="86" rx="16" class="node"/><text x="430" y="100" class="label">Chunk</text><text x="423" y="124" class="small">ordered leaves</text>
+            <rect x="580" y="65" width="150" height="86" rx="16" class="node-purple"/><text x="610" y="100" class="label">Extract</text><text x="604" y="124" class="small">typed memory</text>
+            <rect x="780" y="65" width="130" height="86" rx="16" class="node-green"/><text x="815" y="100" class="label">Graph</text><text x="805" y="124" class="small">relations</text>
+            <rect x="960" y="65" width="130" height="86" rx="16" class="node-red"/><text x="995" y="100" class="label">Signal</text><text x="986" y="124" class="small">tension/action</text>
+            <path d="M170 108 L220 108" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow2)"/><path d="M350 108 L400 108" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow2)"/><path d="M530 108 L580 108" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow2)"/><path d="M730 108 L780 108" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow2)"/><path d="M910 108 L960 108" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+            <rect x="165" y="255" width="190" height="80" rx="16" class="node"/><text x="190" y="288" class="label">Permission filter</text><text x="190" y="312" class="small">visibility + review state</text>
+            <rect x="465" y="255" width="190" height="80" rx="16" class="node"/><text x="490" y="288" class="label">Context packet</text><text x="490" y="312" class="small">selected evidence only</text>
+            <rect x="765" y="255" width="190" height="80" rx="16" class="node"/><text x="790" y="288" class="label">Answer packet</text><text x="790" y="312" class="small">citations + uncertainty</text>
+            <path d="M505 151 C460 205 320 220 270 255" stroke="#9aacb8" stroke-width="1.8" fill="none" marker-end="url(#arrow2)"/><path d="M355 295 L465 295" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow2)"/><path d="M655 295 L765 295" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+          </svg>
+        </div>
+
+        <div class="panel">
+          <h3>Database organization</h3>
+          <table>
+            <thead><tr><th>Layer</th><th>Tables / records</th><th>Purpose</th><th>User-visible surface</th></tr></thead>
+            <tbody>
+              <tr><td>Source roots</td><td><code>artifacts</code>, <code>artifact_permissions</code></td><td>Immutable uploaded or pasted source metadata, checksum, visibility, review state</td><td>Artifacts, Data, Memory FS</td></tr>
+              <tr><td>Evidence leaves</td><td><code>artifact_chunks</code>, <code>artifact_chunks_fts</code></td><td>Ordered retrieval units with logical locators and text coverage</td><td>Query evidence, Memory FS</td></tr>
+              <tr><td>Typed memory</td><td><code>decisions</code>, <code>assumptions</code>, <code>constraints</code>, <code>outcomes</code>, <code>commitments</code></td><td>Reasoning substrate extracted from source artifacts</td><td>Memory detail, Graph, Results</td></tr>
+              <tr><td>Graph</td><td><code>graph_nodes</code>, <code>graph_edges</code></td><td>Typed relationships, continuity, contradiction, supersession, temporal links</td><td>Graph, Readiness, Results</td></tr>
+              <tr><td>Reasoning outputs</td><td><code>signals</code>, <code>query_runs</code>, <code>query_trace_steps</code>, <code>scenario_runs</code></td><td>Inspectable outputs, evidence selection, scenario replay, answer traces</td><td>Dashboard, Signals, Questions, Jobs</td></tr>
+              <tr><td>Operations</td><td><code>orchestration_stage_runs</code>, <code>orchestration_jobs</code>, <code>audit_events</code></td><td>Bounded agent/stage ledger, worker queue, governance audit</td><td>Jobs, Data, Audit</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <div class="callout good">
+            <h3>What admins can inspect</h3>
+            <p>Open <code>/admin/data</code> to see the Alembic revision, table row counts, SQLite path, storage roots, artifact physical paths, logical locators, checksums, size/existence checks, and safe metadata edit affordances.</p>
+          </div>
+          <div class="callout warn">
+            <h3>Source immutability rule</h3>
+            <p>Raw source content should not be edited in place. If a document changes, upload or paste a replacement artifact and reject, restrict, or annotate the old artifact. This preserves auditability and replayability.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="knowledge-graph">
+        <h2>5. Temporal knowledge graph</h2>
+        <p>The graph is the core memory representation. It models institutional memory as related claims and evidence across time rather than as flat text snippets.</p>
+        <div class="diagram-card">
+          <h3>Domain model and graph links</h3>
+          <svg class="diagram" viewBox="0 0 1120 560" role="img" aria-label="Domain model graph diagram">
+            <defs><marker id="arrow3" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#547083"></path></marker></defs>
+            <rect x="60" y="60" width="180" height="80" rx="16" class="node-blue"/><text x="92" y="94" class="label">Artifact</text><text x="90" y="118" class="small">source root</text>
+            <rect x="60" y="220" width="180" height="80" rx="16" class="node"/><text x="82" y="254" class="label">ArtifactChunk</text><text x="90" y="278" class="small">evidence leaf</text>
+            <rect x="380" y="60" width="165" height="76" rx="16" class="node-purple"/><text x="418" y="94" class="label">Decision</text>
+            <rect x="600" y="60" width="165" height="76" rx="16" class="node-purple"/><text x="635" y="94" class="label">Assumption</text>
+            <rect x="820" y="60" width="165" height="76" rx="16" class="node-purple"/><text x="855" y="94" class="label">Constraint</text>
+            <rect x="490" y="205" width="165" height="76" rx="16" class="node-purple"/><text x="535" y="239" class="label">Outcome</text>
+            <rect x="720" y="205" width="165" height="76" rx="16" class="node-purple"/><text x="755" y="239" class="label">Commitment</text>
+            <rect x="420" y="390" width="250" height="90" rx="16" class="node-red"/><text x="455" y="425" class="label">Signal</text><text x="455" y="450" class="small">contradiction · drift · action</text>
+            <rect x="745" y="390" width="250" height="90" rx="16" class="node-green"/><text x="780" y="425" class="label">Query Result</text><text x="780" y="450" class="small">answer + citations + uncertainty</text>
+            <path d="M150 140 L150 220" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow3)"/><text x="166" y="185" class="tiny">HAS_CHUNK</text>
+            <path d="M240 260 C310 220 330 110 380 98" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow3)"/><text x="270" y="182" class="tiny">MENTIONED_IN</text>
+            <path d="M240 260 C365 245 470 245 490 243" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow3)"/>
+            <path d="M240 260 C390 145 520 98 600 98" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow3)"/>
+            <path d="M240 260 C520 160 705 100 820 98" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow3)"/>
+            <path d="M545 98 L600 98" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow3)"/><text x="552" y="84" class="tiny">BASED_ON</text>
+            <path d="M765 98 L820 98" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow3)"/><text x="774" y="84" class="tiny">CONSTRAINED_BY</text>
+            <path d="M462 136 L545 205" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow3)"/><text x="475" y="181" class="tiny">RESULTED_IN</text>
+            <path d="M655 243 L720 243" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow3)"/><text x="662" y="228" class="tiny">RELATES_TO</text>
+            <path d="M682 136 C650 220 630 320 570 390" stroke="#a03737" stroke-width="2" fill="none" marker-end="url(#arrow3)"/><text x="612" y="314" class="tiny">DRIFT</text>
+            <path d="M462 136 C438 245 445 325 500 390" stroke="#a03737" stroke-width="2" fill="none" marker-end="url(#arrow3)"/><text x="420" y="325" class="tiny">CONTRADICTS</text>
+            <path d="M670 435 L745 435" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow3)"/><text x="685" y="420" class="tiny">SUPPORTS</text>
+          </svg>
+        </div>
+
+        <div class="panel">
+          <h3>Graph rules</h3>
+          <ul>
+            <li>Every non-trivial relation should remain explainable through source artifacts, chunks, or memory object evidence.</li>
+            <li>Contradiction and drift are modeled as relational phenomena, not as keyword overlap.</li>
+            <li>Temporal read models group claim occurrences and validity windows so teams can see how a belief changed over time.</li>
+            <li>Rejected or restricted evidence must not leak through graph summaries, signal details, or query results.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="orchestration">
+        <h2>6. Bounded internal orchestration and worker daemon</h2>
+        <p>Izge supports internal task division, but it is intentionally bounded. The orchestrator may divide a query or scenario into stages, but every stage receives a typed context packet and returns structured, cited output. It does not receive unrestricted database or filesystem authority.</p>
+
+        <div class="diagram-card">
+          <h3>Orchestration and DB-backed queue</h3>
+          <svg class="diagram" viewBox="0 0 1120 520" role="img" aria-label="Orchestration and worker queue diagram">
+            <defs><marker id="arrow4" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#547083"></path></marker></defs>
+            <rect x="55" y="70" width="210" height="90" rx="18" class="node-blue"/><text x="86" y="105" class="label">User question</text><text x="86" y="130" class="small">lineage · drift · action</text>
+            <rect x="335" y="70" width="225" height="90" rx="18" class="node"/><text x="360" y="105" class="label">Orchestrator plan</text><text x="360" y="130" class="small">classify intent + stages</text>
+            <rect x="635" y="70" width="225" height="90" rx="18" class="node-purple"/><text x="660" y="105" class="label">Context packet</text><text x="660" y="130" class="small">selected evidence only</text>
+            <rect x="330" y="230" width="150" height="80" rx="16" class="node-gold"/><text x="352" y="264" class="label">Indexer</text><text x="352" y="288" class="small">retrieve/filter</text>
+            <rect x="505" y="230" width="150" height="80" rx="16" class="node-gold"/><text x="527" y="264" class="label">Graph linker</text><text x="527" y="288" class="small">relations</text>
+            <rect x="680" y="230" width="150" height="80" rx="16" class="node-gold"/><text x="702" y="264" class="label">Interrogator</text><text x="702" y="288" class="small">conflict/drift</text>
+            <rect x="855" y="230" width="150" height="80" rx="16" class="node-gold"/><text x="877" y="264" class="label">Verifier</text><text x="877" y="288" class="small">provenance gate</text>
+            <rect x="130" y="390" width="230" height="80" rx="18" class="node"/><text x="155" y="423" class="label">orchestration_jobs</text><text x="155" y="448" class="small">bounded payload + lease</text>
+            <rect x="465" y="390" width="230" height="80" rx="18" class="node-green"/><text x="490" y="423" class="label">app.worker daemon</text><text x="490" y="448" class="small">claim · execute · complete/fail</text>
+            <rect x="800" y="390" width="230" height="80" rx="18" class="node-red"/><text x="825" y="423" class="label">Structured result</text><text x="825" y="448" class="small">safe summary + citations</text>
+            <path d="M265 115 L335 115" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow4)"/>
+            <path d="M560 115 L635 115" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow4)"/>
+            <path d="M748 160 L405 230" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow4)"/>
+            <path d="M748 160 L580 230" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow4)"/>
+            <path d="M748 160 L755 230" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow4)"/>
+            <path d="M748 160 L930 230" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow4)"/>
+            <path d="M405 310 C360 340 300 355 245 390" stroke="#9aacb8" stroke-width="2" fill="none" marker-end="url(#arrow4)"/>
+            <path d="M360 430 L465 430" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow4)"/>
+            <path d="M695 430 L800 430" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow4)"/>
+          </svg>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Recommended stage catalog</h3>
+            <ol>
+              <li>Orchestrator plan</li>
+              <li>Evidence indexer</li>
+              <li>Memory extractor</li>
+              <li>Graph linker</li>
+              <li>Contradiction interrogator</li>
+              <li>Assumption drift interrogator</li>
+              <li>Guidance planner</li>
+              <li>Worker queue dispatcher</li>
+              <li>Provenance verifier</li>
+            </ol>
+          </div>
+          <div class="panel">
+            <h3>Worker daemon</h3>
+            <p>Run continuously when queued jobs should progress without manual API claim/complete calls:</p>
+            <pre><code>scripts/orchestration-worker.sh --worker-id local-worker \
+  --poll-interval-seconds 2 \
+  --lease-seconds 120</code></pre>
+            <p>Docker Compose starts the worker automatically as the <code>worker</code> service.</p>
+          </div>
+        </div>
+
+        <div class="callout danger">
+          <strong>Authority boundary:</strong> stage packets must include selected artifact IDs, chunk IDs, memory IDs, omitted reasons, permission scope, review scope, output schema, max items, and uncertainty policy. Any job requesting trusted writes outside the result contract should be rejected.
+        </div>
+      </section>
+
+      <section class="section" id="ai-boundary">
+        <h2>7. AI and LLM boundary</h2>
+        <p>Izge may use local/private LLM assistance, but AI output is not the authority of record. Deterministic storage, permission filtering, artifact review status, graph construction, signal classification, and provenance verification remain authoritative.</p>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Allowed LLM assistance</h3>
+            <ul>
+              <li>Schema-validated memory extraction candidates.</li>
+              <li>Bounded query intent classification.</li>
+              <li>Answer wording from an already-selected evidence packet.</li>
+              <li>Signal explanation wording after deterministic signal detection.</li>
+              <li>Scenario lens classification across fixed templates.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Disallowed LLM authority</h3>
+            <ul>
+              <li>Inventing citations, artifact IDs, memory IDs, or hidden evidence.</li>
+              <li>Creating trusted graph edges without validation.</li>
+              <li>Overriding permission filters or review rejection.</li>
+              <li>Forecasting scenario outcomes as facts.</li>
+              <li>Persisting memory without a source artifact.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Local/private inference configuration</h3>
+          <pre><code>IZGE_LOCAL_LLM_ENABLED=true
+IZGE_LOCAL_LLM_BASE_URL=http://127.0.0.1:11434
+IZGE_LOCAL_LLM_MODEL=qwen3.5:4b
+IZGE_LLM_QUERY_ROUTING_ENABLED=true
+IZGE_LLM_ANSWER_SYNTHESIS_ENABLED=true
+IZGE_LLM_SIGNAL_EXPLANATION_ENABLED=true</code></pre>
+          <p>If the gateway fails, times out, returns malformed JSON, or fails schema validation, Izge must fall back to deterministic behavior and preserve the boundary in traces.</p>
+        </div>
+      </section>
+
+      <section class="section" id="governance">
+        <h2>8. Security, governance, and trust</h2>
+        <div class="grid-3">
+          <div class="panel"><h3>Authentication</h3><p>Users sign in to a workspace. Role-aware APIs expose Admin and Member capabilities separately.</p></div>
+          <div class="panel"><h3>Permissions</h3><p>Artifact visibility propagates into chunks, evidence refs, memory objects, signals, traces, graph views, and scenario runs.</p></div>
+          <div class="panel"><h3>Audit</h3><p>Sign-ins, uploads, ingestion runs, query submissions, proactive signal generation, review updates, and permission changes are logged.</p></div>
+        </div>
+
+        <div class="diagram-card">
+          <h3>Permission-aware answer path</h3>
+          <svg class="diagram" viewBox="0 0 1120 360" role="img" aria-label="Permission-aware answer path diagram">
+            <defs><marker id="arrow5" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#547083"></path></marker></defs>
+            <rect x="70" y="80" width="170" height="85" rx="16" class="node-blue"/><text x="100" y="114" class="label">Reader</text><text x="100" y="138" class="small">admin or member</text>
+            <rect x="310" y="80" width="170" height="85" rx="16" class="node"/><text x="340" y="114" class="label">Permission</text><text x="340" y="138" class="small">artifact scope</text>
+            <rect x="550" y="80" width="170" height="85" rx="16" class="node-gold"/><text x="580" y="114" class="label">Review gate</text><text x="580" y="138" class="small">accepted/rejected</text>
+            <rect x="790" y="80" width="170" height="85" rx="16" class="node-purple"/><text x="820" y="114" class="label">Evidence</text><text x="820" y="138" class="small">selected packet</text>
+            <rect x="430" y="230" width="260" height="85" rx="16" class="node-green"/><text x="465" y="264" class="label">Answer or redaction</text><text x="465" y="288" class="small">uncertainty notes when evidence omitted</text>
+            <path d="M240 123 L310 123" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow5)"/>
+            <path d="M480 123 L550 123" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow5)"/>
+            <path d="M720 123 L790 123" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow5)"/>
+            <path d="M875 165 C815 230 730 252 690 272" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow5)"/>
+            <path d="M395 165 C405 210 415 238 430 272" stroke="#9aacb8" stroke-width="2" fill="none" marker-end="url(#arrow5)"/>
+          </svg>
+        </div>
+
+        <div class="callout warn">
+          <strong>Governance failure condition:</strong> if Izge produces impressive answers but users cannot tell which evidence was used or whether restricted information leaked, the product has failed its trust contract.
+        </div>
+      </section>
+
+      <section class="section" id="api">
+        <h2>9. API reference</h2>
+        <p>This is a practical endpoint map for operators and integrators. API responses are intentionally structured; Izge should not collapse into a single generic chat endpoint.</p>
+        <table>
+          <thead><tr><th>Area</th><th>Endpoints</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>Auth/users</td><td><code>POST /api/auth/sign-in</code><br><code>GET /api/auth/me</code><br><code>GET/POST/PATCH /api/users</code></td><td>Session, role, and workspace user management.</td></tr>
+            <tr><td>Artifacts</td><td><code>POST /api/artifacts/upload</code><br><code>POST /api/artifacts/pasted-text</code><br><code>GET /api/artifacts</code><br><code>GET /api/artifacts/:id</code><br><code>PATCH /api/artifacts/:id/metadata</code></td><td>Source contribution, inspection, and safe metadata edits.</td></tr>
+            <tr><td>Ingestion</td><td><code>POST /api/ingestion/run</code><br><code>GET /api/ingestion/jobs/:id</code></td><td>Parse, chunk, extract, graph, proactive signals.</td></tr>
+            <tr><td>Memory/graph</td><td><code>GET /api/memory/:id</code><br><code>GET /api/graph/summary</code><br><code>GET /api/graph/timeline</code></td><td>Typed memory inspection and graph/timeline summaries.</td></tr>
+            <tr><td>Questions</td><td><code>POST /api/query</code><br><code>GET /api/query/:id</code></td><td>Lineage, contradiction, assumption drift, and next-action answers.</td></tr>
+            <tr><td>Signals</td><td><code>GET /api/contradictions</code><br><code>GET /api/assumptions/drift</code><br><code>GET /api/next-actions</code><br><code>GET /api/signals/:id</code></td><td>Active tensions, drift, next actions, and details.</td></tr>
+            <tr><td>Evidence substrate</td><td><code>GET /api/evidence-substrate/filesystem</code><br><code>GET /api/evidence-substrate/orchestration</code><br><code>GET /api/evidence-substrate/orchestration/runs</code><br><code>GET /api/evidence-substrate/readiness</code></td><td>Memory FS, stage catalog, traces, readiness coverage.</td></tr>
+            <tr><td>Orchestration jobs</td><td><code>GET/POST /api/evidence-substrate/orchestration/jobs</code><br><code>POST /api/evidence-substrate/orchestration/jobs/claim</code><br><code>POST /api/evidence-substrate/orchestration/jobs/:id/complete</code></td><td>DB-backed bounded asynchronous job queue.</td></tr>
+            <tr><td>Scenarios</td><td><code>GET /api/scenario/templates</code><br><code>POST /api/scenario/impact</code><br><code>GET /api/scenario/runs</code><br><code>GET /api/scenario/runs/:id</code><br><code>POST /api/scenario/runs/:id/replay</code></td><td>Template-guided bounded impact analysis and replay.</td></tr>
+            <tr><td>Admin data/audit</td><td><code>GET /api/admin/database</code><br><code>GET /api/audit/events</code></td><td>Database/storage visibility and governance logs.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section" id="operations">
+        <h2>10. Operations and deployment</h2>
+        <div class="diagram-card">
+          <h3>Deployment topologies</h3>
+          <svg class="diagram" viewBox="0 0 1120 480" role="img" aria-label="Deployment topology diagram">
+            <defs><marker id="arrow6" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#547083"></path></marker></defs>
+            <rect x="70" y="70" width="280" height="330" rx="22" fill="#f7fbfd" stroke="#d9e2ec"/>
+            <text x="100" y="110" class="label">Local development</text>
+            <rect x="105" y="145" width="210" height="55" rx="12" class="node-blue"/><text x="125" y="179" class="small">Vite frontend :5173</text>
+            <rect x="105" y="220" width="210" height="55" rx="12" class="node"/><text x="125" y="254" class="small">FastAPI backend :8000</text>
+            <rect x="105" y="295" width="210" height="55" rx="12" class="node-green"/><text x="125" y="329" class="small">Ollama localhost :11434</text>
+            <path d="M210 200 L210 220" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow6)"/><path d="M210 275 L210 295" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow6)"/>
+
+            <rect x="420" y="70" width="280" height="330" rx="22" fill="#f7fbfd" stroke="#d9e2ec"/>
+            <text x="450" y="110" class="label">Docker/company pilot</text>
+            <rect x="455" y="145" width="210" height="55" rx="12" class="node-blue"/><text x="475" y="179" class="small">frontend container :8080</text>
+            <rect x="455" y="220" width="210" height="55" rx="12" class="node"/><text x="475" y="254" class="small">backend container :8000</text>
+            <rect x="455" y="295" width="210" height="55" rx="12" class="node-gold"/><text x="475" y="329" class="small">worker + izge_data volume</text>
+            <path d="M560 200 L560 220" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow6)"/><path d="M560 275 L560 295" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow6)"/>
+
+            <rect x="770" y="70" width="280" height="330" rx="22" fill="#f7fbfd" stroke="#d9e2ec"/>
+            <text x="800" y="110" class="label">EC2 jury/pilot</text>
+            <rect x="805" y="145" width="210" height="55" rx="12" class="node-blue"/><text x="825" y="179" class="small">Nginx + app.izge.dev</text>
+            <rect x="805" y="220" width="210" height="55" rx="12" class="node"/><text x="825" y="254" class="small">systemd FastAPI backend</text>
+            <rect x="805" y="295" width="210" height="55" rx="12" class="node-green"/><text x="825" y="329" class="small">EC2-local/private LLM</text>
+            <path d="M910 200 L910 220" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow6)"/><path d="M910 275 L910 295" stroke="#547083" stroke-width="2" fill="none" marker-end="url(#arrow6)"/>
+          </svg>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Run with Docker Compose</h3>
+            <pre><code>docker compose up --build</code></pre>
+            <ul>
+              <li>Frontend: <code>http://localhost:8080</code></li>
+              <li>Backend: <code>http://localhost:8000</code></li>
+              <li>Services: <code>backend</code>, <code>worker</code>, <code>frontend</code></li>
+              <li>Default local admin: <code>admin@example.com</code> / <code>change-me-admin</code></li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Run for local development</h3>
+            <pre><code>cd backend
+python3 -m venv .venv
+.venv/bin/pip install -e .
+.venv/bin/python -m app.migration_tools upgrade
+.venv/bin/uvicorn app.main:app --reload
+
+# second terminal
+scripts/orchestration-worker.sh --worker-id local-worker
+
+# third terminal
+cd frontend
+npm install
+npm run dev</code></pre>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Database and storage locations</h3>
+          <table>
+            <thead><tr><th>Mode</th><th>SQLite</th><th>Uploaded artifacts</th><th>Pasted text</th></tr></thead>
+            <tbody>
+              <tr><td>Local dev</td><td><code>backend/data/izge.db</code></td><td><code>backend/data/storage</code></td><td><code>backend/data/pasted</code></td></tr>
+              <tr><td>Docker</td><td><code>/data/izge.db</code> in <code>izge_data</code></td><td><code>/data/storage</code></td><td><code>/data/pasted</code></td></tr>
+              <tr><td>EC2/systemd</td><td>configured under server data root</td><td>configured storage root</td><td>configured pasted-text root</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Migration and schema versioning</h3>
+            <pre><code>scripts/db-migrate.sh
+scripts/db-check.sh
+scripts/db-stamp-current.sh  # only after compatibility check</code></pre>
+          </div>
+          <div class="panel">
+            <h3>Backup and restore</h3>
+            <pre><code>scripts/docker-backup.sh
+docker compose down
+scripts/docker-restore.sh backups/&lt;backup-file&gt;.tar.gz --force</code></pre>
+            <p>Backups can contain company data and credentials; keep them out of git and restrict access.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="evaluation">
+        <h2>11. Evaluation and readiness gates</h2>
+        <p>Izge should be judged by evidence, not by polished prose. The final test rule is simple: if the system produces eloquent nonsense, weakly justified contradictions, or uninspectable recommendations, it fails.</p>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Core gates</h3>
+            <pre><code># Backend compile
+backend/.venv/bin/python -m compileall -q backend/app backend/manual_eval
+
+# Seed/evidence/orchestration eval
+cd backend
+.venv/bin/python -m manual_eval.run_isolated_seed_eval
+
+# Full synthetic company workflow
+.venv/bin/python -m manual_eval.run_isolated_synthetic_company_workflow</code></pre>
+          </div>
+          <div class="panel">
+            <h3>Packaging and AI gates</h3>
+            <pre><code># Docker-contained smoke
+scripts/docker-smoke-eval.sh
+
+# Worker daemon queue smoke
+scripts/worker-smoke-eval.sh
+
+# Ollama/local-private LLM smoke
+scripts/ollama-smoke-eval.sh
+
+# Frontend quality
+cd frontend
+npm run lint
+npm run build</code></pre>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>What the synthetic company workflow proves</h3>
+          <ul>
+            <li>Artifact ingestion and processing over one realistic company corpus.</li>
+            <li>Meaningful lineage, contradiction, drift, and next-action answers.</li>
+            <li>Memory FS organization and temporal knowledge graph projection.</li>
+            <li>Scenario replay and prompt-injection boundaries.</li>
+            <li>Member redaction of restricted evidence.</li>
+            <li>Rejected-artifact exclusion from trusted reasoning.</li>
+            <li>DB-backed orchestration job enqueue/claim/complete behavior.</li>
+            <li>Admin database/storage inspection and safe metadata update.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="onboarding">
+        <h2>12. Company onboarding runbook</h2>
+        <div class="timeline">
+          <div class="timeline-item"><strong>Create the workspace boundary.</strong><br>Run one isolated workspace per company or pilot. Decide whether the deployment is local Docker, customer-hosted, EC2 pilot, or managed single-tenant.</div>
+          <div class="timeline-item"><strong>Start the runtime.</strong><br>Bring up backend, frontend, worker daemon, SQLite, artifact storage, and optional local/private LLM gateway.</div>
+          <div class="timeline-item"><strong>Create or verify admin credentials.</strong><br>Change default passwords before shared or production use.</div>
+          <div class="timeline-item"><strong>Load source artifacts.</strong><br>Upload Markdown, text, PDFs, or pasted notes that represent decisions, planning notes, status updates, reports, or postmortems.</div>
+          <div class="timeline-item"><strong>Run ingestion.</strong><br>Parse, chunk, extract typed memory objects, update graph relations, and generate proactive signals.</div>
+          <div class="timeline-item"><strong>Review memory health.</strong><br>Use Artifacts, Memory FS, Graph, Readiness, Data, and Audit to verify coverage and governance.</div>
+          <div class="timeline-item"><strong>Ask locked-mode questions.</strong><br>Use lineage, contradiction, assumption drift, and next-action queries. Inspect evidence, uncertainty, and trace steps.</div>
+          <div class="timeline-item"><strong>Operate the memory.</strong><br>Review or reject artifacts, upload replacements for changed documents, run backups, and keep migration checks green.</div>
+        </div>
+      </section>
+
+      <section class="section" id="roadmap">
+        <h2>13. Roadmap, boundaries, and remaining risks</h2>
+        <div class="grid-3">
+          <div class="panel"><span class="status ready">Implemented foundation</span><h3>Portable MVP</h3><p>React/FastAPI app, SQLite storage, artifact filesystem, memory extraction, graph, signals, traces, scenarios, Docker, worker daemon, DB inspection, and local LLM smoke path.</p></div>
+          <div class="panel"><span class="status boundary">Production hardening</span><h3>Next risk-reduction work</h3><p>Worker metrics, dead-letter queue, retry/backoff policy, stronger multi-worker stress testing, deployment secret rotation, backups rehearsed in target environment.</p></div>
+          <div class="panel"><span class="status locked">Do not drift</span><h3>Category guardrail</h3><p>Avoid turning Izge into generic enterprise search, generic chat over documents, broad workflow automation, or fake multi-agent theater.</p></div>
+        </div>
+        <div class="panel">
+          <h3>Future directions</h3>
+          <ul>
+            <li>Richer extraction quality metrics and larger gold corpora.</li>
+            <li>Explicit claim-family and claim-occurrence tables if the current temporal read model proves useful.</li>
+            <li>Additional company templates and industry-specific onboarding packs.</li>
+            <li>Optional edge-side lightweight inference, without making it required for MVP correctness.</li>
+            <li>More extensive deployment options for customer-controlled infrastructure.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="glossary">
+        <h2>14. Glossary</h2>
+        <table>
+          <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Artifact</td><td>A source file or pasted text item used as evidence.</td></tr>
+            <tr><td>Chunk</td><td>An ordered text segment extracted from an artifact for retrieval and evidence citation.</td></tr>
+            <tr><td>Memory object</td><td>A typed extracted record: Decision, Assumption, Constraint, Outcome, or Commitment.</td></tr>
+            <tr><td>Signal</td><td>A durable contradiction, drift, supersession, continuity, or next-action item derived from memory and graph state.</td></tr>
+            <tr><td>Context packet</td><td>A typed, permission-filtered set of selected evidence and memory refs passed to reasoning/orchestration stages.</td></tr>
+            <tr><td>Provenance verifier</td><td>A deterministic gate that rejects unsupported stage output before it reaches the user.</td></tr>
+            <tr><td>Local-first</td><td>Company-controlled storage and primary inference; not necessarily one desktop app per employee.</td></tr>
+            <tr><td>Bounded scenario</td><td>An impact lookup over known memory that identifies what requires review without pretending to forecast the future.</td></tr>
+            <tr><td>Worker daemon</td><td>A long-running process that consumes DB-backed orchestration jobs and records terminal results.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section" id="sources">
+        <h2>15. Source documents</h2>
+        <p>This official HTML document consolidates and explains the implementation-aligned source-of-truth docs in this repository:</p>
+        <div class="tag-list">
+          <span class="tag">README.md</span>
+          <span class="tag">docs/PRD.md</span>
+          <span class="tag">docs/REQUIREMENTS.md</span>
+          <span class="tag">docs/SYSTEM_ARCHITECTURE.md</span>
+          <span class="tag">docs/DOMAIN_MODEL.md</span>
+          <span class="tag">docs/DECISION_GRAPH_SPEC.md</span>
+          <span class="tag">docs/API_SPEC.md</span>
+          <span class="tag">docs/SECURITY_GOVERNANCE.md</span>
+          <span class="tag">docs/DEPLOYMENT_MVP.md</span>
+          <span class="tag">docs/COMPANY_PORTABLE_MEMORY_SYSTEM.md</span>
+          <span class="tag">docs/TEST_PLAN.md</span>
+          <span class="tag">docs/UI_UX_SPEC.md</span>
+        </div>
+        <div class="callout info">
+          <strong>Maintenance rule:</strong> update this HTML whenever the architecture, product contract, endpoint surface, database operations, deployment path, or evaluation gates materially change.
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p><strong>Izge Official Documentation.</strong> Standalone repository artifact generated for product, architecture, operations, and customer-readiness communication.</p>
+      <p><a href="#top">Back to top</a></p>
+    </footer>
+  </div>
+</body>
+</html>

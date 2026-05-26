@@ -1,6 +1,11 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { formatDateTime } from '../lib/format'
+
+type ThemePreference = 'dark' | 'light'
+
+const themeStorageKey = 'izge-theme-preference'
 
 const primaryNavigation = [
   { to: '/', label: 'Dashboard', end: true },
@@ -15,10 +20,23 @@ const primaryNavigation = [
 
 export function AppShell() {
   const { session, signOut } = useAuth()
+  const [theme, setTheme] = useState<ThemePreference>(() => {
+    if (typeof window === 'undefined') {
+      return 'dark'
+    }
+
+    return window.localStorage.getItem(themeStorageKey) === 'light' ? 'light' : 'dark'
+  })
   const isAdmin = session?.user.role === 'Admin'
   const navigationItems = isAdmin
     ? [...primaryNavigation, { to: '/admin/data', label: 'Data' }, { to: '/audit', label: 'Audit' }, { to: '/admin/users', label: 'Users' }]
     : [...primaryNavigation, { to: '/audit', label: 'Audit' }]
+  const nextTheme = theme === 'dark' ? 'light' : 'dark'
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    window.localStorage.setItem(themeStorageKey, theme)
+  }, [theme])
 
   return (
     <div className="app-frame">
@@ -43,9 +61,16 @@ export function AppShell() {
               {item.label}
             </NavLink>
           ))}
+          <a className="nav-link" href="/docs/IZGE_OFFICIAL_DOCUMENTATION.html">
+            Docs
+          </a>
         </nav>
 
         <div className="session-cluster">
+          <button type="button" className="theme-toggle" aria-label={`Switch to ${nextTheme} theme`} aria-pressed={theme === 'light'} onClick={() => setTheme(nextTheme)}>
+            <span aria-hidden="true" className="theme-toggle-icon">{theme === 'dark' ? '☀' : '☾'}</span>
+            <span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+          </button>
           <div className="identity-block">
             <p className="identity-name">{session?.user.display_name}</p>
             <p className="identity-meta">{session?.user.role} / {formatDateTime(session?.expiresAt)}</p>
