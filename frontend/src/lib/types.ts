@@ -17,6 +17,23 @@ export interface TokenResponse {
   user: UserRead
 }
 
+export interface TeamChatMessageRead {
+  message_id: string
+  workspace_id: string
+  author_user_id: string
+  author_display_name: string
+  author_role: UserRole
+  body: string
+  message_metadata: Record<string, unknown>
+  created_at: string
+}
+
+export interface TeamChatThreadRead {
+  workspace_id: string
+  generated_at: string
+  messages: TeamChatMessageRead[]
+}
+
 export interface ArtifactRead {
   artifact_id: string
   workspace_id: string

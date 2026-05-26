@@ -370,8 +370,8 @@
               <p>Prepares and governs the memory: uploads or reviews artifacts, manages users, inspects ingestion state, monitors signals, verifies readiness, and manages database/storage visibility.</p>
             </div>
             <div>
-              <h4>Member</h4>
-              <p>Contributes artifacts and asks evidence-backed questions. Members only see artifacts, evidence, signals, and derived outputs that their permissions allow.</p>
+              <h4>Employee / Member</h4>
+              <p>Contributes artifacts, uses the full-page assistant, and coordinates with colleagues through Team Chat. Employee users map to the backend <code>Member</code> role and only see artifacts, evidence, signals, and derived outputs that their permissions allow.</p>
             </div>
           </div>
         </div>
@@ -385,6 +385,7 @@
             <li><strong>Next-action guidance:</strong> recommend a grounded follow-up action based on unresolved memory tensions.</li>
             <li><strong>Proactive ingestion:</strong> evaluate new artifacts against prior memory immediately after processing.</li>
             <li><strong>Continuity and anti-duplication:</strong> surface prior relevant work before teams repeat work that already happened.</li>
+            <li><strong>Employee coordination:</strong> let employees discuss rollout work in Team Chat while the assistant answers from governed artifacts.</li>
           </ol>
         </div>
 
@@ -398,7 +399,8 @@
               <tr><td>Contradiction and drift detection</td><td>Dashboard, Graph, Signals, Query results, proactive ingestion outputs</td><td>Signals are linked to supporting memory/evidence and review status</td></tr>
               <tr><td>Agentic file-system / retrieval</td><td>Memory FS and Data pages</td><td>Logical locators, chunk counts, memory counts, checksums, and immutable source references</td></tr>
               <tr><td>Bounded orchestration</td><td>Jobs / Orchestrate page, stage runs, DB-backed queue</td><td>Typed packets, worker leases, result schemas, provenance verifier</td></tr>
-              <tr><td>Governed AI assistance</td><td>LLM readiness, traces, deterministic fallback</td><td>Local/private gateway, schema validation, permission-aware prompts, fail-closed behavior</td></tr>
+              <tr><td>Governed AI assistance</td><td>Full-page Assistant, LLM readiness, traces, deterministic fallback</td><td>Local/private gateway, schema validation, permission-aware prompts, fail-closed behavior</td></tr>
+              <tr><td>Employee coordination</td><td>Team Chat, Assistant, Audit/Data visibility</td><td>Workspace-scoped messages, role labels, database-backed persistence</td></tr>
             </tbody>
           </table>
         </div>
@@ -414,6 +416,7 @@
           <div class="panel"><h3>Graph relation</h3><p>A typed, evidence-aware relation between memory objects, such as <code>BASED_ON</code>, <code>CONTRADICTS</code>, or <code>SUPERSEDES</code>.</p></div>
           <div class="panel"><h3>Signal</h3><p>A durable proactive finding: contradiction, assumption drift, continuity overlap, supersession, or next action.</p></div>
           <div class="panel"><h3>Query run</h3><p>A persisted reasoning request with selected evidence, trace steps, stage runs, answer packet, and uncertainty notes.</p></div>
+          <div class="panel"><h3>Team chat message</h3><p>A workspace-scoped employee coordination message. It is separate from assistant reasoning, but it can reference artifacts, meetings, and follow-ups.</p></div>
           <div class="panel"><h3>Scenario run</h3><p>A bounded impact-analysis packet over known memory. It identifies what to review; it does not forecast the future.</p></div>
           <div class="panel"><h3>Orchestration job</h3><p>A DB-backed asynchronous task with a bounded payload, lease, worker ownership, terminal result, and rejection path for unsafe requests.</p></div>
         </div>
@@ -555,6 +558,7 @@
               <tr><td>Graph</td><td><code>graph_nodes</code>, <code>graph_edges</code></td><td>Typed relationships, continuity, contradiction, supersession, temporal links</td><td>Graph, Readiness, Results</td></tr>
               <tr><td>Reasoning outputs</td><td><code>signals</code>, <code>query_runs</code>, <code>query_trace_steps</code>, <code>scenario_runs</code></td><td>Inspectable outputs, evidence selection, scenario replay, answer traces</td><td>Dashboard, Signals, Chat, Jobs</td></tr>
               <tr><td>Operations</td><td><code>orchestration_stage_runs</code>, <code>orchestration_jobs</code>, <code>audit_events</code></td><td>Bounded agent/stage ledger, worker queue, governance audit</td><td>Jobs, Data, Audit</td></tr>
+              <tr><td>Employee coordination</td><td><code>company_chat_messages</code></td><td>Workspace-scoped internal team chat for rollout notes, artifact review coordination, and handoffs</td><td>Team Chat, Data</td></tr>
             </tbody>
           </table>
         </div>

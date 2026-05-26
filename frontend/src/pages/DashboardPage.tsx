@@ -297,9 +297,6 @@ export function DashboardPage() {
             <Link className="primary-button" to={demoReadiness.actionTo}>
               {demoReadiness.actionLabel}
             </Link>
-            <a className="secondary-button" href="/docs/IZGE_OFFICIAL_DOCUMENTATION.html">
-              Open docs
-            </a>
           </div>
         </div>
 

@@ -17,6 +17,7 @@ import { QueryResultPage } from './pages/QueryResultPage'
 import { SignalDetailPage } from './pages/SignalDetailPage'
 import { SignInPage } from './pages/SignInPage'
 import { TargetReadinessPage } from './pages/TargetReadinessPage'
+import { TeamChatPage } from './pages/TeamChatPage'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -45,6 +46,7 @@ function App() {
           <Route index element={<DashboardPage />} />
           <Route path="artifacts" element={<ArtifactsPage />} />
           <Route path="ingestion" element={<IngestionPage />} />
+          <Route path="team-chat" element={<TeamChatPage />} />
           <Route path="query" element={<QueryPage />} />
           <Route path="query/:queryRunId" element={<QueryResultPage />} />
           <Route path="signals/:signalId" element={<SignalDetailPage />} />

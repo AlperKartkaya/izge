@@ -18,6 +18,7 @@ from app.routers.query import router as query_router
 from app.routers.scenario import router as scenario_router
 from app.routers.signals import router as signals_router
 from app.routers.system import router as system_router
+from app.routers.team_chat import router as team_chat_router
 from app.routers.users import router as users_router
 from app.services.bootstrap import initialize_database, seed_defaults
 
@@ -49,6 +50,7 @@ app.include_router(ingestion_router, prefix=settings.api_prefix)
 app.include_router(query_router, prefix=settings.api_prefix)
 app.include_router(signals_router, prefix=settings.api_prefix)
 app.include_router(system_router, prefix=settings.api_prefix)
+app.include_router(team_chat_router, prefix=settings.api_prefix)
 app.include_router(graph_router, prefix=settings.api_prefix)
 app.include_router(memory_router, prefix=settings.api_prefix)
 app.include_router(analysis_router, prefix=settings.api_prefix)

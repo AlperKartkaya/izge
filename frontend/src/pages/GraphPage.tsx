@@ -12,8 +12,119 @@ import type {
   GraphTimelineItem,
   NextActionSignalItem,
   SignalRead,
+  TemporalGraphLink,
+  TemporalGraphOccurrence,
   TemporalGraphRead,
 } from '../lib/types'
+
+interface InteractiveGraphNode {
+  id: string
+  kind: 'artifact' | 'memory'
+  label: string
+  subtitle: string
+  x: number
+  y: number
+  memoryType?: string
+  memoryId?: string
+  occurrence?: TemporalGraphOccurrence
+  artifactId?: string
+  artifactTitle?: string
+  confidenceScore?: number
+}
+
+interface InteractiveGraphEdge {
+  id: string
+  fromId: string
+  toId: string
+  edgeType: string
+  confidenceScore: number
+  sourceLink?: TemporalGraphLink
+}
+
+interface InteractiveGraphModel {
+  nodes: InteractiveGraphNode[]
+  edges: InteractiveGraphEdge[]
+}
+
+function truncateGraphLabel(value: string, limit = 30): string {
+  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value
+}
+
+function buildInteractiveGraph(temporalGraph: TemporalGraphRead | null): InteractiveGraphModel {
+  if (!temporalGraph || temporalGraph.occurrences.length === 0) {
+    return { nodes: [], edges: [] }
+  }
+
+  const artifactMap = new Map<string, string>()
+  temporalGraph.occurrences.forEach((occurrence) => {
+    artifactMap.set(occurrence.source_artifact_id, occurrence.source_artifact_title)
+  })
+  const artifactEntries = Array.from(artifactMap.entries()).slice(0, 8)
+  const visibleOccurrences = temporalGraph.occurrences.slice(0, 32)
+  const nodes: InteractiveGraphNode[] = []
+
+  artifactEntries.forEach(([artifactId, artifactTitle], index) => {
+    const denominator = Math.max(artifactEntries.length - 1, 1)
+    nodes.push({
+      id: `artifact:${artifactId}`,
+      kind: 'artifact',
+      label: artifactTitle,
+      subtitle: 'Source artifact',
+      x: 110,
+      y: 90 + (index / denominator) * 420,
+      artifactId,
+      artifactTitle,
+    })
+  })
+
+  const centerX = 575
+  const centerY = 300
+  const radiusX = 325
+  const radiusY = 220
+  visibleOccurrences.forEach((occurrence, index) => {
+    const angle = -Math.PI / 2 + (index / Math.max(visibleOccurrences.length, 1)) * Math.PI * 2
+    nodes.push({
+      id: occurrence.occurrence_id,
+      kind: 'memory',
+      label: occurrence.title_or_label,
+      subtitle: `${formatLabel(occurrence.memory_type)} · ${formatLabel(occurrence.status)}`,
+      x: centerX + Math.cos(angle) * radiusX,
+      y: centerY + Math.sin(angle) * radiusY,
+      memoryType: occurrence.memory_type,
+      memoryId: occurrence.memory_id,
+      occurrence,
+      artifactId: occurrence.source_artifact_id,
+      artifactTitle: occurrence.source_artifact_title,
+      confidenceScore: occurrence.confidence_score,
+    })
+  })
+
+  const nodeIds = new Set(nodes.map((node) => node.id))
+  const edges: InteractiveGraphEdge[] = visibleOccurrences
+    .filter((occurrence) => nodeIds.has(`artifact:${occurrence.source_artifact_id}`))
+    .map((occurrence) => ({
+      id: `source:${occurrence.occurrence_id}`,
+      fromId: `artifact:${occurrence.source_artifact_id}`,
+      toId: occurrence.occurrence_id,
+      edgeType: 'source_artifact',
+      confidenceScore: occurrence.confidence_score,
+    }))
+
+  temporalGraph.links.forEach((link) => {
+    if (nodeIds.has(link.from_occurrence_id) && nodeIds.has(link.to_occurrence_id)) {
+      edges.push({
+        id: link.edge_id,
+        fromId: link.from_occurrence_id,
+        toId: link.to_occurrence_id,
+        edgeType: link.edge_type,
+        confidenceScore: link.confidence_score,
+        sourceLink: link,
+      })
+    }
+  })
+
+  return { nodes, edges }
+}
 
 export function GraphPage() {
   const { session } = useAuth()
@@ -26,6 +137,8 @@ export function GraphPage() {
   const [persistedSignals, setPersistedSignals] = useState<SignalRead[]>([])
   const [temporalGraph, setTemporalGraph] = useState<TemporalGraphRead | null>(null)
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null)
+  const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null)
+  const [selectedGraphEdgeId, setSelectedGraphEdgeId] = useState<string | null>(null)
   const [isNeighborhoodLoading, setIsNeighborhoodLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -76,6 +189,16 @@ export function GraphPage() {
     () => timelineItems.find((item) => item.memory_id === selectedMemoryId) ?? timelineItems[0] ?? null,
     [selectedMemoryId, timelineItems],
   )
+  const interactiveGraph = useMemo(() => buildInteractiveGraph(temporalGraph), [temporalGraph])
+  const selectedGraphNode = useMemo(
+    () => (selectedGraphEdgeId ? null : (interactiveGraph.nodes.find((node) => node.id === selectedGraphNodeId) ?? interactiveGraph.nodes[0] ?? null)),
+    [interactiveGraph.nodes, selectedGraphEdgeId, selectedGraphNodeId],
+  )
+  const selectedGraphEdge = useMemo(
+    () => interactiveGraph.edges.find((edge) => edge.id === selectedGraphEdgeId) ?? null,
+    [interactiveGraph.edges, selectedGraphEdgeId],
+  )
+  const nodeById = useMemo(() => new Map(interactiveGraph.nodes.map((node) => [node.id, node])), [interactiveGraph.nodes])
 
   useEffect(() => {
     let cancelled = false
@@ -132,6 +255,171 @@ export function GraphPage() {
         <MetricCard label="Persisted signals" value={persistedSignals.length || nextActions.length} />
         <MetricCard label="Temporal claims" value={temporalGraph?.occurrences.length ?? '—'} detail={`${temporalGraph?.families.length ?? 0} persisted families`} />
       </section>
+
+      <Panel
+        title="Interactive evidence graph"
+        description="A live projection of how source artifacts feed memory nodes and how orchestration links those nodes into conflict, drift, and guidance context."
+      >
+        {interactiveGraph.nodes.length > 0 ? (
+          <div className="graph-interactive-shell">
+            <div className="graph-svg-panel" aria-label="Interactive artifact and memory graph">
+              <svg className="graph-svg-canvas" viewBox="0 0 980 620" role="img" aria-labelledby="interactive-graph-title interactive-graph-description">
+                <title id="interactive-graph-title">Izge artifact and memory graph</title>
+                <desc id="interactive-graph-description">
+                  Source artifact nodes sit on the left and connect to extracted memory nodes. Relationship edges connect memory nodes used by the orchestration runtime.
+                </desc>
+                <defs>
+                  <marker id="graph-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" />
+                  </marker>
+                </defs>
+                {interactiveGraph.edges.map((edge) => {
+                  const fromNode = nodeById.get(edge.fromId)
+                  const toNode = nodeById.get(edge.toId)
+                  if (!fromNode || !toNode) {
+                    return null
+                  }
+                  return (
+                    <g key={edge.id}>
+                      <line
+                        className={selectedGraphEdge?.id === edge.id ? 'graph-svg-edge graph-svg-edge-active' : 'graph-svg-edge'}
+                        x1={fromNode.x}
+                        y1={fromNode.y}
+                        x2={toNode.x}
+                        y2={toNode.y}
+                        markerEnd="url(#graph-arrow)"
+                        onClick={() => {
+                          setSelectedGraphEdgeId(edge.id)
+                          setSelectedGraphNodeId(null)
+                        }}
+                      />
+                    </g>
+                  )
+                })}
+                {interactiveGraph.nodes.map((node) => (
+                  <g
+                    key={node.id}
+                    className={selectedGraphNode?.id === node.id ? 'graph-svg-node graph-svg-node-active' : `graph-svg-node graph-svg-node-${node.kind}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${node.kind === 'artifact' ? 'Artifact' : 'Memory'} node: ${node.label}`}
+                    transform={`translate(${node.x} ${node.y})`}
+                    onClick={() => {
+                      setSelectedGraphNodeId(node.id)
+                      setSelectedGraphEdgeId(null)
+                      if (node.memoryId) {
+                        setSelectedMemoryId(node.memoryId)
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setSelectedGraphNodeId(node.id)
+                        setSelectedGraphEdgeId(null)
+                        if (node.memoryId) {
+                          setSelectedMemoryId(node.memoryId)
+                        }
+                      }
+                    }}
+                  >
+                    <circle className="graph-node-halo" r={node.kind === 'artifact' ? 28 : 22} />
+                    <circle className="graph-node-circle" r={node.kind === 'artifact' ? 17 : 14} />
+                    <text className="graph-node-label" x={node.kind === 'artifact' ? 26 : 20} y="-3">
+                      {truncateGraphLabel(node.label)}
+                    </text>
+                    <text className="graph-node-subtitle" x={node.kind === 'artifact' ? 26 : 20} y="14">
+                      {truncateGraphLabel(node.subtitle, 24)}
+                    </text>
+                  </g>
+                ))}
+              </svg>
+            </div>
+
+            <aside className="graph-detail-panel panel-subtle" aria-label="Selected graph item detail">
+              {selectedGraphEdge ? (
+                <div className="stack-md">
+                  <div>
+                    <p className="section-label">Selected edge</p>
+                    <h4 className="section-title">{formatLabel(selectedGraphEdge.edgeType)}</h4>
+                    <p className="table-secondary">Confidence {formatPercent(selectedGraphEdge.confidenceScore)}</p>
+                  </div>
+                  <dl className="meta-list compact-meta-list">
+                    <div>
+                      <dt>From</dt>
+                      <dd>{nodeById.get(selectedGraphEdge.fromId)?.label ?? selectedGraphEdge.fromId}</dd>
+                    </div>
+                    <div>
+                      <dt>To</dt>
+                      <dd>{nodeById.get(selectedGraphEdge.toId)?.label ?? selectedGraphEdge.toId}</dd>
+                    </div>
+                    <div>
+                      <dt>Evidence artifact</dt>
+                      <dd>{selectedGraphEdge.sourceLink?.evidence_artifact_id ?? 'Source projection'}</dd>
+                    </div>
+                  </dl>
+                  <p className="muted-copy">
+                    Edges show how Izge's graph context lets orchestration compare claims, detect contradictions, and carry evidence into answer synthesis.
+                  </p>
+                </div>
+              ) : selectedGraphNode ? (
+                <div className="stack-md">
+                  <div>
+                    <p className="section-label">{selectedGraphNode.kind === 'artifact' ? 'Source artifact' : 'Memory node'}</p>
+                    <h4 className="section-title">{selectedGraphNode.label}</h4>
+                    <p className="table-secondary">{selectedGraphNode.subtitle}</p>
+                  </div>
+                  {selectedGraphNode.kind === 'artifact' && selectedGraphNode.artifactId ? (
+                    <div className="graph-detail-actions inline-actions">
+                      <a className="primary-button" href={api.artifactPreviewUrl(selectedGraphNode.artifactId)} target="_blank" rel="noreferrer">
+                        Preview artifact
+                      </a>
+                      <a className="secondary-button" href={api.artifactDownloadUrl(selectedGraphNode.artifactId)}>
+                        Download
+                      </a>
+                    </div>
+                  ) : null}
+                  {selectedGraphNode.kind === 'memory' && selectedGraphNode.memoryType && selectedGraphNode.memoryId ? (
+                    <div className="stack-sm">
+                      <p className="muted-copy">{selectedGraphNode.occurrence?.evidence_span ?? 'No evidence span recorded for this occurrence.'}</p>
+                      <dl className="meta-list compact-meta-list">
+                        <div>
+                          <dt>Source</dt>
+                          <dd>{selectedGraphNode.artifactTitle}</dd>
+                        </div>
+                        <div>
+                          <dt>Observed</dt>
+                          <dd>{formatDateTime(selectedGraphNode.occurrence?.observed_at)}</dd>
+                        </div>
+                        <div>
+                          <dt>Confidence</dt>
+                          <dd>{formatPercent(selectedGraphNode.confidenceScore ?? 0)}</dd>
+                        </div>
+                      </dl>
+                      <div className="graph-detail-actions inline-actions">
+                        <Link className="primary-button" to={`/memory/${selectedGraphNode.memoryType}/${selectedGraphNode.memoryId}`}>
+                          Open memory
+                        </Link>
+                        {selectedGraphNode.artifactId ? (
+                          <a className="secondary-button" href={api.artifactPreviewUrl(selectedGraphNode.artifactId)} target="_blank" rel="noreferrer">
+                            Preview source
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <EmptyState title="Select a node" description="Hover nodes to enlarge them, then click to inspect artifact and memory details." />
+              )}
+            </aside>
+          </div>
+        ) : (
+          <EmptyState
+            title="No graph projection yet"
+            description="Run ingestion on company artifacts to create source nodes, extracted memory nodes, and orchestration-ready relationships."
+          />
+        )}
+      </Panel>
 
       <Panel
         title="Temporal knowledge graph"

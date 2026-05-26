@@ -150,6 +150,17 @@ class Commitment(Base, MemoryMixin):
     due_date: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class CompanyChatMessage(Base):
+    __tablename__ = "company_chat_messages"
+
+    message_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("msg"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    author_user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False, index=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    message_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class IngestionJob(Base):
     __tablename__ = "ingestion_jobs"
 

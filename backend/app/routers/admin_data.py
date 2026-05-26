@@ -34,6 +34,7 @@ TABLE_SURFACES: dict[str, tuple[str, str]] = {
     "signals": ("proactive signal generation", "signals and dashboard"),
     "query_runs": ("query API", "query history and readiness"),
     "query_trace_steps": ("query/orchestration tracing", "trace evidence"),
+    "company_chat_messages": ("employee team chat", "team chat and admin data"),
     "orchestration_stage_runs": ("bounded orchestration runtime", "orchestration evidence"),
     "orchestration_jobs": ("worker queue API/daemon", "jobs dashboard, admin data"),
     "scenario_runs": ("scenario replay", "scenario history and readiness"),

@@ -24,6 +24,11 @@ Run the DB-backed orchestration worker in another terminal when queued stage job
 
 Override these with `IZGE_DEFAULT_ADMIN_EMAIL` and `IZGE_DEFAULT_ADMIN_PASSWORD` if needed.
 
+Seeded local employee users for demo inspection:
+
+- `employee@example.com` / `change-me-employee`
+- `ops@example.com` / `change-me-ops`
+
 ## Database migration/version tooling
 
 The app uses Alembic-backed schema versioning. Startup runs the safe upgrade/stamp path automatically, and operators can run the tooling directly:

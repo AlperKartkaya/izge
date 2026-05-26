@@ -44,6 +44,27 @@ class UserRead(UserBase):
     created_at: datetime
 
 
+class TeamChatMessageCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class TeamChatMessageRead(BaseModel):
+    message_id: str
+    workspace_id: str
+    author_user_id: str
+    author_display_name: str
+    author_role: Literal["Admin", "Member"]
+    body: str
+    message_metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class TeamChatThreadRead(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    messages: list[TeamChatMessageRead]
+
+
 class ArtifactRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

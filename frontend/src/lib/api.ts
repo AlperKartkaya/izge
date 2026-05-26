@@ -28,6 +28,8 @@ import type {
   QueryTraceRead,
   SignalDetail,
   SignalRead,
+  TeamChatMessageRead,
+  TeamChatThreadRead,
   TargetReadinessRead,
   TokenResponse,
   UserRead,
@@ -237,6 +239,18 @@ export const api = {
     return request<QueryTraceRead>(`/query/${queryRunId}/trace`, { token })
   },
 
+  listTeamChatMessages(token: string, limit = 80) {
+    return request<TeamChatThreadRead>(`/team-chat?limit=${limit}`, { token })
+  },
+
+  createTeamChatMessage(token: string, body: string) {
+    return request<TeamChatMessageRead>('/team-chat', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ body }),
+    })
+  },
+
   getGraphSummary(token: string) {
     return request<GraphSummary>('/graph/summary', { token })
   },
@@ -294,8 +308,12 @@ export const api = {
     return request<TargetReadinessRead>('/evidence-substrate/readiness', { token })
   },
 
-  listOrchestrationStageRuns(token: string, limit = 40) {
-    return request<OrchestrationStageRunsRead>(`/evidence-substrate/orchestration/runs?limit=${limit}`, { token })
+  listOrchestrationStageRuns(token: string, limit = 40, queryRunId?: string) {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (queryRunId) {
+      params.set('query_run_id', queryRunId)
+    }
+    return request<OrchestrationStageRunsRead>(`/evidence-substrate/orchestration/runs?${params.toString()}`, { token })
   },
 
   listOrchestrationJobs(token: string, limit = 20) {

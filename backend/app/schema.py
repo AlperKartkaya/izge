@@ -24,6 +24,7 @@ REQUIRED_SCHEMA_COLUMNS: dict[str, set[str]] = {
         "output_summary",
         "created_at",
     },
+    "company_chat_messages": {"message_id", "workspace_id", "author_user_id", "body", "message_metadata", "created_at"},
     "orchestration_jobs": {
         "job_id",
         "workspace_id",

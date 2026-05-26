@@ -116,6 +116,10 @@ Default local credentials:
 
 - email: `admin@example.com`
 - password: `change-me-admin`
+- employee email: `employee@example.com`
+- employee password: `change-me-employee`
+- ops employee email: `ops@example.com`
+- ops employee password: `change-me-ops`
 
 Change `IZGE_DEFAULT_ADMIN_PASSWORD` before any shared or production deployment.
 

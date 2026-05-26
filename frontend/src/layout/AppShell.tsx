@@ -8,6 +8,7 @@ const primaryNavigation = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/artifacts', label: 'Artifacts' },
   { to: '/ingestion', label: 'Ingestion' },
+  { to: '/team-chat', label: 'Team chat' },
   { to: '/graph', label: 'Graph' },
   { to: '/memory-filesystem', label: 'Memory FS' },
   { to: '/orchestration', label: 'Jobs' },
