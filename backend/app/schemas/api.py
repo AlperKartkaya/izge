@@ -796,6 +796,54 @@ class OrchestrationStageRunsRead(BaseModel):
     runs: list[OrchestrationStageRunRead]
 
 
+class OrchestrationJobCreate(BaseModel):
+    job_kind: str = Field(default="stage_packet", min_length=1, max_length=64)
+    stage_key: str | None = Field(default=None, max_length=64)
+    query_run_id: str | None = None
+    priority: int = Field(default=100, ge=0, le=10000)
+    payload_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class OrchestrationJobClaimRequest(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=255)
+    lease_seconds: int = Field(default=90, ge=10, le=3600)
+
+
+class OrchestrationJobCompleteRequest(BaseModel):
+    status: Literal["completed", "failed", "cancelled"] = "completed"
+    result_json: dict[str, Any] = Field(default_factory=dict)
+    error_message: str | None = Field(default=None, max_length=2000)
+
+
+class OrchestrationJobRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    job_id: str
+    workspace_id: str
+    created_by: str
+    query_run_id: str | None
+    job_kind: str
+    stage_key: str | None
+    status: str
+    priority: int
+    payload_json: dict[str, Any]
+    result_json: dict[str, Any]
+    error_message: str | None
+    lease_owner: str | None
+    lease_expires_at: datetime | None
+    available_at: datetime
+    claimed_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class OrchestrationJobListRead(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    jobs: list[OrchestrationJobRead]
+
+
 ReadinessAreaStatus = Literal["implemented", "partial", "planned"]
 
 

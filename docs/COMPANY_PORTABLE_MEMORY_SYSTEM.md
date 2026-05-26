@@ -68,13 +68,15 @@ Rules:
 
 ### 6. Signals, traces, and governance
 
-Tables: `signals`, `query_runs`, `query_trace_steps`, `orchestration_stage_runs`, `audit_events`
+Tables: `signals`, `query_runs`, `query_trace_steps`, `orchestration_stage_runs`, `orchestration_jobs`, `scenario_runs`, `audit_events`
 
 Rules:
 
 - Signals are durable proactive findings from evidence-backed memory, not generic alerts.
 - Query traces must show route decision, bounded orchestration, typed context assembly, provenance verification, evidence selection, answer composition, and uncertainty.
 - Orchestration stage runs persist the replayable stage ledger for each bounded query execution without exposing raw source paths or hidden artifact content.
+- Orchestration jobs provide a portable DB-backed worker queue foundation: create a bounded payload, claim it with a lease, complete/fail/cancel it with structured result metadata, and expose safe job state through `/api/evidence-substrate/orchestration/jobs`.
+- Scenario runs persist bounded impact packets for deterministic replay.
 - Audit events prove who uploaded, reviewed, queried, and changed governance state.
 
 ## Bounded orchestration contract
@@ -90,7 +92,8 @@ Recommended stage sequence:
 5. **Contradiction interrogator** — compare explicit conflicting memory pairs.
 6. **Assumption drift interrogator** — compare assumptions against later evidence and signals.
 7. **Guidance planner** — compose next actions from contradictions, stale assumptions, and commitments.
-8. **Provenance verifier** — reject unsupported stage output before it reaches the user.
+8. **Worker queue dispatcher** — persist bounded asynchronous stage tasks in `orchestration_jobs` so a local or future external worker can claim, lease, complete, fail, and replay work without bypassing the typed context packet boundary.
+9. **Provenance verifier** — reject unsupported stage output before it reaches the user.
 
 Every sub-agent/stage packet should include:
 
@@ -111,7 +114,9 @@ The current query runtime now persists this as a `context_packet.v1` trace paylo
 
 Each query also writes `orchestration_stage_runs` rows for the bounded stages. Those rows hold packet IDs, stage status, authority level, verifier status, and safe output summaries so the Orchestrate page can replay what happened without granting direct source-file access.
 
-Startup bootstrap now creates the additive demo tables/columns and fails loudly if the critical portable-memory schema is incomplete (`artifacts`, `query_runs`, `query_trace_steps`, and `orchestration_stage_runs`). That protects existing company databases from silently missing the stage ledger; destructive or shape-changing migrations still need explicit versioned migration tooling.
+Asynchronous or future external-agent work starts in `orchestration_jobs`: `/api/evidence-substrate/orchestration/jobs` enqueues bounded payloads, `/claim` assigns a lease to a worker, and `/{job_id}/complete` records terminal output. The queue is intentionally DB-backed first so it works on the same customer-controlled SQLite volume as the rest of the demo; distributed workers can be attached later without changing the evidence/provenance contract.
+
+Startup now runs Alembic-backed migration/version tooling. Fresh databases run the baseline revision; verified pre-Alembic SQLite databases are non-destructively repaired for legacy additive columns, stamped at head, and then checked by the portable-memory schema guard. Future schema changes should add explicit revisions under `backend/migrations/versions/` and be verified with `scripts/db-migrate.sh` plus `scripts/db-check.sh`.
 
 Every stage response should include:
 
@@ -161,8 +166,16 @@ Because `IZGE_DEFAULT_ADMIN_PASSWORD` is empty in `docker-compose.yml`, the back
 Use these commands when moving the same company memory system across machines or before risky maintenance:
 
 ```bash
+# Prove/upgrade the configured database schema with Alembic tooling.
+scripts/db-migrate.sh
+scripts/db-check.sh
+
 # Prove the backend image can run the full seed/evidence/orchestration eval.
 scripts/docker-smoke-eval.sh
+
+# Prove the one-company synthetic workflow: Northstar Payroll corpus, permissions,
+# prompt injection, scenario replay, rejection, temporal graph, and DB-backed jobs.
+scripts/synthetic-company-smoke-eval.sh
 
 # Prove the same eval with local/private Ollama routing plus backend LLM smoke.
 scripts/ollama-smoke-eval.sh
@@ -214,14 +227,23 @@ Scenario impact calls now persist `scenario_runs` rows. Operators can inspect `/
 
 ## Evaluation coverage
 
-The isolated seed evaluation is the current portability/readiness gate:
+The isolated seed evaluation remains the fast portability/readiness gate:
 
 ```bash
 cd backend
 .venv/bin/python -m manual_eval.run_isolated_seed_eval
 ```
 
-The Docker equivalent is:
+The one-company full workflow gate is:
+
+```bash
+cd backend
+.venv/bin/python -m manual_eval.run_isolated_synthetic_company_workflow
+```
+
+It ingests the Northstar Payroll synthetic company corpus, creates one restricted confidential memo, verifies query classes and meaningful evidence-backed answers, exercises the DB-backed orchestration job queue, checks scenario replay and prompt-injection boundaries, verifies member redaction, rejects a reversal artifact, and confirms the temporal graph/query surfaces exclude rejected evidence.
+
+The Docker equivalent for the seed lane is:
 
 ```bash
 scripts/docker-smoke-eval.sh
@@ -239,7 +261,7 @@ In addition to the original lineage, contradiction, drift, next-action, proactiv
 
 - memory file-system roots, database blueprint, organization guide, safe logical locators, downstream counts, and absence of raw source paths;
 - temporal knowledge graph persisted families, occurrences, validity windows, claim-family keys, evidence-backed links, projection sync summaries, and absence of raw source paths;
-- bounded orchestration traces, typed context packet traces, bounded parallel stage-packet traces, provenance-verification traces, persisted stage-run ledgers, truthful stage statuses, spawn policy, and scoped reflection counts;
+- bounded orchestration traces, typed context packet traces, bounded parallel stage-packet traces, provenance-verification traces, persisted stage-run ledgers, DB-backed orchestration jobs, truthful stage statuses, spawn policy, and scoped reflection counts;
 - target readiness coverage across evidence substrate, temporal KG, typed context, bounded orchestration, evidence-backed intelligence, private AI discipline, UI storytelling, bounded scenarios, and Docker portability;
 - bounded scenario support with all template probes, catalog endpoint alignment, typed scenario context packets, persisted scenario runs, replay comparisons, deterministic replay identity, evidence-backed impacted memory, and explicit “not unsupported forecasting” uncertainty;
 - member redaction across memory file-system, temporal graph, scenario impact, scenario run/replay history, orchestration aggregate endpoints, and target readiness;
@@ -256,7 +278,7 @@ The response includes:
 - `current_workspace_snapshot` — safe counts for artifacts, chunks, memory objects, graph edges, claim families, claim occurrences, signals, query traces, stage packet traces, stage runs, scenario runs, scenario templates, and local/private AI feature flags/status;
 - `next_best_passes` — the implementation order that keeps evidence substrate and provenance gates ahead of multi-agent runtime expansion.
 
-This endpoint now treats the local bounded parallel stage-packet runtime, temporal claim projection, and scenario replay history as implemented demo capabilities. It still ranks CI automation, richer customer-corpus answer-quality evaluators, optional external worker backends, migration-version tooling, and production deployment hardening as remaining work.
+This endpoint now treats the local bounded parallel stage-packet runtime, DB-backed orchestration job foundation, temporal claim projection, migration-version tooling, and scenario replay history as implemented demo capabilities. It still ranks CI automation, more customer-corpus answer-quality evaluators beyond Northstar Payroll, external worker-process attachment, and production deployment hardening as remaining work.
 
 ## Future implementation plan
 
@@ -281,16 +303,16 @@ This endpoint now treats the local bounded parallel stage-packet runtime, tempor
 ### Phase 4 — bounded sub-agent runtime
 
 - Continue executing independent read-only stages through the bounded local parallel stage-packet pool.
-- Add optional external worker backends only after preserving typed context packets and deterministic verifier behavior.
+- Attach optional external worker processes to `orchestration_jobs` only after preserving typed context packets and deterministic verifier behavior.
 - Let the orchestrator compare stage outputs, but keep provenance verifier deterministic.
 - Add replay mode for demos and audits.
 
 ### Phase 5 — company deployment hardening
 
 - Add scheduled/off-host backup guidance on top of the manual Docker backup/restore commands.
-- Promote startup schema readiness checks into explicit versioned migrations before changing, renaming, or dropping table shapes.
+- Maintain explicit Alembic revisions and migration smoke checks before changing, renaming, or dropping table shapes.
 - Add HTTPS and auth hardening for customer-controlled deployments.
-- Add CI automation around the documented Docker smoke eval.
+- Add CI automation around the documented migration, Docker, synthetic-company, and Ollama smoke evals.
 - Add CI/runner support for `scripts/ollama-smoke-eval.sh` where a local/private model is available.
 
 ### Phase 6 — scenario support expansion

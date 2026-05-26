@@ -19,6 +19,7 @@ import type {
   ScenarioTemplateCatalogItem,
   TemporalGraphRead,
   OrchestrationBlueprintRead,
+  OrchestrationJobListRead,
   OrchestrationStageRunsRead,
   MemoryFilesystemRead,
   NextActionSignalItem,
@@ -278,6 +279,10 @@ export const api = {
 
   listOrchestrationStageRuns(token: string, limit = 40) {
     return request<OrchestrationStageRunsRead>(`/evidence-substrate/orchestration/runs?limit=${limit}`, { token })
+  },
+
+  listOrchestrationJobs(token: string, limit = 20) {
+    return request<OrchestrationJobListRead>(`/evidence-substrate/orchestration/jobs?limit=${limit}`, { token })
   },
 
   getTemporalGraph(token: string, limit = 80) {

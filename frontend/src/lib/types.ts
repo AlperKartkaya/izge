@@ -493,6 +493,33 @@ export interface OrchestrationStageRunsRead {
   runs: OrchestrationStageRunRead[]
 }
 
+export interface OrchestrationJobRead {
+  job_id: string
+  workspace_id: string
+  created_by: string
+  query_run_id: string | null
+  job_kind: string
+  stage_key: string | null
+  status: string
+  priority: number
+  payload_json: Record<string, unknown>
+  result_json: Record<string, unknown>
+  error_message: string | null
+  lease_owner: string | null
+  lease_expires_at: string | null
+  available_at: string
+  claimed_at: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface OrchestrationJobListRead {
+  workspace_id: string
+  generated_at: string
+  jobs: OrchestrationJobRead[]
+}
+
 export type ReadinessAreaStatus = 'implemented' | 'partial' | 'planned'
 
 export interface TargetReadinessProofSignal {

@@ -18,6 +18,7 @@ from app.models import (
     Constraint,
     Decision,
     GraphEdge,
+    OrchestrationJob,
     OrchestrationStageRun,
     Outcome,
     QueryRun,
@@ -156,11 +157,11 @@ def _database_blueprint() -> list[dict[str, Any]]:
         },
         {
             "layer": "5. Signals and traces",
-            "table_names": ["signals", "query_runs", "query_trace_steps", "orchestration_stage_runs", "scenario_runs", "audit_events"],
+            "table_names": ["signals", "query_runs", "query_trace_steps", "orchestration_stage_runs", "orchestration_jobs", "scenario_runs", "audit_events"],
             "purpose": "Durable proactive findings, query packets, orchestration trace, and governance audit.",
             "write_path": "Ingestion/query generates signals and trace events after deterministic evidence selection.",
             "read_path": "Dashboard, signal detail, query result trace, orchestration stage-run ledger, scenario replay history, audit page, orchestration page.",
-            "organization_rule": "Every AI-assisted, scenario, or orchestration stage must leave a trace showing input evidence, proposed output, and deterministic acceptance gate.",
+            "organization_rule": "Every AI-assisted, scenario, or orchestration stage must leave a trace showing input evidence, proposed output, queue/worker state when async, and deterministic acceptance gate.",
         },
     ]
 
@@ -393,6 +394,18 @@ ORCHESTRATION_STAGE_CATALOG: list[dict[str, Any]] = [
         "status": "implemented_as_parallel_stage_packet",
     },
     {
+        "stage_key": "worker_queue_dispatcher",
+        "title": "DB-backed worker queue dispatcher",
+        "agent_role": "orchestration_worker",
+        "purpose": "Persist bounded stage tasks in a portable database queue so a local or future external worker can claim, lease, complete, fail, and replay work without losing the typed context boundary.",
+        "inputs": ["typed stage payload", "workspace boundary", "lease policy"],
+        "outputs": ["queued job", "claim lease", "terminal result"],
+        "deterministic_gate": "Workers can only claim queued jobs from the current workspace and must return terminal status plus structured result/error metadata.",
+        "authority_level": "bounded_async_execution",
+        "current_reflection": "orchestration_jobs endpoint and migration-backed table",
+        "status": "implemented_as_db_backed_queue_foundation",
+    },
+    {
         "stage_key": "provenance_verifier",
         "title": "Provenance verifier",
         "agent_role": "verifier_agent",
@@ -414,6 +427,7 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
         query_count_query = select(func.count()).select_from(QueryRun).where(QueryRun.workspace_id == user.workspace_id)
         signal_count_query = select(func.count()).select_from(Signal).where(Signal.workspace_id == user.workspace_id, Signal.status == "active")
         artifact_count_query = select(func.count()).select_from(Artifact).where(Artifact.workspace_id == user.workspace_id)
+        job_count_query = select(func.count()).select_from(OrchestrationJob).where(OrchestrationJob.workspace_id == user.workspace_id)
     else:
         visible_artifact_ids = [
             artifact.artifact_id
@@ -439,6 +453,10 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
             Signal.source_artifact_id.in_(visible_artifact_ids),
         )
         artifact_count_query = select(func.count()).select_from(Artifact).where(Artifact.artifact_id.in_(visible_artifact_ids))
+        job_count_query = select(func.count()).select_from(OrchestrationJob).where(
+            OrchestrationJob.workspace_id == user.workspace_id,
+            OrchestrationJob.created_by == user.user_id,
+        )
 
     trace_counts = {
         str(step_kind): int(count)
@@ -455,6 +473,7 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
     query_count = int(db.scalar(query_count_query) or 0)
     signal_count = int(db.scalar(signal_count_query) or 0)
     artifact_count = int(db.scalar(artifact_count_query) or 0)
+    job_count = int(db.scalar(job_count_query) or 0)
 
     return {
         "workspace_id": user.workspace_id,
@@ -463,13 +482,14 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
         "current_runtime_note": (
             "The current runtime executes independent read-only specialist stage packets in a bounded local parallel pool after "
             "typed context assembly. This demonstrates the orchestrator/sub-agent contract without granting unrestricted database "
-            "authority: every packet remains evidence-scoped and must pass deterministic provenance and permission gates."
+            "authority: every packet remains evidence-scoped, queueable work has a lease/terminal result, and all output must pass deterministic provenance and permission gates."
         ),
         "stage_catalog": ORCHESTRATION_STAGE_CATALOG,
         "spawn_policy": [
             "Spawn bounded stages only after artifact visibility and review scope are known.",
             "Each sub-agent receives a typed context packet, not unrestricted database access.",
             "Only independent read-only stages may run concurrently; write-capable stages remain behind explicit provenance gates.",
+            "Longer-running stages may be persisted as orchestration_jobs and claimed through a lease before any worker returns a terminal result.",
             "Each sub-agent returns structured findings plus cited artifact/chunk/memory IDs.",
             "The orchestrator can compare sub-agent outputs, but cannot promote unsupported claims to trusted memory.",
             "The provenance verifier is the final gate before answers, graph changes, or signals become visible.",
@@ -481,6 +501,7 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
             "trace_step_counts": trace_counts,
             "stage_run_count": sum(stage_run_counts.values()),
             "stage_run_counts": stage_run_counts,
+            "orchestration_job_count": job_count,
             "stage_packet_trace_count": int(trace_counts.get("stage_packet_execution", 0)),
         },
     }
@@ -547,6 +568,7 @@ def _query_scope_counts(db: Session, user: User) -> dict[str, int]:
             QueryTraceStep.workspace_id == user.workspace_id,
             QueryTraceStep.step_kind == "stage_packet_execution",
         )
+        orchestration_job_count = _count_rows(db, OrchestrationJob, OrchestrationJob.workspace_id == user.workspace_id)
         return {
             "query_run_count": query_count,
             "trace_step_count": trace_step_count,
@@ -555,6 +577,7 @@ def _query_scope_counts(db: Session, user: User) -> dict[str, int]:
             "provenance_verification_count": provenance_count,
             "bounded_orchestration_trace_count": orchestration_trace_count,
             "stage_packet_trace_count": stage_packet_trace_count,
+            "orchestration_job_count": orchestration_job_count,
         }
 
     scoped_query_ids = select(QueryRun.query_run_id).where(QueryRun.workspace_id == user.workspace_id, QueryRun.created_by == user.user_id).scalar_subquery()
@@ -599,6 +622,12 @@ def _query_scope_counts(db: Session, user: User) -> dict[str, int]:
         QueryTraceStep.query_run_id.in_(scoped_query_ids),
         QueryTraceStep.step_kind == "stage_packet_execution",
     )
+    orchestration_job_count = _count_rows(
+        db,
+        OrchestrationJob,
+        OrchestrationJob.workspace_id == user.workspace_id,
+        OrchestrationJob.created_by == user.user_id,
+    )
     return {
         "query_run_count": query_count,
         "trace_step_count": trace_step_count,
@@ -607,6 +636,7 @@ def _query_scope_counts(db: Session, user: User) -> dict[str, int]:
         "provenance_verification_count": provenance_count,
         "bounded_orchestration_trace_count": orchestration_trace_count,
         "stage_packet_trace_count": stage_packet_trace_count,
+        "orchestration_job_count": orchestration_job_count,
     }
 
 
@@ -744,7 +774,7 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
             ],
             "remaining_work": [
                 "Add explicit chunk-neighbor traversal and latency/token budget metrics.",
-                "Promote current startup schema checks into versioned migration tooling before destructive table changes.",
+                "Keep adding explicit Alembic revisions before any future table/column shape changes.",
             ],
             "risks": ["Retrieval is deterministic and inspectable, but not yet tuned against broad real-company corpora."],
         },
@@ -765,7 +795,7 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
             ],
             "remaining_work": [
                 "Add advanced temporal analytics for long-lived family drift and family-level confidence decay.",
-                "Add migration-version tracking before evolving the claim projection schema beyond additive columns.",
+                "Keep claim projection changes behind explicit Alembic revisions and migration smoke checks.",
             ],
             "risks": ["Claim families are a persisted projection over source memory rows; memory tables still remain the source of truth."],
         },
@@ -804,12 +834,13 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
                 _proof_signal("Partial stages", partial_stage_count, "/api/evidence-substrate/orchestration"),
                 _proof_signal("Persisted stage runs", snapshot["stage_run_count"], "/api/evidence-substrate/orchestration/runs"),
                 _proof_signal("Stage packet traces", stage_packet_trace_count, "/api/query/{query_run_id}/trace"),
+                _proof_signal("DB-backed orchestration jobs", snapshot["orchestration_job_count"], "/api/evidence-substrate/orchestration/jobs"),
             ],
             "remaining_work": [
-                "Add optional external worker backends after the local bounded-pool contract remains stable.",
+                "Connect optional external worker processes to the DB-backed job queue after the local bounded-pool contract remains stable.",
                 "Add richer replay comparison for stage packets beyond the current safe output summaries.",
             ],
-            "risks": ["The parallel pool is intentionally local and read-only; external distributed agents remain a later hardening step."],
+            "risks": ["The current queue foundation is database-backed and portable; distributed worker processes remain a later hardening step."],
         },
         {
             "area_key": "contradiction_drift_next_actions",
@@ -915,7 +946,7 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
                 _proof_signal("Bootstrap credentials file", "generated on first run"),
             ],
             "remaining_work": [
-                "Add CI automation around the Docker smoke eval.",
+                "Add CI automation around migration, Docker, synthetic-company, and Ollama smoke evals.",
                 "Add HTTPS and stronger auth hardening guidance for production customer-controlled deployments.",
             ],
             "risks": ["Portable local runtime is implemented; production hardening still needs deployment-specific security work."],
@@ -933,13 +964,13 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
         "areas": areas,
         "next_best_passes": [
             "Add CI automation that runs deterministic seed eval, Docker smoke eval, and Ollama smoke eval when a model is available.",
-            "Add customer-corpus evaluator fixtures that score answer usefulness against cited evidence, not just endpoint shape.",
-            "Add optional external worker backends for stage packets while preserving the bounded local-pool contract.",
-            "Add migration-version tooling before evolving the persisted temporal claim projection schema.",
+            "Add more customer-corpus evaluator fixtures beyond the first synthetic company workflow, scoring answer usefulness against cited evidence.",
+            "Connect optional external worker processes to the DB-backed stage queue while preserving the bounded local-pool contract.",
+            "Promote the synthetic-company workflow eval into CI next to deterministic seed, Docker, and Ollama gates.",
         ],
         "evaluator_gate": {
             "name": "company_portable_memory_system_seed_eval",
-            "command": "cd backend && .venv/bin/python -m manual_eval.run_isolated_seed_eval",
+            "command": "cd backend && .venv/bin/python -m manual_eval.run_isolated_seed_eval && .venv/bin/python -m manual_eval.run_isolated_synthetic_company_workflow",
             "required_checks": [
                 "readiness_endpoint_has_all_target_areas",
                 "readiness_areas_have_evidence_routes_and_demo_surfaces",

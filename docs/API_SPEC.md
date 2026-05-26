@@ -78,3 +78,33 @@ The API should clearly support:
 - evidence-backed reasoning,
 - proactive signal generation,
 - inspectable admin and member workflows.
+
+## Portable memory/orchestration endpoints
+
+### Evidence substrate and readiness
+- `GET /api/evidence-substrate/filesystem` — safe internal memory file-system view with artifact locators, chunk/memory/signal counts, database blueprint, and organization guide.
+- `GET /api/evidence-substrate/orchestration` — bounded stage catalog, spawn policy, runtime note, trace/stage/job reflection counts.
+- `GET /api/evidence-substrate/orchestration/runs` — persisted stage-run ledger, optionally filtered by `query_run_id`.
+- `GET /api/evidence-substrate/readiness` — website/PRD promise coverage mapped to current demo evidence, remaining work, and evaluator gates.
+
+### DB-backed orchestration job foundation
+- `GET /api/evidence-substrate/orchestration/jobs` — list safe job state; admins see workspace jobs, members see their own.
+- `POST /api/evidence-substrate/orchestration/jobs` — admin-only enqueue of a bounded stage payload.
+- `POST /api/evidence-substrate/orchestration/jobs/claim` — admin/worker claim with `worker_id` and lease seconds.
+- `POST /api/evidence-substrate/orchestration/jobs/:jobId/complete` — admin/worker terminal completion/failure/cancellation with structured result/error metadata.
+
+### Bounded scenario support
+- `GET /api/scenario/templates` — fixed bounded scenario lenses.
+- `POST /api/scenario/impact` — typed scenario impact packet over known memory; forecasting/trusted writes disabled.
+- `GET /api/scenario/runs` — persisted scenario run history.
+- `GET /api/scenario/runs/:scenarioRunId` — stored scenario packet/result detail.
+- `POST /api/scenario/runs/:scenarioRunId/replay` — deterministic replay against current permissions/evidence.
+
+### Database operations
+Database schema versioning is operated through CLI scripts, not public HTTP endpoints:
+
+```bash
+scripts/db-migrate.sh
+scripts/db-check.sh
+scripts/db-stamp-current.sh
+```

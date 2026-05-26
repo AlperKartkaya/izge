@@ -1,0 +1,31 @@
+{
+  "company": "Northstar Payroll",
+  "visible_artifact_count": 8,
+  "restricted_marker": "CONFIDENTIAL_PAYROLL_RISK_MARKER",
+  "queries": [
+    {
+      "name": "lineage",
+      "query": "What was decided about Northstar Payroll enterprise onboarding launch and why?",
+      "expected_query_class": "Decision lineage",
+      "expected_fragments": ["Northstar Payroll", "Q3 2026"]
+    },
+    {
+      "name": "contradiction",
+      "query": "Which Northstar Payroll enterprise onboarding launch decisions conflict with earlier commitments?",
+      "expected_query_class": "Contradiction analysis",
+      "expected_fragments": ["late Q2 2026"]
+    },
+    {
+      "name": "assumption_drift",
+      "query": "Which Northstar Payroll enterprise onboarding assumptions now look stale?",
+      "expected_query_class": "Assumption drift",
+      "expected_fragments": ["72", "35"]
+    },
+    {
+      "name": "next_action",
+      "query": "What should the team do next about Northstar Payroll enterprise onboarding launch?",
+      "expected_query_class": "Next-action guidance",
+      "expected_fragments": ["Resolve", "Revalidate", "Review"]
+    }
+  ]
+}

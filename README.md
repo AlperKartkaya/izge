@@ -101,10 +101,19 @@ docker compose up --build
 
 Then open `http://localhost:8080`. The backend remains available at `http://localhost:8000`; credentials are generated into the persisted Docker volume at `/data/bootstrap_admin_credentials.json` when `IZGE_DEFAULT_ADMIN_PASSWORD` is empty.
 
-Run the Docker-contained demo smoke evaluation before handing the system to a new company:
+Run the migration/version checks and smoke evaluations before handing the system to a new company:
 
 ```bash
+# Create/upgrade or verify the configured SQLite database schema.
+scripts/db-migrate.sh
+scripts/db-check.sh
+
+# Docker-contained seed/evidence/orchestration smoke evaluation.
 scripts/docker-smoke-eval.sh
+
+# One-company synthetic workflow evaluation with realistic artifacts, permissions,
+# scenario replay, rejection, and DB-backed orchestration job checks.
+scripts/synthetic-company-smoke-eval.sh
 ```
 
 Back up and restore the persisted company memory volume with:
@@ -176,7 +185,14 @@ cd backend
 .venv/bin/python -m manual_eval.run_isolated_seed_eval
 ```
 
-This launches a temporary backend, ingests the seed corpus, runs locked query classes, checks contradiction/drift provenance, verifies permission-limited evidence redaction, and shuts down. Nonzero exit means the demo confidence lane failed.
+Run the full one-company workflow scenario when checking real-world readiness:
+
+```bash
+cd backend
+.venv/bin/python -m manual_eval.run_isolated_synthetic_company_workflow
+```
+
+These launch temporary backends, ingest controlled corpora, run locked query classes, check contradiction/drift provenance, verify permission-limited evidence redaction, exercise bounded scenario replay, and shut down. Nonzero exit means the demo confidence lane failed.
 
 ---
 

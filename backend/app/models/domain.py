@@ -207,6 +207,29 @@ class OrchestrationStageRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
+class OrchestrationJob(Base):
+    __tablename__ = "orchestration_jobs"
+
+    job_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("ojb"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False, index=True)
+    query_run_id: Mapped[str | None] = mapped_column(ForeignKey("query_runs.query_run_id"), nullable=True, index=True)
+    job_kind: Mapped[str] = mapped_column(String(64), default="stage_packet", nullable=False, index=True)
+    stage_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="queued", nullable=False, index=True)
+    priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False, index=True)
+    payload_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    result_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    lease_owner: Mapped[str | None] = mapped_column(String(255), index=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    available_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class ScenarioRun(Base):
     __tablename__ = "scenario_runs"
 

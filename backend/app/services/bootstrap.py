@@ -3,86 +3,15 @@ from __future__ import annotations
 import json
 import secrets
 
-from sqlalchemy import inspect, select
-from sqlalchemy.engine import Connection
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db import Base, engine
+from app.db import engine
 from app.models import User, Workspace
+from app.schema import assert_required_schema_ready
 from app.services.audit import log_event
 from app.services.security import hash_password
-
-
-REQUIRED_SCHEMA_COLUMNS: dict[str, set[str]] = {
-    "artifacts": {"artifact_id", "workspace_id", "title", "review_status", "reviewed_by", "reviewed_at", "review_notes"},
-    "query_runs": {"query_run_id", "workspace_id", "query_class", "route_confidence", "answer_payload", "permissions_limited"},
-    "query_trace_steps": {"trace_step_id", "query_run_id", "workspace_id", "step_kind", "payload_json"},
-    "orchestration_stage_runs": {
-        "stage_run_id",
-        "query_run_id",
-        "workspace_id",
-        "stage_key",
-        "status",
-        "authority_level",
-        "verifier_status",
-        "input_refs",
-        "output_summary",
-        "created_at",
-    },
-    "scenario_runs": {
-        "scenario_run_id",
-        "workspace_id",
-        "created_by",
-        "scenario_text_hash",
-        "packet_id",
-        "input_snapshot_hash",
-        "candidate_snapshot_hash",
-        "scenario_packet",
-        "result_payload",
-    },
-    "claim_families": {
-        "family_id",
-        "workspace_id",
-        "claim_family_key",
-        "status",
-        "first_seen_at",
-        "latest_seen_at",
-        "occurrence_count",
-    },
-    "claim_occurrences": {
-        "occurrence_id",
-        "family_id",
-        "workspace_id",
-        "memory_type",
-        "memory_id",
-        "source_artifact_id",
-        "observed_at",
-        "valid_from",
-        "status",
-    },
-}
-
-
-def _assert_required_schema(connection: Connection) -> None:
-    """Fail startup loudly if an existing company database is missing critical demo substrate tables/columns."""
-
-    inspector = inspect(connection)
-    problems: list[str] = []
-    for table_name, required_columns in REQUIRED_SCHEMA_COLUMNS.items():
-        if not inspector.has_table(table_name):
-            problems.append(f"{table_name}: missing table")
-            continue
-        existing_columns = {str(column["name"]) for column in inspector.get_columns(table_name)}
-        missing_columns = sorted(required_columns - existing_columns)
-        if missing_columns:
-            problems.append(f"{table_name}: missing columns {', '.join(missing_columns)}")
-    if problems:
-        raise RuntimeError(
-            "Database schema is not ready for the portable memory/orchestration demo. "
-            "Run the startup bootstrap against the target database or add a migration before serving traffic: "
-            + "; ".join(problems)
-        )
 
 
 def initialize_database() -> None:
@@ -90,32 +19,12 @@ def initialize_database() -> None:
     settings.storage_path.mkdir(parents=True, exist_ok=True)
     settings.pasted_storage_path.mkdir(parents=True, exist_ok=True)
     settings.storage_path.parent.mkdir(parents=True, exist_ok=True)
-    Base.metadata.create_all(bind=engine)
+
+    from app.migration_tools import upgrade_database
+
+    upgrade_database()
     with engine.begin() as connection:
-        for table_name in ("decisions", "assumptions", "constraints", "outcomes", "commitments"):
-            columns = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()}
-            if "topic_key" not in columns:
-                connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN topic_key VARCHAR(255) NOT NULL DEFAULT 'general'")
-            if "extraction_method" not in columns:
-                connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN extraction_method VARCHAR(64) NOT NULL DEFAULT 'heuristic'")
-            if table_name == "commitments" and "owner_label" not in columns:
-                connection.exec_driver_sql("ALTER TABLE commitments ADD COLUMN owner_label VARCHAR(255)")
-        query_run_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(query_runs)").fetchall()}
-        if "route_confidence" not in query_run_columns:
-            connection.exec_driver_sql("ALTER TABLE query_runs ADD COLUMN route_confidence FLOAT NOT NULL DEFAULT 0.0")
-        artifact_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(artifacts)").fetchall()}
-        if "review_status" not in artifact_columns:
-            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN review_status VARCHAR(32) NOT NULL DEFAULT 'submitted'")
-        if "reviewed_by" not in artifact_columns:
-            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN reviewed_by VARCHAR(64)")
-        if "reviewed_at" not in artifact_columns:
-            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN reviewed_at DATETIME")
-        if "review_notes" not in artifact_columns:
-            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN review_notes TEXT")
-        connection.exec_driver_sql(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS artifact_chunks_fts USING fts5(chunk_id UNINDEXED, artifact_id UNINDEXED, workspace_id UNINDEXED, text)"
-        )
-        _assert_required_schema(connection)
+        assert_required_schema_ready(connection)
 
 
 def _bootstrap_admin_password() -> str:

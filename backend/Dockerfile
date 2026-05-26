@@ -10,7 +10,9 @@ RUN addgroup --system izge && adduser --system --ingroup izge izge
 
 COPY pyproject.toml README.md ./
 COPY app ./app
+COPY migrations ./migrations
 COPY manual_eval ./manual_eval
+COPY alembic.ini ./alembic.ini
 
 RUN pip install --upgrade pip && pip install .
 
@@ -25,4 +27,4 @@ USER izge
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "python -m app.migration_tools upgrade && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

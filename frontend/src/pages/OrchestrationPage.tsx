@@ -6,6 +6,7 @@ import { api, ApiError } from '../lib/api'
 import { formatLabel, formatPercent } from '../lib/format'
 import type {
   OrchestrationBlueprintRead,
+  OrchestrationJobListRead,
   OrchestrationStageRunsRead,
   ScenarioImpactRead,
   ScenarioReplayRead,
@@ -19,6 +20,7 @@ export function OrchestrationPage() {
   const { session } = useAuth()
   const [blueprint, setBlueprint] = useState<OrchestrationBlueprintRead | null>(null)
   const [stageRuns, setStageRuns] = useState<OrchestrationStageRunsRead | null>(null)
+  const [jobQueue, setJobQueue] = useState<OrchestrationJobListRead | null>(null)
   const [scenarioRuns, setScenarioRuns] = useState<ScenarioRunListRead | null>(null)
   const [scenarioReplay, setScenarioReplay] = useState<ScenarioReplayRead | null>(null)
   const [scenarioTemplates, setScenarioTemplates] = useState<ScenarioTemplateCatalogItem[]>([])
@@ -36,15 +38,17 @@ export function OrchestrationPage() {
         return
       }
       try {
-        const [payload, runsPayload, templatesPayload, scenarioRunsPayload] = await Promise.all([
+        const [payload, runsPayload, jobsPayload, templatesPayload, scenarioRunsPayload] = await Promise.all([
           api.getOrchestrationBlueprint(session.token),
           api.listOrchestrationStageRuns(session.token, 40),
+          api.listOrchestrationJobs(session.token, 20),
           api.listScenarioTemplates(session.token),
           api.listScenarioRuns(session.token, 12),
         ])
         if (!cancelled) {
           setBlueprint(payload)
           setStageRuns(runsPayload)
+          setJobQueue(jobsPayload)
           setScenarioTemplates(templatesPayload)
           setScenarioRuns(scenarioRunsPayload)
         }
@@ -131,6 +135,7 @@ export function OrchestrationPage() {
         <MetricCard label="Stages" value={blueprint?.stage_catalog.length ?? '—'} />
         <MetricCard label="Query runs" value={String(reflection.query_run_count ?? '—')} />
         <MetricCard label="Stage runs" value={String(reflection.stage_run_count ?? stageRuns?.runs.length ?? '—')} />
+        <MetricCard label="DB jobs" value={String(reflection.orchestration_job_count ?? jobQueue?.jobs.length ?? '—')} />
         <MetricCard label="Active signals" value={String(reflection.active_signal_count ?? '—')} />
       </section>
 
@@ -175,6 +180,30 @@ export function OrchestrationPage() {
             {blueprint.spawn_policy.map((rule) => <p key={rule} className="evidence-block">{rule}</p>)}
           </div>
         ) : null}
+      </Panel>
+
+      <Panel title="Recent DB-backed job queue" description="Portable async-worker foundation: bounded payloads are queued, claimed with leases, and completed with structured results before future external agents can participate.">
+        {jobQueue && jobQueue.jobs.length > 0 ? (
+          <div className="stack-sm">
+            {jobQueue.jobs.slice(0, 8).map((job) => (
+              <article key={job.job_id} className="panel-subtle stack-sm">
+                <div className="timeline-card-head">
+                  <div>
+                    <p className="section-label">{formatLabel(job.job_kind)} · priority {job.priority}</p>
+                    <p className="table-primary">{job.stage_key ? formatLabel(job.stage_key) : job.job_id}</p>
+                  </div>
+                  <StatusBadge value={formatLabel(job.status)} />
+                </div>
+                <p className="table-secondary">Lease: {job.lease_owner ?? 'not claimed'} · Query: {job.query_run_id ?? 'standalone job'}</p>
+                <p className="muted-copy">Created {new Date(job.created_at).toLocaleString()} · available {new Date(job.available_at).toLocaleString()}</p>
+                <p className="evidence-block">Payload boundary: {String(job.payload_json.schema_version ?? 'bounded payload')} · trusted writes {job.payload_json.trusted_write_allowed === false ? 'blocked' : 'not requested'}</p>
+                {job.completed_at ? <p className="table-secondary">Completed {new Date(job.completed_at).toLocaleString()}</p> : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No orchestration jobs yet" description="Run the synthetic company workflow or enqueue a bounded job to see DB-backed worker state." />
+        )}
       </Panel>
 
       <Panel title="Recent stage-run ledger" description="Persisted bounded stage executions from query runs. This is the replayable audit layer that future sub-agents will write through.">
