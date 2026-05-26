@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEventHandler } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
+import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatLabel } from '../lib/format'
 import type { ArtifactStorageAdminRead, DatabaseOverviewRead } from '../lib/types'
@@ -144,11 +144,27 @@ export function DataAdminPage() {
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {success ? <Callout>{success}</Callout> : null}
 
-      <section className="metric-grid">
-        <MetricCard label="Database revision" value={overview?.alembic_revision ?? 'Not loaded'} detail="Current Alembic migration version for this database." />
-        <MetricCard label="Tables" value={overview?.tables.length ?? '—'} detail={`${totalRows} total stored rows across application tables.`} />
-        <MetricCard label="Artifacts" value={overview?.artifacts.length ?? '—'} detail={`${formatBytes(totalSourceBytes)} stored source data visible to admins.`} />
-        <MetricCard label="Workspace" value={overview?.workspace_id ?? '—'} detail="Single-company workspace boundary for this deployment." />
+      <section className="data-overview-grid" aria-label="Database overview">
+        <article className="data-overview-card panel-subtle">
+          <p className="metric-label">Database revision</p>
+          <code className="data-overview-value">{overview?.alembic_revision ?? 'Not loaded'}</code>
+          <p className="metric-detail">Current Alembic migration version for this database.</p>
+        </article>
+        <article className="data-overview-card panel-subtle">
+          <p className="metric-label">Tables</p>
+          <p className="data-overview-number">{overview?.tables.length ?? '—'}</p>
+          <p className="metric-detail">{totalRows} total stored rows across application tables.</p>
+        </article>
+        <article className="data-overview-card panel-subtle">
+          <p className="metric-label">Artifacts</p>
+          <p className="data-overview-number">{overview?.artifacts.length ?? '—'}</p>
+          <p className="metric-detail">{formatBytes(totalSourceBytes)} stored source data visible to admins.</p>
+        </article>
+        <article className="data-overview-card panel-subtle">
+          <p className="metric-label">Workspace</p>
+          <code className="data-overview-value">{overview?.workspace_id ?? '—'}</code>
+          <p className="metric-detail">Single-company workspace boundary for this deployment.</p>
+        </article>
       </section>
 
       <div className="two-column-layout wide-right-column">
@@ -165,6 +181,7 @@ export function DataAdminPage() {
                     <th>Memory</th>
                     <th>Review</th>
                     <th>Updated</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -175,7 +192,9 @@ export function DataAdminPage() {
                       onClick={() => handleSelectArtifact(artifact)}
                     >
                       <td>
-                        <p className="table-primary">{artifact.title}</p>
+                        <button type="button" className="row-title-button" onClick={() => handleSelectArtifact(artifact)}>
+                          {artifact.title}
+                        </button>
                         <p className="table-secondary">{artifact.artifact_id}</p>
                       </td>
                       <td>
@@ -187,6 +206,16 @@ export function DataAdminPage() {
                         <StatusBadge value={formatLabel(artifact.review_status)} />
                       </td>
                       <td>{formatDateTime(artifact.updated_at)}</td>
+                      <td>
+                        <div className="table-action-group" onClick={(event) => event.stopPropagation()}>
+                          <a className="table-action-link" href={api.artifactPreviewUrl(artifact.artifact_id)} target="_blank" rel="noreferrer">
+                            Preview
+                          </a>
+                          <a className="table-action-link" href={api.artifactDownloadUrl(artifact.artifact_id)}>
+                            Download
+                          </a>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -200,6 +229,18 @@ export function DataAdminPage() {
             <EmptyState title="Select an artifact" description="Choose a stored artifact to inspect its database and storage record." />
           ) : (
             <div className="stack-lg">
+              <div className="artifact-action-strip">
+                <a className="secondary-button" href={api.artifactPreviewUrl(selectedArtifact.artifact_id)} target="_blank" rel="noreferrer">
+                  Preview source
+                </a>
+                <a className="secondary-button" href={api.artifactDownloadUrl(selectedArtifact.artifact_id)}>
+                  Download source
+                </a>
+                <Link className="secondary-button" to="/artifacts">
+                  Open artifact workspace
+                </Link>
+              </div>
+
               <dl className="meta-list">
                 <div>
                   <dt>Logical locator</dt>

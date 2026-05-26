@@ -1,6 +1,9 @@
 from datetime import datetime
+from pathlib import Path
+import re
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -156,6 +159,30 @@ def get_artifact(artifact_id: str, current_user: User = Depends(get_current_user
     )
 
 
+@router.get("/{artifact_id}/preview")
+def preview_artifact_source(artifact_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> FileResponse:
+    artifact = _get_accessible_artifact(db, artifact_id, current_user)
+    source_path = _artifact_source_file(artifact)
+    return FileResponse(
+        source_path,
+        media_type=artifact.mime_type or "application/octet-stream",
+        filename=_safe_download_name(artifact),
+        content_disposition_type="inline",
+    )
+
+
+@router.get("/{artifact_id}/download")
+def download_artifact_source(artifact_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> FileResponse:
+    artifact = _get_accessible_artifact(db, artifact_id, current_user)
+    source_path = _artifact_source_file(artifact)
+    return FileResponse(
+        source_path,
+        media_type=artifact.mime_type or "application/octet-stream",
+        filename=_safe_download_name(artifact),
+        content_disposition_type="attachment",
+    )
+
+
 @router.get("/{artifact_id}/signals", response_model=ArtifactProactiveSignals)
 def get_artifact_signals(artifact_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ArtifactProactiveSignals:
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
@@ -243,6 +270,38 @@ def update_artifact_review_status(
         event_metadata={"review_status": payload.review_status, "has_notes": bool(payload.review_notes)},
     )
     return get_artifact(artifact_id, current_user, db)
+
+
+def _get_accessible_artifact(db: Session, artifact_id: str, current_user: User) -> Artifact:
+    artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
+    if artifact is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+    require_artifact_access(db, artifact, current_user)
+    return artifact
+
+
+def _artifact_source_file(artifact: Artifact) -> Path:
+    if not artifact.source_path or artifact.source_path == "pending":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact source file is not available yet")
+
+    try:
+        source_path = Path(artifact.source_path).expanduser().resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact source file is missing from storage") from exc
+
+    settings = get_settings()
+    allowed_roots = (settings.storage_path.resolve(strict=False), settings.pasted_storage_path.resolve(strict=False))
+    if not any(source_path.is_relative_to(root) for root in allowed_roots):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Artifact source path is outside managed storage")
+    if not source_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact source path is not a file")
+    return source_path
+
+
+def _safe_download_name(artifact: Artifact) -> str:
+    raw_name = artifact.original_filename or f"{artifact.title or artifact.artifact_id}.txt"
+    safe_name = re.sub(r"[^A-Za-z0-9._ -]+", "_", raw_name).strip(" .")
+    return safe_name or f"{artifact.artifact_id}.txt"
 
 
 def _access_error(db: Session, artifact: Artifact, current_user: User) -> bool:

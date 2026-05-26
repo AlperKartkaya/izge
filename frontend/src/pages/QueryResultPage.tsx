@@ -169,10 +169,10 @@ export function QueryResultPage() {
       <PageIntro
         eyebrow="Evidence-backed historical reading"
         title="The answer is only credible because the record is visible"
-        description="Result sections stay fixed so remembered decisions, contradictions, drift, next actions, and uncertainty remain inspectable instead of collapsing into a freeform chat reply."
+        description="This is the inspectable reasoning view behind a chat answer, with evidence, memory objects, contradictions, drift, next actions, and uncertainty kept visible."
         actions={
           <Link className="secondary-button" to="/query">
-            Ask another question
+            Back to chat
           </Link>
         }
       />

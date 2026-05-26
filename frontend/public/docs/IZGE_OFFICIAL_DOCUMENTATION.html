@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Izge Official Documentation</title>
   <meta name="description" content="Official product, architecture, operations, and deployment documentation for Izge.">
+  <script>
+    (function () {
+      var key = 'izge-theme-preference';
+      var stored = localStorage.getItem(key);
+      document.documentElement.dataset.theme = stored === 'light' ? 'light' : 'dark';
+    }());
+  </script>
   <style>
     :root {
       color-scheme: light;
@@ -35,6 +42,30 @@
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --ink: #f8fafc;
+      --muted: #a7b3c5;
+      --subtle: #94a3b8;
+      --line: rgba(203, 213, 225, 0.18);
+      --soft-line: rgba(203, 213, 225, 0.12);
+      --panel: rgba(12, 19, 29, 0.94);
+      --paper: #05070d;
+      --paper-2: #0b1220;
+      --brand: #9cb5ff;
+      --brand-2: #c8d5ff;
+      --brand-3: #f8fafc;
+      --accent: #f4c58f;
+      --green: #86efac;
+      --red: #fca5a5;
+      --purple: #c4b5fd;
+      --blue-soft: rgba(156, 181, 255, 0.12);
+      --gold-soft: rgba(185, 130, 75, 0.16);
+      --green-soft: rgba(45, 212, 128, 0.12);
+      --red-soft: rgba(248, 113, 113, 0.12);
+      --shadow: 0 22px 58px rgba(0, 0, 0, 0.42);
+    }
+
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body {
@@ -44,6 +75,12 @@
         radial-gradient(circle at 12% -10%, rgba(47, 111, 143, 0.13), transparent 34rem),
         linear-gradient(180deg, #f9fbfd 0%, #eef4f8 100%);
       line-height: 1.65;
+    }
+    :root[data-theme="dark"] body {
+      background:
+        radial-gradient(circle at 15% -15%, rgba(156, 181, 255, 0.16), transparent 34rem),
+        radial-gradient(circle at 95% 10%, rgba(185, 130, 75, 0.12), transparent 30rem),
+        linear-gradient(135deg, #05070d 0%, #07101d 52%, #0b0d13 100%);
     }
     a { color: var(--brand-2); text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -78,6 +115,41 @@
     th, td { text-align: left; vertical-align: top; padding: 0.8rem 0.9rem; border-bottom: 1px solid var(--soft-line); }
     th { background: #eaf2f7; color: var(--brand-3); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
     tr:last-child td { border-bottom: 0; }
+    .docs-toolbar {
+      position: sticky;
+      top: 1rem;
+      z-index: 20;
+      display: flex;
+      max-width: var(--max);
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin: 1rem auto 0;
+      padding: 0.7rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--panel) 90%, transparent);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+    .docs-toolbar-group { display: flex; gap: 0.55rem; align-items: center; flex-wrap: wrap; }
+    .docs-toolbar strong { color: var(--brand-3); }
+    .docs-button {
+      display: inline-flex;
+      min-height: 40px;
+      align-items: center;
+      gap: 0.45rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--ink);
+      padding: 0.45rem 0.8rem;
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .docs-button:hover { border-color: var(--brand); }
     .page { max-width: var(--max); margin: 0 auto; padding: 2rem 1.25rem 5rem; }
     .hero {
       display: grid;
@@ -93,6 +165,39 @@
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow);
     }
+    :root[data-theme="dark"] .hero-card,
+    :root[data-theme="dark"] .panel,
+    :root[data-theme="dark"] .toc,
+    :root[data-theme="dark"] .callout,
+    :root[data-theme="dark"] .diagram-card,
+    :root[data-theme="dark"] .metric-card,
+    :root[data-theme="dark"] .definition,
+    :root[data-theme="dark"] .timeline-item,
+    :root[data-theme="dark"] details,
+    :root[data-theme="dark"] table {
+      background: var(--panel);
+      border-color: var(--line);
+      color: var(--ink);
+    }
+    :root[data-theme="dark"] code,
+    :root[data-theme="dark"] .tag,
+    :root[data-theme="dark"] .pill,
+    :root[data-theme="dark"] .kbd {
+      background: rgba(156, 181, 255, 0.12);
+      border-color: rgba(156, 181, 255, 0.28);
+      color: var(--brand-2);
+    }
+    :root[data-theme="dark"] th { background: rgba(255,255,255,0.05); color: var(--muted); }
+    :root[data-theme="dark"] td { border-color: var(--soft-line); }
+    :root[data-theme="dark"] .hero-summary,
+    :root[data-theme="dark"] .caption,
+    :root[data-theme="dark"] .definition,
+    :root[data-theme="dark"] .metric-card span,
+    :root[data-theme="dark"] .footer { color: var(--muted); }
+    :root[data-theme="dark"] .diagram { background: #07101d; border-color: var(--line); }
+    :root[data-theme="dark"] .diagram text { fill: #f8fafc; }
+    :root[data-theme="dark"] .small,
+    :root[data-theme="dark"] .tiny { fill: #a7b3c5; }
     .hero-card { padding: clamp(1.5rem, 3vw, 3rem); display: flex; flex-direction: column; justify-content: space-between; }
     .eyebrow { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--brand-2); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.78rem; }
     .hero-summary { font-size: clamp(1.15rem, 2vw, 1.45rem); color: #354253; max-width: 62ch; }
@@ -156,6 +261,14 @@
       .grid-3, .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 680px) {
+      .docs-toolbar {
+        position: static;
+        width: calc(100% - 1rem);
+        border-radius: 18px;
+        align-items: stretch;
+        flex-direction: column;
+      }
+      .docs-toolbar-group { justify-content: space-between; }
       .page { padding: 1rem 0.75rem 3rem; }
       .grid-2, .grid-3, .grid-4, .toc ol { grid-template-columns: 1fr; }
       th, td { display: block; width: 100%; }
@@ -174,6 +287,16 @@
   </style>
 </head>
 <body>
+  <div class="docs-toolbar" aria-label="Documentation controls">
+    <div class="docs-toolbar-group">
+      <button type="button" class="docs-button" id="docsBackButton">← Go back</button>
+      <strong>Izge documentation</strong>
+    </div>
+    <button type="button" class="docs-button" id="docsThemeToggle" aria-label="Toggle documentation theme">
+      <span id="docsThemeIcon" aria-hidden="true">☀</span>
+      <span id="docsThemeLabel">Light</span>
+    </button>
+  </div>
   <div class="page">
     <header class="hero" id="top">
       <div class="hero-card">
@@ -387,7 +510,7 @@
             <ul>
               <li><strong>Dashboard:</strong> operational workspace overview and active signals.</li>
               <li><strong>Artifacts / Ingestion:</strong> contribution, review, processing state.</li>
-              <li><strong>Questions / Results:</strong> evidence-backed query workflow.</li>
+              <li><strong>Chat / Results:</strong> permission-aware assistant plus inspectable evidence-backed query runs.</li>
               <li><strong>Graph:</strong> memory graph and temporal relationships.</li>
               <li><strong>Memory FS:</strong> logical memory organization and artifact roots.</li>
               <li><strong>Jobs:</strong> bounded orchestration stage catalog and queue visibility.</li>
@@ -430,7 +553,7 @@
               <tr><td>Evidence leaves</td><td><code>artifact_chunks</code>, <code>artifact_chunks_fts</code></td><td>Ordered retrieval units with logical locators and text coverage</td><td>Query evidence, Memory FS</td></tr>
               <tr><td>Typed memory</td><td><code>decisions</code>, <code>assumptions</code>, <code>constraints</code>, <code>outcomes</code>, <code>commitments</code></td><td>Reasoning substrate extracted from source artifacts</td><td>Memory detail, Graph, Results</td></tr>
               <tr><td>Graph</td><td><code>graph_nodes</code>, <code>graph_edges</code></td><td>Typed relationships, continuity, contradiction, supersession, temporal links</td><td>Graph, Readiness, Results</td></tr>
-              <tr><td>Reasoning outputs</td><td><code>signals</code>, <code>query_runs</code>, <code>query_trace_steps</code>, <code>scenario_runs</code></td><td>Inspectable outputs, evidence selection, scenario replay, answer traces</td><td>Dashboard, Signals, Questions, Jobs</td></tr>
+              <tr><td>Reasoning outputs</td><td><code>signals</code>, <code>query_runs</code>, <code>query_trace_steps</code>, <code>scenario_runs</code></td><td>Inspectable outputs, evidence selection, scenario replay, answer traces</td><td>Dashboard, Signals, Chat, Jobs</td></tr>
               <tr><td>Operations</td><td><code>orchestration_stage_runs</code>, <code>orchestration_jobs</code>, <code>audit_events</code></td><td>Bounded agent/stage ledger, worker queue, governance audit</td><td>Jobs, Data, Audit</td></tr>
             </tbody>
           </table>
@@ -624,10 +747,10 @@ IZGE_LLM_SIGNAL_EXPLANATION_ENABLED=true</code></pre>
           <thead><tr><th>Area</th><th>Endpoints</th><th>Purpose</th></tr></thead>
           <tbody>
             <tr><td>Auth/users</td><td><code>POST /api/auth/sign-in</code><br><code>GET /api/auth/me</code><br><code>GET/POST/PATCH /api/users</code></td><td>Session, role, and workspace user management.</td></tr>
-            <tr><td>Artifacts</td><td><code>POST /api/artifacts/upload</code><br><code>POST /api/artifacts/pasted-text</code><br><code>GET /api/artifacts</code><br><code>GET /api/artifacts/:id</code><br><code>PATCH /api/artifacts/:id/metadata</code></td><td>Source contribution, inspection, and safe metadata edits.</td></tr>
+            <tr><td>Artifacts</td><td><code>POST /api/artifacts/upload</code><br><code>POST /api/artifacts/pasted-text</code><br><code>GET /api/artifacts</code><br><code>GET /api/artifacts/:id</code><br><code>GET /api/artifacts/:id/preview</code><br><code>GET /api/artifacts/:id/download</code><br><code>PATCH /api/artifacts/:id/metadata</code></td><td>Source contribution, permission-aware preview/download, inspection, and safe metadata edits.</td></tr>
             <tr><td>Ingestion</td><td><code>POST /api/ingestion/run</code><br><code>GET /api/ingestion/jobs/:id</code></td><td>Parse, chunk, extract, graph, proactive signals.</td></tr>
             <tr><td>Memory/graph</td><td><code>GET /api/memory/:id</code><br><code>GET /api/graph/summary</code><br><code>GET /api/graph/timeline</code></td><td>Typed memory inspection and graph/timeline summaries.</td></tr>
-            <tr><td>Questions</td><td><code>POST /api/query</code><br><code>GET /api/query/:id</code></td><td>Lineage, contradiction, assumption drift, and next-action answers.</td></tr>
+            <tr><td>Chat and query runs</td><td><code>POST /api/query</code><br><code>GET /api/query/:id</code></td><td>Permission-aware assistant answers plus inspectable lineage, contradiction, assumption drift, and next-action query runs.</td></tr>
             <tr><td>Signals</td><td><code>GET /api/contradictions</code><br><code>GET /api/assumptions/drift</code><br><code>GET /api/next-actions</code><br><code>GET /api/signals/:id</code></td><td>Active tensions, drift, next actions, and details.</td></tr>
             <tr><td>Evidence substrate</td><td><code>GET /api/evidence-substrate/filesystem</code><br><code>GET /api/evidence-substrate/orchestration</code><br><code>GET /api/evidence-substrate/orchestration/runs</code><br><code>GET /api/evidence-substrate/readiness</code></td><td>Memory FS, stage catalog, traces, readiness coverage.</td></tr>
             <tr><td>Orchestration jobs</td><td><code>GET/POST /api/evidence-substrate/orchestration/jobs</code><br><code>POST /api/evidence-substrate/orchestration/jobs/claim</code><br><code>POST /api/evidence-substrate/orchestration/jobs/:id/complete</code></td><td>DB-backed bounded asynchronous job queue.</td></tr>
@@ -781,7 +904,7 @@ npm run build</code></pre>
           <div class="timeline-item"><strong>Load source artifacts.</strong><br>Upload Markdown, text, PDFs, or pasted notes that represent decisions, planning notes, status updates, reports, or postmortems.</div>
           <div class="timeline-item"><strong>Run ingestion.</strong><br>Parse, chunk, extract typed memory objects, update graph relations, and generate proactive signals.</div>
           <div class="timeline-item"><strong>Review memory health.</strong><br>Use Artifacts, Memory FS, Graph, Readiness, Data, and Audit to verify coverage and governance.</div>
-          <div class="timeline-item"><strong>Ask locked-mode questions.</strong><br>Use lineage, contradiction, assumption drift, and next-action queries. Inspect evidence, uncertainty, and trace steps.</div>
+          <div class="timeline-item"><strong>Chat with company memory.</strong><br>Use the assistant for lineage, contradiction, assumption drift, and next-action questions. Inspect evidence, uncertainty, and trace steps from each query run.</div>
           <div class="timeline-item"><strong>Operate the memory.</strong><br>Review or reject artifacts, upload replacements for changed documents, run backups, and keep migration checks green.</div>
         </div>
       </section>
@@ -851,5 +974,43 @@ npm run build</code></pre>
       <p><a href="#top">Back to top</a></p>
     </footer>
   </div>
+  <script>
+    (function () {
+      var key = 'izge-theme-preference';
+      var button = document.getElementById('docsThemeToggle');
+      var icon = document.getElementById('docsThemeIcon');
+      var label = document.getElementById('docsThemeLabel');
+      var backButton = document.getElementById('docsBackButton');
+
+      function currentTheme() {
+        return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+      }
+
+      function setTheme(theme) {
+        document.documentElement.dataset.theme = theme;
+        localStorage.setItem(key, theme);
+        if (icon) icon.textContent = theme === 'dark' ? '☀' : '☾';
+        if (label) label.textContent = theme === 'dark' ? 'Light' : 'Dark';
+      }
+
+      setTheme(currentTheme());
+
+      if (button) {
+        button.addEventListener('click', function () {
+          setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+        });
+      }
+
+      if (backButton) {
+        backButton.addEventListener('click', function () {
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.href = '/';
+          }
+        });
+      }
+    }());
+  </script>
 </body>
 </html>

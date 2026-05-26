@@ -135,6 +135,14 @@ export const api = {
     return request<ArtifactDetail>(`/artifacts/${artifactId}`, { token })
   },
 
+  artifactPreviewUrl(artifactId: string) {
+    return `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/preview`
+  },
+
+  artifactDownloadUrl(artifactId: string) {
+    return `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/download`
+  },
+
   getArtifactSignals(token: string, artifactId: string) {
     return request<ArtifactProactiveSignals>(`/artifacts/${artifactId}/signals`, { token })
   },

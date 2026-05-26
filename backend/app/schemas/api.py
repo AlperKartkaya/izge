@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TokenResponse(BaseModel):
@@ -14,13 +14,13 @@ class TokenResponse(BaseModel):
 
 
 class SignInRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=3, max_length=255)
     password: str
 
 
 class UserBase(BaseModel):
     display_name: str
-    email: EmailStr
+    email: str = Field(min_length=3, max_length=255)
     role: Literal["Admin", "Member"]
     is_active: bool = True
 

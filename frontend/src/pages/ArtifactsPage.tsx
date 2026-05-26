@@ -248,9 +248,22 @@ export function ArtifactsPage() {
                 required
               />
             </label>
-            <label className="field">
+            <label className="field field-block">
               <span className="field-label">File</span>
-              <input type="file" accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} required />
+              <span className={uploadFile ? 'file-drop-zone file-drop-zone-active' : 'file-drop-zone'}>
+                <span className="file-upload-icon" aria-hidden="true">⇧</span>
+                <span className="file-drop-copy">
+                  <strong>{uploadFile ? uploadFile.name : 'Choose a source file'}</strong>
+                  <span>{uploadFile ? 'Ready to store. Choose again to replace before submitting.' : 'PDF, Markdown, or plain text. Click anywhere in this area.'}</span>
+                </span>
+                <input
+                  className="file-input"
+                  type="file"
+                  accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf"
+                  onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                  required
+                />
+              </span>
             </label>
             <label className="field">
               <span className="field-label">Visibility</span>
@@ -368,6 +381,7 @@ export function ArtifactsPage() {
                     <th>Status</th>
                     <th>Review</th>
                     <th>Updated</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -379,7 +393,9 @@ export function ArtifactsPage() {
                     >
                       <td>
                         <div>
-                          <p className="table-primary">{artifact.title}</p>
+                          <button type="button" className="row-title-button" onClick={() => void handleArtifactSelection(artifact.artifact_id)}>
+                            {artifact.title}
+                          </button>
                           <p className="table-secondary">{artifact.artifact_id}</p>
                         </div>
                       </td>
@@ -391,6 +407,16 @@ export function ArtifactsPage() {
                         <StatusBadge value={formatLabel(artifact.review_status)} />
                       </td>
                       <td>{formatDateTime(artifact.updated_at)}</td>
+                      <td>
+                        <div className="table-action-group" onClick={(event) => event.stopPropagation()}>
+                          <a className="table-action-link" href={api.artifactPreviewUrl(artifact.artifact_id)} target="_blank" rel="noreferrer">
+                            Preview
+                          </a>
+                          <a className="table-action-link" href={api.artifactDownloadUrl(artifact.artifact_id)}>
+                            Download
+                          </a>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -404,6 +430,15 @@ export function ArtifactsPage() {
             <EmptyState title="Select an artifact" description="Choose an artifact from the inventory to inspect extracted text previews and permissions." />
           ) : (
             <div className="stack-lg">
+              <div className="artifact-action-strip">
+                <a className="secondary-button" href={api.artifactPreviewUrl(selectedArtifact.artifact_id)} target="_blank" rel="noreferrer">
+                  Preview source
+                </a>
+                <a className="secondary-button" href={api.artifactDownloadUrl(selectedArtifact.artifact_id)}>
+                  Download source
+                </a>
+              </div>
+
               <dl className="meta-list">
                 <div>
                   <dt>Artifact ID</dt>

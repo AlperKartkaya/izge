@@ -1,7 +1,8 @@
-import { useState, type FormEventHandler } from 'react'
+import { useEffect, useState, type FormEventHandler } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../lib/api'
+import { applyThemePreference, nextThemePreference, readInitialThemePreference, type ThemePreference } from '../lib/theme'
 
 const DEMO_ADMIN_EMAIL = import.meta.env.VITE_DEMO_ADMIN_EMAIL?.trim() || 'admin@example.com'
 const DEMO_ADMIN_PASSWORD = import.meta.env.VITE_DEMO_ADMIN_PASSWORD?.trim() || 'change-me-admin'
@@ -14,6 +15,12 @@ export function SignInPage() {
   const [password, setPassword] = useState(DEMO_ADMIN_PASSWORD)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [theme, setTheme] = useState<ThemePreference>(() => readInitialThemePreference())
+  const nextTheme = nextThemePreference(theme)
+
+  useEffect(() => {
+    applyThemePreference(theme)
+  }, [theme])
 
   if (isAuthReady && isAuthenticated) {
     return <Navigate to={redirectTo} replace />
@@ -35,12 +42,25 @@ export function SignInPage() {
 
   return (
     <main className="auth-layout">
+      <header className="auth-shell-bar" aria-label="Sign-in controls">
+        <div className="auth-brand">
+          <span className="brand-sigil">IZ</span>
+          <span>
+            <span className="brand-kicker">Company memory</span>
+            <span className="brand-name">Izge</span>
+          </span>
+        </div>
+        <button type="button" className="theme-toggle auth-theme-toggle" aria-label={`Switch to ${nextTheme} theme`} aria-pressed={theme === 'light'} onClick={() => setTheme(nextTheme)}>
+          <span aria-hidden="true" className="theme-toggle-icon">{theme === 'dark' ? '☀' : '☾'}</span>
+          <span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+        </button>
+      </header>
       <section className="auth-panel panel">
         <div className="auth-copy">
-          <p className="eyebrow">Izge / local-first decision intelligence</p>
-          <h1 className="auth-title">Enter the memory system that exposes drift</h1>
+          <p className="eyebrow">Izge workspace</p>
+          <h1 className="auth-title">Sign in to company memory</h1>
           <p className="page-description">
-            Sign in to review artifacts, build memory objects, trace historical decisions, and inspect evidence-backed contradictions before the team moves again.
+            Use your company account to access artifacts, evidence-backed answers, ingestion status, and role-specific administration tools.
           </p>
         </div>
 
