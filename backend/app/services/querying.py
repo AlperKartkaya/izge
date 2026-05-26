@@ -47,6 +47,7 @@ from app.services.llm_reasoning import (
     synthesize_query_answer_with_local_llm,
 )
 from app.services.permissions import artifact_is_visible_to_user
+from app.services.orchestration_runtime import run_bounded_parallel_stage_packets
 from app.services.query_context import (
     build_bounded_orchestration_payload,
     build_context_packet,
@@ -2354,8 +2355,21 @@ def _persist_query_trace_steps(
         drift_count=len(stale_assumptions),
         guidance_count=len(recommended_next_actions),
     )
+    stage_packet_execution_payload = run_bounded_parallel_stage_packets(
+        query_class=query_run.query_class,
+        context_packet=context_packet,
+        verifier_result=verifier_result,
+        contradiction_count=len(contradictions),
+        drift_count=len(stale_assumptions),
+        guidance_count=len(recommended_next_actions),
+    )
     context_packet_payload = context_packet.to_payload()
     verifier_payload = verifier_result.to_payload()
+    stage_packets_by_key = {
+        str(packet.get("stage_key")): packet
+        for packet in stage_packet_execution_payload.get("packets", [])
+        if isinstance(packet, dict)
+    }
     trace_payloads: list[tuple[str, dict[str, Any]]] = [
         (
             "route_decision",
@@ -2364,6 +2378,10 @@ def _persist_query_trace_steps(
         (
             "bounded_orchestration",
             bounded_orchestration_payload,
+        ),
+        (
+            "stage_packet_execution",
+            stage_packet_execution_payload,
         ),
         (
             "seed_selection",
@@ -2430,6 +2448,8 @@ def _persist_query_trace_steps(
         if not isinstance(stage, dict):
             continue
         stage_key = str(stage.get("stage_key") or "unknown_stage")
+        stage_packet = stage_packets_by_key.get(stage_key)
+        stage_packet_id = str(stage_packet.get("stage_packet_id")) if stage_packet else None
         db.add(
             OrchestrationStageRun(
                 query_run_id=query_run.query_run_id,
@@ -2442,6 +2462,9 @@ def _persist_query_trace_steps(
                     "context_packet_id": context_packet.packet_id,
                     "query_class": query_run.query_class,
                     "schema_version": "orchestration_stage_run_input.v1",
+                    "stage_packet_id": stage_packet_id,
+                    "stage_packet_schema_version": stage_packet.get("schema_version") if stage_packet else None,
+                    "execution_wave": stage_packet.get("execution_wave") if stage_packet else None,
                 },
                 output_summary={
                     "schema_version": "orchestration_stage_run_output.v1",
@@ -2450,6 +2473,8 @@ def _persist_query_trace_steps(
                     "verifier_status": verifier_result.status,
                     "verifier_checks": verifier_payload.get("checks", {}),
                     "trusted_write_allowed": False,
+                    "execution_model": stage_packet.get("execution_model") if stage_packet else "deterministic_stage",
+                    "stage_packet": stage_packet,
                 },
             )
         )

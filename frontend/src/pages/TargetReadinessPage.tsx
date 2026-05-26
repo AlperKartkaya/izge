@@ -122,6 +122,26 @@ export function TargetReadinessPage() {
               <p className="muted-copy">Persisted bounded orchestration ledger rows.</p>
             </article>
             <article className="panel-subtle detail-card">
+              <p className="section-label">Stage packet traces</p>
+              <p className="table-primary">{snapshotValue(snapshot, 'stage_packet_trace_count')}</p>
+              <p className="muted-copy">Bounded local sub-agent packet executions.</p>
+            </article>
+            <article className="panel-subtle detail-card">
+              <p className="section-label">Temporal families</p>
+              <p className="table-primary">{snapshotValue(snapshot, 'claim_family_count')}</p>
+              <p className="muted-copy">Persisted claim-family projection rows.</p>
+            </article>
+            <article className="panel-subtle detail-card">
+              <p className="section-label">Scenario runs</p>
+              <p className="table-primary">{snapshotValue(snapshot, 'scenario_run_count')}</p>
+              <p className="muted-copy">Stored scenario packets available for replay.</p>
+            </article>
+            <article className="panel-subtle detail-card">
+              <p className="section-label">LLM gateway</p>
+              <p className="table-primary">{snapshotValue(snapshot, 'local_llm_gateway_status')}</p>
+              <p className="muted-copy">Live readiness when local/private AI flags are enabled.</p>
+            </article>
+            <article className="panel-subtle detail-card">
               <p className="section-label">Signals</p>
               <p className="table-primary">{snapshotValue(snapshot, 'active_signal_count')}</p>
               <p className="muted-copy">Evidence-backed contradiction, drift, continuity, or next-action outputs.</p>

@@ -271,7 +271,7 @@ def build_bounded_orchestration_payload(
     guidance_stage_active = query_class == "Next-action guidance"
     return {
         "schema_version": "bounded_orchestration_trace.v1",
-        "execution_model": "bounded_stage_orchestration",
+        "execution_model": "bounded_parallel_stage_orchestration",
         "context_packet_id": context_packet.packet_id,
         "verifier_status": verifier_result.status,
         "stages": [
@@ -318,5 +318,5 @@ def build_bounded_orchestration_payload(
                 "reason": "Accepted the answer with selected evidence or explicit uncertainty notes.",
             },
         ],
-        "trust_rule": "Stage outputs remain proposals until selected evidence, permission scope, and provenance are accepted by deterministic gates.",
+        "trust_rule": "Stage packets execute in a bounded parallel pool when independent, but outputs remain proposals until selected evidence, permission scope, and provenance are accepted by deterministic gates.",
     }

@@ -12,6 +12,8 @@ from app.models import (
     Artifact,
     ArtifactChunk,
     Assumption,
+    ClaimFamily,
+    ClaimOccurrence,
     Commitment,
     Constraint,
     Decision,
@@ -20,9 +22,11 @@ from app.models import (
     Outcome,
     QueryRun,
     QueryTraceStep,
+    ScenarioRun,
     Signal,
     User,
 )
+from app.services.llm_status import inspect_local_llm_status
 from app.services.permissions import artifact_is_visible_to_user
 from app.services.scenario_support import SCENARIO_TEMPLATES, TEMPLATE_CATALOG_VERSION
 
@@ -144,19 +148,19 @@ def _database_blueprint() -> list[dict[str, Any]]:
         },
         {
             "layer": "4. Knowledge graph",
-            "table_names": ["graph_nodes", "graph_edges"],
-            "purpose": "Typed links among memory objects and source-backed conflict/supersession/continuity relationships.",
-            "write_path": "Ingestion links extracted memory into graph nodes and edges with evidence pointers.",
-            "read_path": "Graph timeline, graph neighborhood, query support, signal generation.",
-            "organization_rule": "Edges must remain evidence-backed; future temporal KG should add claim-occurrence and edge-evidence layers before richer graph claims.",
+            "table_names": ["graph_nodes", "graph_edges", "claim_families", "claim_occurrences"],
+            "purpose": "Typed links among memory objects plus time-aware claim families, claim occurrences, and source-backed conflict/supersession/continuity relationships.",
+            "write_path": "Ingestion links extracted memory into graph nodes/edges, then syncs claim-family and claim-occurrence projections with validity windows.",
+            "read_path": "Graph timeline, temporal graph, graph neighborhood, query support, signal generation.",
+            "organization_rule": "Edges and temporal occurrences must remain evidence-backed; generated output never becomes a claim occurrence without source memory.",
         },
         {
             "layer": "5. Signals and traces",
-            "table_names": ["signals", "query_runs", "query_trace_steps", "orchestration_stage_runs", "audit_events"],
+            "table_names": ["signals", "query_runs", "query_trace_steps", "orchestration_stage_runs", "scenario_runs", "audit_events"],
             "purpose": "Durable proactive findings, query packets, orchestration trace, and governance audit.",
             "write_path": "Ingestion/query generates signals and trace events after deterministic evidence selection.",
-            "read_path": "Dashboard, signal detail, query result trace, orchestration stage-run ledger, audit page, orchestration page.",
-            "organization_rule": "Every AI-assisted or orchestration stage must leave a trace showing input evidence, proposed output, and deterministic acceptance gate.",
+            "read_path": "Dashboard, signal detail, query result trace, orchestration stage-run ledger, scenario replay history, audit page, orchestration page.",
+            "organization_rule": "Every AI-assisted, scenario, or orchestration stage must leave a trace showing input evidence, proposed output, and deterministic acceptance gate.",
         },
     ]
 
@@ -326,7 +330,7 @@ ORCHESTRATION_STAGE_CATALOG: list[dict[str, Any]] = [
         "deterministic_gate": "Permission and review filters run before evidence is exposed to reasoning or LLM wording.",
         "authority_level": "deterministic_gate",
         "current_reflection": "evidence_selection query trace step plus memory file-system endpoint",
-        "status": "partially_implemented",
+        "status": "implemented",
     },
     {
         "stage_key": "memory_extractor",
@@ -361,8 +365,8 @@ ORCHESTRATION_STAGE_CATALOG: list[dict[str, Any]] = [
         "outputs": ["ranked contradiction pairs", "paired evidence"],
         "deterministic_gate": "Only explicit conflict pairs with visible evidence on both sides can be surfaced.",
         "authority_level": "deterministic_reasoning",
-        "current_reflection": "contradiction query mode and persisted signals",
-        "status": "implemented",
+        "current_reflection": "contradiction query mode, persisted signals, and bounded_parallel_subagent stage packets",
+        "status": "implemented_as_parallel_stage_packet",
     },
     {
         "stage_key": "assumption_drift_interrogator",
@@ -373,8 +377,8 @@ ORCHESTRATION_STAGE_CATALOG: list[dict[str, Any]] = [
         "outputs": ["stale assumptions", "validity notes", "supporting later evidence"],
         "deterministic_gate": "Drift requires a visible source assumption and visible later support.",
         "authority_level": "deterministic_reasoning",
-        "current_reflection": "assumption drift query mode and persisted signals",
-        "status": "implemented",
+        "current_reflection": "assumption drift query mode, persisted signals, and bounded_parallel_subagent stage packets",
+        "status": "implemented_as_parallel_stage_packet",
     },
     {
         "stage_key": "guidance_planner",
@@ -385,8 +389,8 @@ ORCHESTRATION_STAGE_CATALOG: list[dict[str, Any]] = [
         "outputs": ["recommended next actions", "uncertainty notes"],
         "deterministic_gate": "Recommendations must cite selected visible evidence or state uncertainty.",
         "authority_level": "deterministic_reasoning_then_optional_wording",
-        "current_reflection": "next-action query mode and answer_composition trace step",
-        "status": "implemented",
+        "current_reflection": "next-action query mode, answer_composition trace step, and bounded_parallel_subagent stage packets",
+        "status": "implemented_as_parallel_stage_packet",
     },
     {
         "stage_key": "provenance_verifier",
@@ -455,16 +459,17 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
     return {
         "workspace_id": user.workspace_id,
         "generated_at": datetime.utcnow(),
-        "execution_model": "bounded_stage_orchestration",
+        "execution_model": "bounded_parallel_stage_orchestration",
         "current_runtime_note": (
-            "The current runtime is deterministic and single-process. This blueprint shows the safe contract for the requested "
-            "orchestrator/sub-agent model: the orchestrator can divide work into bounded stages, but every stage output remains "
-            "evidence-scoped and must pass deterministic provenance and permission gates."
+            "The current runtime executes independent read-only specialist stage packets in a bounded local parallel pool after "
+            "typed context assembly. This demonstrates the orchestrator/sub-agent contract without granting unrestricted database "
+            "authority: every packet remains evidence-scoped and must pass deterministic provenance and permission gates."
         ),
         "stage_catalog": ORCHESTRATION_STAGE_CATALOG,
         "spawn_policy": [
             "Spawn bounded stages only after artifact visibility and review scope are known.",
             "Each sub-agent receives a typed context packet, not unrestricted database access.",
+            "Only independent read-only stages may run concurrently; write-capable stages remain behind explicit provenance gates.",
             "Each sub-agent returns structured findings plus cited artifact/chunk/memory IDs.",
             "The orchestrator can compare sub-agent outputs, but cannot promote unsupported claims to trusted memory.",
             "The provenance verifier is the final gate before answers, graph changes, or signals become visible.",
@@ -476,6 +481,7 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
             "trace_step_counts": trace_counts,
             "stage_run_count": sum(stage_run_counts.values()),
             "stage_run_counts": stage_run_counts,
+            "stage_packet_trace_count": int(trace_counts.get("stage_packet_execution", 0)),
         },
     }
 
@@ -535,6 +541,12 @@ def _query_scope_counts(db: Session, user: User) -> dict[str, int]:
             QueryTraceStep.workspace_id == user.workspace_id,
             QueryTraceStep.step_kind == "bounded_orchestration",
         )
+        stage_packet_trace_count = _count_rows(
+            db,
+            QueryTraceStep,
+            QueryTraceStep.workspace_id == user.workspace_id,
+            QueryTraceStep.step_kind == "stage_packet_execution",
+        )
         return {
             "query_run_count": query_count,
             "trace_step_count": trace_step_count,
@@ -542,6 +554,7 @@ def _query_scope_counts(db: Session, user: User) -> dict[str, int]:
             "context_packet_count": context_packet_count,
             "provenance_verification_count": provenance_count,
             "bounded_orchestration_trace_count": orchestration_trace_count,
+            "stage_packet_trace_count": stage_packet_trace_count,
         }
 
     scoped_query_ids = select(QueryRun.query_run_id).where(QueryRun.workspace_id == user.workspace_id, QueryRun.created_by == user.user_id).scalar_subquery()
@@ -579,6 +592,13 @@ def _query_scope_counts(db: Session, user: User) -> dict[str, int]:
         QueryTraceStep.query_run_id.in_(scoped_query_ids),
         QueryTraceStep.step_kind == "bounded_orchestration",
     )
+    stage_packet_trace_count = _count_rows(
+        db,
+        QueryTraceStep,
+        QueryTraceStep.workspace_id == user.workspace_id,
+        QueryTraceStep.query_run_id.in_(scoped_query_ids),
+        QueryTraceStep.step_kind == "stage_packet_execution",
+    )
     return {
         "query_run_count": query_count,
         "trace_step_count": trace_step_count,
@@ -586,6 +606,7 @@ def _query_scope_counts(db: Session, user: User) -> dict[str, int]:
         "context_packet_count": context_packet_count,
         "provenance_verification_count": provenance_count,
         "bounded_orchestration_trace_count": orchestration_trace_count,
+        "stage_packet_trace_count": stage_packet_trace_count,
     }
 
 
@@ -612,6 +633,41 @@ def _workspace_snapshot(db: Session, user: User) -> dict[str, Any]:
         "signal_explanation": settings.llm_signal_explanation_enabled,
     }
     enabled_llm_features = sum(1 for enabled in local_llm_feature_flags.values() if enabled)
+    local_llm_gateway_status = "not_checked"
+    local_llm_model_available = False
+    local_llm_available_model_count = 0
+    if enabled_llm_features:
+        llm_status = inspect_local_llm_status()
+        local_llm_gateway_status = str(llm_status.get("gateway_status") or "unknown")
+        local_llm_model_available = bool(llm_status.get("configured_model_available"))
+        local_llm_available_model_count = len(llm_status.get("available_models") or [])
+
+    if user.role == "Admin":
+        claim_occurrence_count = _count_rows(db, ClaimOccurrence, ClaimOccurrence.workspace_id == user.workspace_id)
+        claim_family_count = _count_rows(db, ClaimFamily, ClaimFamily.workspace_id == user.workspace_id)
+        scenario_run_count = _count_rows(db, ScenarioRun, ScenarioRun.workspace_id == user.workspace_id)
+    else:
+        claim_occurrence_count = _count_rows(
+            db,
+            ClaimOccurrence,
+            ClaimOccurrence.workspace_id == user.workspace_id,
+            ClaimOccurrence.source_artifact_id.in_(usable_artifact_ids),
+        )
+        claim_family_count = int(
+            db.scalar(
+                select(func.count(func.distinct(ClaimOccurrence.family_id))).where(
+                    ClaimOccurrence.workspace_id == user.workspace_id,
+                    ClaimOccurrence.source_artifact_id.in_(usable_artifact_ids),
+                )
+            )
+            or 0
+        )
+        scenario_run_count = _count_rows(
+            db,
+            ScenarioRun,
+            ScenarioRun.workspace_id == user.workspace_id,
+            ScenarioRun.created_by == user.user_id,
+        )
 
     return {
         "visible_artifact_count": len(visible_artifacts),
@@ -623,11 +679,17 @@ def _workspace_snapshot(db: Session, user: User) -> dict[str, Any]:
         "memory_counts": memory_counts,
         "memory_object_count": sum(memory_counts.values()),
         "graph_edge_count": _count_rows(db, GraphEdge, GraphEdge.workspace_id == user.workspace_id, GraphEdge.evidence_artifact_id.in_(usable_artifact_ids)),
+        "claim_family_count": claim_family_count,
+        "claim_occurrence_count": claim_occurrence_count,
         "active_signal_count": _count_rows(db, Signal, *signal_criteria),
+        "scenario_run_count": scenario_run_count,
         "scenario_template_count": len(SCENARIO_TEMPLATES),
         "scenario_template_catalog_version": TEMPLATE_CATALOG_VERSION,
         "local_llm_features_enabled": enabled_llm_features,
         "local_llm_feature_flags": local_llm_feature_flags,
+        "local_llm_gateway_status": local_llm_gateway_status,
+        "local_llm_configured_model_available": local_llm_model_available,
+        "local_llm_available_model_count": local_llm_available_model_count,
         **query_counts,
     }
 
@@ -655,7 +717,15 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
         1 for stage in ORCHESTRATION_STAGE_CATALOG if "partial" in str(stage.get("status", ""))
     )
     enabled_llm_features = int(snapshot["local_llm_features_enabled"])
-    local_llm_label = "configured" if enabled_llm_features else "deterministic fallback"
+    stage_packet_trace_count = int(snapshot["stage_packet_trace_count"])
+    llm_gateway_status = str(snapshot["local_llm_gateway_status"])
+    llm_ready = enabled_llm_features > 0 and llm_gateway_status == "ready" and bool(snapshot["local_llm_configured_model_available"])
+    if llm_ready:
+        local_llm_label = "ready"
+    elif enabled_llm_features:
+        local_llm_label = llm_gateway_status
+    else:
+        local_llm_label = "deterministic fallback"
 
     areas: list[dict[str, Any]] = [
         {
@@ -681,22 +751,23 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
         {
             "area_key": "temporal_knowledge_graph",
             "title": "Temporal knowledge graph",
-            "status": "partial",
-            "score": 0.72,
+            "status": "implemented",
+            "score": 0.9,
             "promise": "Decisions, assumptions, constraints, outcomes, and commitments should become time-aware claim occurrences with evidence-backed relationships.",
-            "demo_reflection": "The current graph persists typed memory nodes and evidence-backed edges, then exposes a temporal read model for claim family, status, and relationship inspection.",
+            "demo_reflection": "The current graph persists typed memory nodes, evidence-backed edges, claim-family rows, claim-occurrence rows, validity windows, and status transitions for temporal inspection.",
             "evidence_routes": ["/api/graph/summary", "/api/graph/temporal", "/api/graph/neighborhood/{memory_type}/{memory_id}"],
             "demo_surfaces": ["/graph", "/memory/:memoryType/:memoryId"],
             "proof_signals": [
                 _proof_signal("Memory objects", snapshot["memory_object_count"], "/api/graph/summary"),
                 _proof_signal("Graph edges", snapshot["graph_edge_count"], "/api/graph/summary"),
-                _proof_signal("Memory types", len([count for count in snapshot["memory_counts"].values() if count]), "/api/graph/summary"),
+                _proof_signal("Claim families", snapshot["claim_family_count"], "/api/graph/temporal"),
+                _proof_signal("Claim occurrences", snapshot["claim_occurrence_count"], "/api/graph/temporal"),
             ],
             "remaining_work": [
-                "Add explicit claim-family and claim-occurrence tables after the read model remains stable.",
-                "Persist validity windows and status-transition history instead of deriving them only from current rows and edges.",
+                "Add advanced temporal analytics for long-lived family drift and family-level confidence decay.",
+                "Add migration-version tracking before evolving the claim projection schema beyond additive columns.",
             ],
-            "risks": ["Temporal semantics are visible and test-covered as a read model, but not yet a first-class persisted KG schema."],
+            "risks": ["Claim families are a persisted projection over source memory rows; memory tables still remain the source of truth."],
         },
         {
             "area_key": "typed_context_assembly",
@@ -721,10 +792,10 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
         {
             "area_key": "bounded_internal_orchestration",
             "title": "Bounded internal orchestration",
-            "status": "partial",
-            "score": 0.78,
+            "status": "implemented",
+            "score": 0.89,
             "promise": "An orchestrator may divide work into specialist stages, but every stage must receive a typed context packet and return cited output through deterministic gates.",
-            "demo_reflection": "The Orchestrate page shows a bounded stage catalog, spawn policy, current runtime boundary, and a persisted stage-run ledger for query executions.",
+            "demo_reflection": "The Orchestrate page shows a bounded stage catalog, spawn policy, current runtime boundary, persisted stage-run ledger, and stage_packet_execution traces from a bounded parallel local sub-agent pool.",
             "evidence_routes": ["/api/evidence-substrate/orchestration", "/api/evidence-substrate/orchestration/runs"],
             "demo_surfaces": ["/orchestration", "/query/:queryRunId"],
             "proof_signals": [
@@ -732,12 +803,13 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
                 _proof_signal("Implemented stages", implemented_stage_count, "/api/evidence-substrate/orchestration"),
                 _proof_signal("Partial stages", partial_stage_count, "/api/evidence-substrate/orchestration"),
                 _proof_signal("Persisted stage runs", snapshot["stage_run_count"], "/api/evidence-substrate/orchestration/runs"),
+                _proof_signal("Stage packet traces", stage_packet_trace_count, "/api/query/{query_run_id}/trace"),
             ],
             "remaining_work": [
-                "Execute independent stages concurrently only after their inputs are proven independent.",
-                "Store richer sub-agent output payloads and replay summaries without granting unrestricted database authority.",
+                "Add optional external worker backends after the local bounded-pool contract remains stable.",
+                "Add richer replay comparison for stage packets beyond the current safe output summaries.",
             ],
-            "risks": ["The current implementation is intentionally single-process; true multi-agent execution remains behind the provenance gate."],
+            "risks": ["The parallel pool is intentionally local and read-only; external distributed agents remain a later hardening step."],
         },
         {
             "area_key": "contradiction_drift_next_actions",
@@ -762,8 +834,8 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
         {
             "area_key": "private_ai_evidence_discipline",
             "title": "Private AI assistance with evidence discipline",
-            "status": "partial",
-            "score": 0.7 if enabled_llm_features else 0.62,
+            "status": "implemented" if llm_ready else "partial",
+            "score": 0.88 if llm_ready else (0.72 if enabled_llm_features else 0.62),
             "promise": "Private/local inference may assist extraction, routing, wording, and signal explanation while deterministic graph logic remains the authority.",
             "demo_reflection": "The backend has feature flags, health/smoke endpoints, deterministic fallback, answer trace boundaries, and provenance verification so AI wording cannot become trusted memory by itself.",
             "evidence_routes": ["/api/system/llm-status", "/api/system/llm-smoke", "/api/query/{query_run_id}/trace"],
@@ -771,10 +843,11 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
             "proof_signals": [
                 _proof_signal("LLM mode", local_llm_label, "/api/system/llm-status"),
                 _proof_signal("Enabled AI feature flags", enabled_llm_features, "/api/system/llm-status"),
+                _proof_signal("Configured model available", bool(snapshot["local_llm_configured_model_available"]), "/api/system/llm-status"),
                 _proof_signal("Provenance verifier traces", snapshot["provenance_verification_count"], "/api/query/{query_run_id}/trace"),
             ],
             "remaining_work": [
-                "Run and record deployment-specific local/private LLM smoke evidence for the actual customer machine.",
+                "Keep recording deployment-specific local/private LLM smoke evidence for every customer machine.",
                 "Add answer-quality evaluator fixtures that compare meaningful responses against cited evidence.",
             ],
             "risks": ["If local LLM features are disabled or the model is absent, Izge remains deterministic but cannot demonstrate private inference assistance live."],
@@ -808,34 +881,36 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
         {
             "area_key": "bounded_scenario_support",
             "title": "Bounded scenario support",
-            "status": "partial",
-            "score": 0.82,
+            "status": "implemented",
+            "score": 0.9,
             "promise": "Scenario questions should identify known assumptions, commitments, constraints, decisions, and outcomes needing review without fabricating forecasts.",
-            "demo_reflection": "The Orchestrate page calls a template-guided impact endpoint that returns impacted memory, selected evidence, candidate snapshots, deterministic ranking, and follow-up questions.",
-            "evidence_routes": ["/api/scenario/templates", "/api/scenario/impact"],
+            "demo_reflection": "The Orchestrate page calls a template-guided impact endpoint, persists scenario packet runs, and can replay stored runs against current permissions/evidence for deterministic comparison.",
+            "evidence_routes": ["/api/scenario/templates", "/api/scenario/impact", "/api/scenario/runs", "/api/scenario/runs/{scenario_run_id}/replay"],
             "demo_surfaces": ["/orchestration"],
             "proof_signals": [
                 _proof_signal("Scenario templates", snapshot["scenario_template_count"], "/api/scenario/templates"),
                 _proof_signal("Template catalog", snapshot["scenario_template_catalog_version"], "/api/scenario/templates"),
+                _proof_signal("Scenario runs", snapshot["scenario_run_count"], "/api/scenario/runs"),
                 _proof_signal("Forecasting allowed", "no", "/api/scenario/impact"),
             ],
             "remaining_work": [
-                "Persist scenario packet runs so deterministic summaries can be compared over time.",
-                "Add evaluator fixtures for unsupported-forecast refusal and broader company scenario lenses.",
+                "Add more company-specific scenario lenses after the replay contract stays stable.",
+                "Add longitudinal scenario-diff dashboards for high-volume workspaces.",
             ],
             "risks": ["This is impact lookup, not simulation; expansion should stay bounded to evidence-backed memory."],
         },
         {
             "area_key": "portable_runtime",
             "title": "Portable runtime for any company machine",
-            "status": "partial",
-            "score": 0.8,
+            "status": "implemented",
+            "score": 0.86,
             "promise": "Docker Compose should start backend, frontend, persisted database/storage, and proxy on a clean company-controlled machine.",
-            "demo_reflection": "The project includes Compose runtime, persisted volumes, generated bootstrap admin credentials, backup/restore scripts, and a Docker smoke evaluation path.",
+            "demo_reflection": "The project includes Compose runtime, persisted volumes, generated bootstrap admin credentials, backup/restore scripts, Docker smoke evaluation, and an Ollama-backed smoke/eval script.",
             "evidence_routes": ["/health", "/api/evidence-substrate/readiness"],
             "demo_surfaces": ["Docker Compose runtime", "frontend proxy", "backend health"],
             "proof_signals": [
                 _proof_signal("Portable smoke gate", "documented"),
+                _proof_signal("Ollama smoke gate", "documented"),
                 _proof_signal("Persisted workspace volume", "yes"),
                 _proof_signal("Bootstrap credentials file", "generated on first run"),
             ],
@@ -857,10 +932,10 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
         "current_workspace_snapshot": snapshot,
         "areas": areas,
         "next_best_passes": [
-            "Persist scenario packet runs and compare replay summaries over time under current permissions.",
-            "Promote the temporal read model into claim-family and claim-occurrence tables with validity windows.",
-            "Introduce true concurrent sub-agent execution only behind typed context packets and deterministic provenance verification.",
-            "Automate Docker smoke eval and local/private LLM smoke evidence in CI or deployment runbooks.",
+            "Add CI automation that runs deterministic seed eval, Docker smoke eval, and Ollama smoke eval when a model is available.",
+            "Add customer-corpus evaluator fixtures that score answer usefulness against cited evidence, not just endpoint shape.",
+            "Add optional external worker backends for stage packets while preserving the bounded local-pool contract.",
+            "Add migration-version tooling before evolving the persisted temporal claim projection schema.",
         ],
         "evaluator_gate": {
             "name": "company_portable_memory_system_seed_eval",

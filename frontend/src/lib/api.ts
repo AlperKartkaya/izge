@@ -13,6 +13,9 @@ import type {
   LocalLLMStatusRead,
   MemoryDetail,
   ScenarioImpactRead,
+  ScenarioReplayRead,
+  ScenarioRunListRead,
+  ScenarioRunRead,
   ScenarioTemplateCatalogItem,
   TemporalGraphRead,
   OrchestrationBlueprintRead,
@@ -286,6 +289,21 @@ export const api = {
       method: 'POST',
       token,
       body: JSON.stringify({ scenario_text: scenarioText, limit }),
+    })
+  },
+
+  listScenarioRuns(token: string, limit = 30) {
+    return request<ScenarioRunListRead>(`/scenario/runs?limit=${limit}`, { token })
+  },
+
+  getScenarioRun(token: string, scenarioRunId: string) {
+    return request<ScenarioRunRead>(`/scenario/runs/${scenarioRunId}`, { token })
+  },
+
+  replayScenarioRun(token: string, scenarioRunId: string) {
+    return request<ScenarioReplayRead>(`/scenario/runs/${scenarioRunId}/replay`, {
+      method: 'POST',
+      token,
     })
   },
 

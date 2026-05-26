@@ -449,17 +449,32 @@ class SignalDetail(SignalRead):
 
 class TemporalGraphOccurrence(BaseModel):
     occurrence_id: str
+    family_id: str
     memory_type: str
     memory_id: str
     claim_family_key: str
     title_or_label: str
     observed_at: datetime
+    valid_from: datetime
+    valid_to: datetime | None = None
     source_artifact_id: str
     source_artifact_title: str
     source_chunk_id: str | None = None
     evidence_span: str | None = None
     status: str
     confidence_score: float
+
+
+class TemporalClaimFamilyRead(BaseModel):
+    family_id: str
+    claim_family_key: str
+    memory_type: str
+    title_or_label: str
+    status: str
+    first_seen_at: datetime
+    latest_seen_at: datetime
+    active_occurrence_id: str | None = None
+    occurrence_count: int
 
 
 class TemporalGraphLink(BaseModel):
@@ -474,8 +489,10 @@ class TemporalGraphLink(BaseModel):
 
 class TemporalGraphRead(BaseModel):
     workspace_id: str
+    families: list[TemporalClaimFamilyRead] = Field(default_factory=list)
     occurrences: list[TemporalGraphOccurrence]
     links: list[TemporalGraphLink]
+    sync_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class ScenarioImpactRequest(BaseModel):
@@ -622,10 +639,60 @@ class ScenarioImpactRead(BaseModel):
     scenario_template: ScenarioTemplateRead
     candidate_templates: list[ScenarioTemplateRead]
     scenario_packet: ScenarioContextPacketRead
+    scenario_run_id: str | None = None
     answer_text: str
     impacted_memory: list[ScenarioImpactItem]
     recommended_questions: list[str]
     uncertainty_notes: list[str]
+
+
+class ScenarioRunSummaryRead(BaseModel):
+    scenario_run_id: str
+    scenario_text_hash: str
+    packet_id: str
+    selected_template_key: str
+    selected_memory_count: int
+    candidate_memory_count: int
+    replay_verdict: str
+    created_at: datetime
+
+
+class ScenarioRunRead(BaseModel):
+    scenario_run_id: str
+    workspace_id: str
+    created_by: str
+    scenario_text: str
+    scenario_text_hash: str
+    packet_id: str
+    selected_template_key: str
+    input_snapshot_hash: str
+    candidate_snapshot_hash: str
+    result_payload: ScenarioImpactRead
+    replay_summary: dict[str, Any]
+    created_at: datetime
+
+
+class ScenarioRunListRead(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    runs: list[ScenarioRunSummaryRead]
+
+
+class ScenarioReplayRead(BaseModel):
+    scenario_run_id: str
+    replayed_at: datetime
+    verdict: Literal["stable", "changed", "permission_limited"]
+    original_packet_id: str
+    current_packet_id: str
+    original_template_key: str
+    current_template_key: str
+    input_snapshot_changed: bool
+    candidate_snapshot_changed: bool
+    selected_memory_kept: list[str]
+    selected_memory_added: list[str]
+    selected_memory_removed: list[str]
+    summary: str
+    current_result: ScenarioImpactRead
 
 
 class MemoryFilesystemRoot(BaseModel):

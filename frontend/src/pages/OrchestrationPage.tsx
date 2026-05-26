@@ -4,7 +4,14 @@ import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatLabel, formatPercent } from '../lib/format'
-import type { OrchestrationBlueprintRead, OrchestrationStageRunsRead, ScenarioImpactRead, ScenarioTemplateCatalogItem } from '../lib/types'
+import type {
+  OrchestrationBlueprintRead,
+  OrchestrationStageRunsRead,
+  ScenarioImpactRead,
+  ScenarioReplayRead,
+  ScenarioRunListRead,
+  ScenarioTemplateCatalogItem,
+} from '../lib/types'
 
 const DEFAULT_SCENARIO = 'Which evidence-backed memory should be reviewed if the company accelerates self-serve onboarding for enterprise expansion next quarter?'
 
@@ -12,11 +19,14 @@ export function OrchestrationPage() {
   const { session } = useAuth()
   const [blueprint, setBlueprint] = useState<OrchestrationBlueprintRead | null>(null)
   const [stageRuns, setStageRuns] = useState<OrchestrationStageRunsRead | null>(null)
+  const [scenarioRuns, setScenarioRuns] = useState<ScenarioRunListRead | null>(null)
+  const [scenarioReplay, setScenarioReplay] = useState<ScenarioReplayRead | null>(null)
   const [scenarioTemplates, setScenarioTemplates] = useState<ScenarioTemplateCatalogItem[]>([])
   const [scenarioText, setScenarioText] = useState(DEFAULT_SCENARIO)
   const [scenarioResult, setScenarioResult] = useState<ScenarioImpactRead | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isScenarioRunning, setIsScenarioRunning] = useState(false)
+  const [replayingRunId, setReplayingRunId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -26,15 +36,17 @@ export function OrchestrationPage() {
         return
       }
       try {
-        const [payload, runsPayload, templatesPayload] = await Promise.all([
+        const [payload, runsPayload, templatesPayload, scenarioRunsPayload] = await Promise.all([
           api.getOrchestrationBlueprint(session.token),
           api.listOrchestrationStageRuns(session.token, 40),
           api.listScenarioTemplates(session.token),
+          api.listScenarioRuns(session.token, 12),
         ])
         if (!cancelled) {
           setBlueprint(payload)
           setStageRuns(runsPayload)
           setScenarioTemplates(templatesPayload)
+          setScenarioRuns(scenarioRunsPayload)
         }
       } catch (caughtError) {
         if (!cancelled) {
@@ -57,9 +69,12 @@ export function OrchestrationPage() {
     setIsScenarioRunning(true)
     setError(null)
     setScenarioResult(null)
+    setScenarioReplay(null)
     try {
       const result = await api.runScenarioImpact(session.token, scenarioText, 10)
       setScenarioResult(result)
+      const runsPayload = await api.listScenarioRuns(session.token, 12)
+      setScenarioRuns(runsPayload)
     } catch (caughtError) {
       setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to run bounded scenario support.')
     } finally {
@@ -70,7 +85,26 @@ export function OrchestrationPage() {
   const updateScenarioText = (value: string) => {
     setScenarioText(value)
     setScenarioResult(null)
+    setScenarioReplay(null)
     setError(null)
+  }
+
+  const handleReplayScenario = async (scenarioRunId: string) => {
+    if (!session?.token) {
+      return
+    }
+    setReplayingRunId(scenarioRunId)
+    setError(null)
+    try {
+      const replay = await api.replayScenarioRun(session.token, scenarioRunId)
+      setScenarioReplay(replay)
+      const runsPayload = await api.listScenarioRuns(session.token, 12)
+      setScenarioRuns(runsPayload)
+    } catch (caughtError) {
+      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to replay scenario run.')
+    } finally {
+      setReplayingRunId(null)
+    }
   }
 
   const reflection = blueprint?.current_reflection ?? {}
@@ -100,7 +134,7 @@ export function OrchestrationPage() {
         <MetricCard label="Active signals" value={String(reflection.active_signal_count ?? '—')} />
       </section>
 
-      <Panel title="Current runtime boundary" description="The implementation remains deterministic and single-process; this page exposes the safe contract for future sub-agent execution.">
+      <Panel title="Current runtime boundary" description="Independent read-only specialist packets execute through a bounded local pool; deterministic gates still decide what can become trusted output.">
         {blueprint ? <p className="evidence-block">{blueprint.current_runtime_note}</p> : <EmptyState title="Loading blueprint" description="The backend is preparing orchestration stage metadata." />}
       </Panel>
 
@@ -157,6 +191,11 @@ export function OrchestrationPage() {
                 </div>
                 <p className="table-secondary">Authority: {formatLabel(run.authority_level)} · Verifier: {run.verifier_status ? formatLabel(run.verifier_status) : 'Unavailable'}</p>
                 <p className="muted-copy">Context packet: {String(run.input_refs.context_packet_id ?? 'not recorded')}</p>
+                {run.input_refs.stage_packet_id ? (
+                  <p className="muted-copy">
+                    Stage packet: {String(run.input_refs.stage_packet_id)} · {String(run.output_summary.execution_model ?? 'bounded stage')}
+                  </p>
+                ) : null}
                 <p className="evidence-block">{String(run.output_summary.reason ?? 'No stage summary recorded.')}</p>
               </article>
             ))}
@@ -204,6 +243,9 @@ export function OrchestrationPage() {
               <p className="muted-copy">
                 Replay: {scenarioResult.scenario_packet.replay_contract.replay_mode} · writes {scenarioResult.scenario_packet.replay_contract.trusted_write_allowed ? 'allowed' : 'blocked'} · forecasting {scenarioResult.scenario_packet.replay_contract.forecasting_allowed ? 'allowed' : 'blocked'}
               </p>
+              <p className="muted-copy">
+                Stored run: {scenarioResult.scenario_run_id ?? 'not persisted'} · input snapshot {scenarioResult.scenario_packet.input_snapshot_hash.slice(0, 20)}…
+              </p>
               {scenarioResult.candidate_templates.length > 1 ? (
                 <p className="table-secondary">Also matched: {scenarioResult.candidate_templates.slice(1).map((template) => template.title).join(', ')}</p>
               ) : null}
@@ -234,6 +276,50 @@ export function OrchestrationPage() {
             </div>
           </div>
         ) : null}
+      </Panel>
+
+      <Panel title="Scenario run history and replay" description="Stored scenario packets can be replayed under current permissions/evidence to prove impact lookup is deterministic and bounded.">
+        {scenarioRuns && scenarioRuns.runs.length > 0 ? (
+          <div className="stack-md">
+            <div className="stack-sm">
+              {scenarioRuns.runs.map((run) => (
+                <article key={run.scenario_run_id} className="panel-subtle stack-sm">
+                  <div className="timeline-card-head">
+                    <div>
+                      <p className="section-label">{formatLabel(run.selected_template_key)} · {formatLabel(run.replay_verdict)}</p>
+                      <p className="table-primary">{run.packet_id}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => void handleReplayScenario(run.scenario_run_id)}
+                      disabled={replayingRunId === run.scenario_run_id}
+                    >
+                      {replayingRunId === run.scenario_run_id ? 'Replaying…' : 'Replay'}
+                    </button>
+                  </div>
+                  <p className="table-secondary">
+                    Selected {run.selected_memory_count} of {run.candidate_memory_count} candidate memory objects · {run.scenario_run_id}
+                  </p>
+                </article>
+              ))}
+            </div>
+            {scenarioReplay ? (
+              <div className="panel-subtle stack-sm">
+                <div className="timeline-card-head">
+                  <p className="table-primary">Replay verdict: {formatLabel(scenarioReplay.verdict)}</p>
+                  <StatusBadge value={scenarioReplay.input_snapshot_changed || scenarioReplay.candidate_snapshot_changed ? 'Changed' : 'Stable'} />
+                </div>
+                <p className="evidence-block">{scenarioReplay.summary}</p>
+                <p className="table-secondary">
+                  Kept {scenarioReplay.selected_memory_kept.length} · added {scenarioReplay.selected_memory_added.length} · removed {scenarioReplay.selected_memory_removed.length}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <EmptyState title="No scenario runs yet" description="Run bounded scenario impact once to persist a replayable packet." />
+        )}
       </Panel>
     </div>
   )

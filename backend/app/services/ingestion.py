@@ -1003,6 +1003,9 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
         _link_decision_context(db, all_memories, artifact.artifact_id, artifact.workspace_id)
         _link_decision_timeline(db, all_memories, artifact.artifact_id, artifact.workspace_id)
         _update_assumption_drift(db, all_memories, artifact.artifact_id, artifact.workspace_id)
+        from app.services.temporal_graph import sync_temporal_claims
+
+        temporal_sync_summary = sync_temporal_claims(db, workspace_id=artifact.workspace_id)
 
         artifact.ingestion_status = "completed"
         if artifact.review_status == "submitted":
@@ -1010,7 +1013,8 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
         job.status = "completed"
         job.detail = (
             f"Stored {len(stored_chunks)} chunks and {sum(extracted_counts.values())} extracted memory objects "
-            f"using {extraction_diagnostics.extraction_method} extraction."
+            f"using {extraction_diagnostics.extraction_method} extraction. "
+            f"Synced {temporal_sync_summary['occurrence_count']} temporal claim occurrence(s)."
         )
         db.commit()
         log_event(

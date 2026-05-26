@@ -139,15 +139,23 @@ def _extract_json_content(raw: str) -> str:
 
 def run_structured_local_prompt(*, system_prompt: str, user_prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
     settings = get_settings()
+    schema_text = json.dumps(schema, sort_keys=True)
     payload = {
         "model": settings.local_llm_model,
         "stream": False,
-        "format": schema,
-        "options": {"temperature": 0},
+        "format": "json",
+        "options": {"temperature": 0, "num_predict": 256, "num_ctx": 4096},
         "think": False,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {
+                "role": "user",
+                "content": (
+                    f"{user_prompt}\n\n"
+                    "Return one JSON object only. It must validate against this JSON schema:\n"
+                    f"{schema_text}"
+                ),
+            },
         ],
     }
     raw_response = request_local_llm_json("/api/chat", method="POST", payload=payload)

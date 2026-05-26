@@ -4,12 +4,13 @@ from dataclasses import dataclass
 import hashlib
 import json
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Artifact, Assumption, Commitment, Constraint, Decision, Outcome, User
+from app.models import Artifact, Assumption, Commitment, Constraint, Decision, Outcome, ScenarioRun, User
 from app.services.permissions import artifact_is_visible_to_user
 
 SCENARIO_MODELS = [
@@ -348,7 +349,15 @@ def _scenario_packet_payload(
     }
 
 
-def build_scenario_impact(db: Session, user: User, *, scenario_text: str, limit: int = 10) -> dict[str, Any]:
+def _visible_trusted_artifact_ids(db: Session, user: User) -> set[str]:
+    return {
+        artifact.artifact_id
+        for artifact in db.scalars(select(Artifact).where(Artifact.workspace_id == user.workspace_id)).all()
+        if artifact.review_status != "rejected" and artifact_is_visible_to_user(db, artifact, user)
+    }
+
+
+def build_scenario_impact(db: Session, user: User, *, scenario_text: str, limit: int = 10, persist_run: bool = False) -> dict[str, Any]:
     scenario_tokens = _tokens(scenario_text)
     template, matched_template_terms, template_confidence = _classify_template(scenario_tokens)
     artifacts = db.scalars(select(Artifact).where(Artifact.workspace_id == user.workspace_id).order_by(Artifact.artifact_id)).all()
@@ -422,7 +431,7 @@ def build_scenario_impact(db: Session, user: User, *, scenario_text: str, limit:
         secondary_titles = ", ".join(item["title"] for item in candidate_templates[1:3])
         uncertainty_notes.append(f"Multiple scenario lenses matched; secondary review lenses include {secondary_titles}.")
     scenario_template = _scenario_template_payload(template, matched_template_terms, template_confidence)
-    return {
+    result = {
         "scenario_text": scenario_text,
         "scenario_template": scenario_template,
         "candidate_templates": candidate_templates,
@@ -448,4 +457,201 @@ def build_scenario_impact(db: Session, user: User, *, scenario_text: str, limit:
             "Which of these memory objects needs a fresh artifact before the company acts?",
         ],
         "uncertainty_notes": uncertainty_notes,
+    }
+    if persist_run:
+        run = persist_scenario_run(db, user, result)
+        result["scenario_run_id"] = run.scenario_run_id
+    return result
+
+
+def _scenario_run_summary_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    packet = payload.get("scenario_packet") if isinstance(payload.get("scenario_packet"), dict) else {}
+    evidence_budget = packet.get("evidence_budget") if isinstance(packet.get("evidence_budget"), dict) else {}
+    return {
+        "selected_memory_count": int(evidence_budget.get("selected_memory_count") or 0),
+        "candidate_memory_count": int(evidence_budget.get("candidate_memory_count") or 0),
+        "selected_memory_ids": [str(item) for item in packet.get("selected_memory_ids", []) if isinstance(item, str)],
+    }
+
+
+def persist_scenario_run(db: Session, user: User, result_payload: dict[str, Any]) -> ScenarioRun:
+    packet = result_payload.get("scenario_packet") if isinstance(result_payload.get("scenario_packet"), dict) else {}
+    summary = _scenario_run_summary_from_payload(result_payload)
+    replay_summary = {
+        "schema_version": "scenario_replay_summary.v1",
+        "verdict": "original",
+        "selected_memory_count": summary["selected_memory_count"],
+        "candidate_memory_count": summary["candidate_memory_count"],
+        "created_from": "scenario_impact",
+    }
+    run = ScenarioRun(
+        workspace_id=user.workspace_id,
+        created_by=user.user_id,
+        scenario_text=str(result_payload.get("scenario_text") or ""),
+        scenario_text_hash=str(packet.get("scenario_text_hash") or ""),
+        packet_id=str(packet.get("packet_id") or ""),
+        selected_template_key=str(packet.get("selected_template_key") or ""),
+        input_snapshot_hash=str(packet.get("input_snapshot_hash") or ""),
+        candidate_snapshot_hash=str(packet.get("candidate_snapshot_hash") or ""),
+        scenario_packet=packet,
+        result_payload={**result_payload, "scenario_run_id": None},
+        replay_summary=replay_summary,
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    run.result_payload = {**result_payload, "scenario_run_id": run.scenario_run_id}
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def _run_visible_to_user(run: ScenarioRun, user: User) -> bool:
+    return user.role == "Admin" or run.created_by == user.user_id
+
+
+def _filter_scenario_result_for_reader(db: Session, user: User, payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    visible_artifact_ids = _visible_trusted_artifact_ids(db, user)
+    filtered = dict(payload)
+    packet = dict(filtered.get("scenario_packet") or {})
+    redacted = False
+
+    impacted = [item for item in filtered.get("impacted_memory", []) if isinstance(item, dict)]
+    kept_impacted = [item for item in impacted if item.get("source_artifact_id") in visible_artifact_ids]
+    redacted = redacted or len(kept_impacted) != len(impacted)
+    filtered["impacted_memory"] = kept_impacted
+
+    for key in ("selected_memory_refs", "candidate_memory_snapshot"):
+        items = [item for item in packet.get(key, []) if isinstance(item, dict)]
+        kept_items = [item for item in items if item.get("source_artifact_id") in visible_artifact_ids]
+        redacted = redacted or len(kept_items) != len(items)
+        packet[key] = kept_items
+
+    evidence_refs = [item for item in packet.get("selected_evidence_refs", []) if isinstance(item, dict)]
+    kept_evidence_refs = [item for item in evidence_refs if item.get("artifact_id") in visible_artifact_ids]
+    redacted = redacted or len(kept_evidence_refs) != len(evidence_refs)
+    packet["selected_evidence_refs"] = kept_evidence_refs
+    packet["selected_artifact_ids"] = [item for item in packet.get("selected_artifact_ids", []) if item in visible_artifact_ids]
+    packet["selected_memory_ids"] = [item.get("memory_id") for item in packet["selected_memory_refs"] if isinstance(item.get("memory_id"), str)]
+    evidence_budget = dict(packet.get("evidence_budget") or {})
+    evidence_budget["selected_memory_count"] = len(packet["selected_memory_refs"])
+    evidence_budget["candidate_memory_count"] = len(packet.get("candidate_memory_snapshot", []))
+    evidence_budget["selected_artifact_count"] = len(packet["selected_artifact_ids"])
+    packet["evidence_budget"] = evidence_budget
+    filtered["scenario_packet"] = packet
+    if redacted:
+        notes = list(filtered.get("uncertainty_notes") or [])
+        notice = "This scenario run was reduced to currently permitted and review-accepted evidence."
+        if notice not in notes:
+            notes.append(notice)
+        filtered["uncertainty_notes"] = notes
+    return filtered, redacted
+
+
+def _scenario_run_read_payload(db: Session, user: User, run: ScenarioRun) -> dict[str, Any]:
+    payload, _redacted = _filter_scenario_result_for_reader(db, user, dict(run.result_payload or {}))
+    return {
+        "scenario_run_id": run.scenario_run_id,
+        "workspace_id": run.workspace_id,
+        "created_by": run.created_by,
+        "scenario_text": run.scenario_text,
+        "scenario_text_hash": run.scenario_text_hash,
+        "packet_id": run.packet_id,
+        "selected_template_key": run.selected_template_key,
+        "input_snapshot_hash": run.input_snapshot_hash,
+        "candidate_snapshot_hash": run.candidate_snapshot_hash,
+        "result_payload": {**payload, "scenario_run_id": run.scenario_run_id},
+        "replay_summary": run.replay_summary,
+        "created_at": run.created_at,
+    }
+
+
+def list_scenario_runs(db: Session, user: User, *, limit: int = 30) -> dict[str, Any]:
+    criteria = [ScenarioRun.workspace_id == user.workspace_id]
+    if user.role != "Admin":
+        criteria.append(ScenarioRun.created_by == user.user_id)
+    rows = db.scalars(
+        select(ScenarioRun)
+        .where(*criteria)
+        .order_by(ScenarioRun.created_at.desc(), ScenarioRun.scenario_run_id.desc())
+        .limit(max(1, min(limit, 100)))
+    ).all()
+    runs = []
+    for run in rows:
+        payload, redacted = _filter_scenario_result_for_reader(db, user, dict(run.result_payload or {}))
+        summary = _scenario_run_summary_from_payload(payload)
+        runs.append(
+            {
+                "scenario_run_id": run.scenario_run_id,
+                "scenario_text_hash": run.scenario_text_hash,
+                "packet_id": run.packet_id,
+                "selected_template_key": run.selected_template_key,
+                "selected_memory_count": summary["selected_memory_count"],
+                "candidate_memory_count": summary["candidate_memory_count"],
+                "replay_verdict": "permission_limited" if redacted else str((run.replay_summary or {}).get("verdict") or "original"),
+                "created_at": run.created_at,
+            }
+        )
+    return {"workspace_id": user.workspace_id, "generated_at": datetime.now(UTC), "runs": runs}
+
+
+def get_scenario_run(db: Session, user: User, scenario_run_id: str) -> dict[str, Any] | None:
+    run = db.scalar(select(ScenarioRun).where(ScenarioRun.workspace_id == user.workspace_id, ScenarioRun.scenario_run_id == scenario_run_id))
+    if run is None or not _run_visible_to_user(run, user):
+        return None
+    return _scenario_run_read_payload(db, user, run)
+
+
+def replay_scenario_run(db: Session, user: User, scenario_run_id: str) -> dict[str, Any] | None:
+    run = db.scalar(select(ScenarioRun).where(ScenarioRun.workspace_id == user.workspace_id, ScenarioRun.scenario_run_id == scenario_run_id))
+    if run is None or not _run_visible_to_user(run, user):
+        return None
+
+    original_payload, redacted = _filter_scenario_result_for_reader(db, user, dict(run.result_payload or {}))
+    original_packet = original_payload.get("scenario_packet") if isinstance(original_payload.get("scenario_packet"), dict) else {}
+    original_budget = original_packet.get("evidence_budget") if isinstance(original_packet.get("evidence_budget"), dict) else {}
+    limit = int(original_budget.get("max_impacted_memory") or 10)
+    current_result = build_scenario_impact(db, user, scenario_text=run.scenario_text, limit=limit, persist_run=False)
+    current_packet = current_result.get("scenario_packet") if isinstance(current_result.get("scenario_packet"), dict) else {}
+    original_selected = {str(item) for item in original_packet.get("selected_memory_ids", []) if isinstance(item, str)}
+    current_selected = {str(item) for item in current_packet.get("selected_memory_ids", []) if isinstance(item, str)}
+    input_changed = run.input_snapshot_hash != current_packet.get("input_snapshot_hash")
+    candidate_changed = run.candidate_snapshot_hash != current_packet.get("candidate_snapshot_hash")
+    changed = input_changed or candidate_changed or original_selected != current_selected or run.selected_template_key != current_packet.get("selected_template_key")
+    verdict = "permission_limited" if redacted else ("changed" if changed else "stable")
+    replay_summary = {
+        "schema_version": "scenario_replay_summary.v1",
+        "verdict": verdict,
+        "replayed_at": datetime.now(UTC).isoformat(),
+        "current_packet_id": current_packet.get("packet_id"),
+        "input_snapshot_changed": input_changed,
+        "candidate_snapshot_changed": candidate_changed,
+        "selected_memory_added": sorted(current_selected - original_selected),
+        "selected_memory_removed": sorted(original_selected - current_selected),
+    }
+    run.replay_summary = replay_summary
+    db.commit()
+    db.refresh(run)
+    summary_text = (
+        "Replay is stable: the same template and selected memory set were reconstructed."
+        if verdict == "stable"
+        else "Replay changed: the scenario packet differs from the stored run under current evidence or permissions."
+    )
+    if verdict == "permission_limited":
+        summary_text = "Replay is permission-limited: stored details were reduced to the current reader's trusted evidence scope."
+    return {
+        "scenario_run_id": run.scenario_run_id,
+        "replayed_at": datetime.now(UTC),
+        "verdict": verdict,
+        "original_packet_id": run.packet_id,
+        "current_packet_id": str(current_packet.get("packet_id") or ""),
+        "original_template_key": run.selected_template_key,
+        "current_template_key": str(current_packet.get("selected_template_key") or ""),
+        "input_snapshot_changed": input_changed,
+        "candidate_snapshot_changed": candidate_changed,
+        "selected_memory_kept": sorted(original_selected & current_selected),
+        "selected_memory_added": sorted(current_selected - original_selected),
+        "selected_memory_removed": sorted(original_selected - current_selected),
+        "summary": summary_text,
+        "current_result": current_result,
     }

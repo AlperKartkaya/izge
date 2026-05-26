@@ -259,6 +259,15 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         ),
         "member scenario impact",
     )
+    member_scenario_run_id = str(member_scenario.get("scenario_run_id") or "")
+    member_scenario_runs = expect_object(
+        request("/api/scenario/runs?limit=10", headers={"Authorization": f"Bearer {member_token}"}),
+        "member scenario runs",
+    )
+    member_scenario_replay = expect_object(
+        request(f"/api/scenario/runs/{member_scenario_run_id}/replay", method="POST", headers={"Authorization": f"Bearer {member_token}"}),
+        "member scenario replay",
+    ) if member_scenario_run_id else {}
     admin_signals = expect_list(request("/api/signals", headers={"Authorization": f"Bearer {admin_token}"}), "admin persisted signals")
     restricted_signal = next((signal for signal in admin_signals if signal.get("source_artifact_id") == restricted_artifact_id), None)
     restricted_signal_detail_status = None
@@ -285,6 +294,8 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "orchestration_stage_runs": member_stage_runs,
         "target_readiness": member_readiness,
         "scenario_impact": member_scenario,
+        "scenario_runs": member_scenario_runs,
+        "scenario_replay": member_scenario_replay,
     }
     member_trace_counts = member_orchestration.get("current_reflection", {}).get("trace_step_counts", {})
     member_stage_run_counts = member_orchestration.get("current_reflection", {}).get("stage_run_counts", {})
@@ -330,6 +341,12 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "scenario_impact_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["scenario_impact"], restricted_artifact_id=restricted_artifact_id
         ),
+        "scenario_runs_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["scenario_runs"], restricted_artifact_id=restricted_artifact_id
+        ),
+        "scenario_replay_redacted": not payload_contains_forbidden_value(
+            forbidden_payloads["scenario_replay"], restricted_artifact_id=restricted_artifact_id
+        ),
         "orchestration_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["orchestration"], restricted_artifact_id=restricted_artifact_id
         ),
@@ -347,6 +364,11 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
             for item in member_stage_run_items
             if isinstance(item, dict)
         ),
+        "member_scenario_runs_scoped": bool(member_scenario_run_id)
+        and {str(item.get("scenario_run_id")) for item in member_scenario_runs.get("runs", []) if isinstance(item, dict)}
+        == {member_scenario_run_id},
+        "member_scenario_replay_stays_bounded": member_scenario_replay.get("scenario_run_id") == member_scenario_run_id
+        and member_scenario_replay.get("current_result", {}).get("scenario_packet", {}).get("replay_contract", {}).get("trusted_write_allowed") is False,
     }
     return {
         "restricted_artifact_id": restricted_artifact_id,
@@ -433,6 +455,7 @@ def run_eval() -> dict[str, Any]:
     permission_regression = permission_regression_checks(token)
 
     results = []
+    first_query_trace: dict[str, Any] = {}
     for spec in EXPECTED["queries"]:
         result = expect_object(
             request("/api/query", method="POST", data=json.dumps({"query_text": spec["query"]}).encode(), headers=auth_headers),
@@ -448,6 +471,8 @@ def run_eval() -> dict[str, Any]:
         )
         stage_run_items = [item for item in stage_runs.get("runs", []) if isinstance(item, dict)]
         trace_steps = trace.get("steps", [])
+        if not first_query_trace:
+            first_query_trace = trace
         trace_step_by_kind = {
             str(step.get("step_kind")): step.get("payload", {})
             for step in trace_steps
@@ -466,6 +491,13 @@ def run_eval() -> dict[str, Any]:
         provenance_verification_payload = trace_step_by_kind.get("provenance_verification", {})
         context_metrics = context_assembly_payload.get("metrics", {}) if isinstance(context_assembly_payload, dict) else {}
         context_packet_id = context_assembly_payload.get("packet_id")
+        stage_packet_execution = trace_step_by_kind.get("stage_packet_execution", {})
+        stage_packets = [
+            packet
+            for packet in stage_packet_execution.get("packets", [])
+            if isinstance(packet, dict)
+        ] if isinstance(stage_packet_execution, dict) else []
+        stage_packets_by_key = {str(packet.get("stage_key")): packet for packet in stage_packets}
         contradiction_top = result.get("contradictions", [{}])[0] if result.get("contradictions") else {}
         drift_top = result.get("stale_assumptions", [{}])[0] if result.get("stale_assumptions") else {}
         top_item = contradiction_top if spec["name"] == "contradiction" else drift_top
@@ -522,6 +554,22 @@ def run_eval() -> dict[str, Any]:
             ),
             "trace_has_context_assembly": "context_assembly" in trace_step_by_kind,
             "trace_has_bounded_orchestration": "bounded_orchestration" in trace_step_by_kind,
+            "trace_has_parallel_stage_packet_execution": stage_packet_execution.get("schema_version") == "bounded_stage_packet_execution.v1"
+            and stage_packet_execution.get("execution_model") == "bounded_parallel_subagent_pool"
+            and int(stage_packet_execution.get("max_workers", 0)) >= 3,
+            "stage_packets_are_typed_read_only": bool(stage_packets)
+            and all(
+                packet.get("schema_version") == "stage_packet.v1"
+                and packet.get("execution_model") == "bounded_parallel_subagent"
+                and packet.get("output_contract", {}).get("trusted_write_allowed") is False
+                and packet.get("input_contract", {}).get("context_packet_id") == context_packet_id
+                for packet in stage_packets
+            ),
+            "stage_packet_statuses_truthful": (
+                stage_packets_by_key.get("contradiction_interrogator", {}).get("status") in expected_contradiction_status
+                and stage_packets_by_key.get("assumption_drift_interrogator", {}).get("status") in expected_drift_status
+                and stage_packets_by_key.get("guidance_planner", {}).get("status") in expected_guidance_status
+            ),
             "trace_stage_statuses_truthful": (
                 orchestration_stages.get("contradiction_interrogator") in expected_contradiction_status
                 and orchestration_stages.get("assumption_drift_interrogator") in expected_drift_status
@@ -552,6 +600,12 @@ def run_eval() -> dict[str, Any]:
             "stage_runs_do_not_allow_trusted_writes": all(
                 item.get("output_summary", {}).get("trusted_write_allowed") is False
                 for item in stage_run_items
+            ),
+            "stage_runs_link_stage_packets": all(
+                item.get("input_refs", {}).get("stage_packet_id")
+                and item.get("output_summary", {}).get("stage_packet", {}).get("schema_version") == "stage_packet.v1"
+                for item in stage_run_items
+                if item.get("stage_key") in {"contradiction_interrogator", "assumption_drift_interrogator", "guidance_planner"}
             ),
             "stage_runs_omit_raw_source_paths": "source_path" not in json.dumps(stage_runs, sort_keys=True, default=str),
             "trace_omits_raw_source_paths": "source_path" not in json.dumps(trace, sort_keys=True, default=str),
@@ -607,6 +661,33 @@ def run_eval() -> dict[str, Any]:
         request("/api/scenario/templates", headers={"Authorization": f"Bearer {token}"}),
         "scenario templates",
     )
+    scenario_run_id = str(scenario_impact.get("scenario_run_id") or "")
+    scenario_runs = expect_object(
+        request("/api/scenario/runs?limit=20", headers={"Authorization": f"Bearer {token}"}),
+        "scenario runs",
+    )
+    scenario_run_detail = expect_object(
+        request(f"/api/scenario/runs/{scenario_run_id}", headers={"Authorization": f"Bearer {token}"}),
+        "scenario run detail",
+    ) if scenario_run_id else {}
+    scenario_replay = expect_object(
+        request(f"/api/scenario/runs/{scenario_run_id}/replay", method="POST", headers={"Authorization": f"Bearer {token}"}),
+        "scenario run replay",
+    ) if scenario_run_id else {}
+    target_readiness = expect_object(
+        request("/api/evidence-substrate/readiness", headers={"Authorization": f"Bearer {token}"}),
+        "target readiness after scenario replay",
+    )
+    local_llm_status = expect_object(
+        request("/api/system/llm-status", headers={"Authorization": f"Bearer {token}"}),
+        "local llm status",
+    )
+    local_llm_smoke = expect_object(
+        request("/api/system/llm-smoke", method="POST", headers={"Authorization": f"Bearer {token}"}),
+        "local llm smoke",
+    )
+    local_llm_features_enabled = any(bool(value) for value in local_llm_status.get("feature_flags", {}).values())
+    llm_query_trace = first_query_trace if local_llm_features_enabled else {}
     filesystem_artifacts = memory_filesystem.get("artifacts", [])
     filesystem_text = json.dumps(memory_filesystem, sort_keys=True, default=str)
     trace_step_counts = orchestration_blueprint.get("current_reflection", {}).get("trace_step_counts", {})
@@ -617,6 +698,7 @@ def run_eval() -> dict[str, Any]:
     readiness_status_counts = target_readiness.get("status_counts", {})
     readiness_snapshot = target_readiness.get("current_workspace_snapshot", {})
     readiness_text = json.dumps(target_readiness, sort_keys=True, default=str)
+    temporal_families = temporal_graph.get("families", [])
     temporal_occurrences = temporal_graph.get("occurrences", [])
     temporal_links = temporal_graph.get("links", [])
     scenario_items = scenario_impact.get("impacted_memory", [])
@@ -691,7 +773,7 @@ def run_eval() -> dict[str, Any]:
         "orchestration_blueprint": {
             "stage_count": len(orchestration_blueprint.get("stage_catalog", [])),
             "checks": {
-                "uses_bounded_execution_model": orchestration_blueprint.get("execution_model") == "bounded_stage_orchestration",
+                "uses_bounded_execution_model": orchestration_blueprint.get("execution_model") == "bounded_parallel_stage_orchestration",
                 "has_expected_stage_catalog": len(orchestration_blueprint.get("stage_catalog", [])) >= 8,
                 "has_provenance_verifier_stage": any(
                     stage.get("stage_key") == "provenance_verifier"
@@ -701,12 +783,17 @@ def run_eval() -> dict[str, Any]:
                 "has_spawn_policy": bool(orchestration_blueprint.get("spawn_policy")),
                 "reflects_context_assembly_traces": int(trace_step_counts.get("context_assembly", 0)) >= len(EXPECTED["queries"]),
                 "reflects_bounded_orchestration_traces": int(trace_step_counts.get("bounded_orchestration", 0)) >= len(EXPECTED["queries"]),
+                "reflects_stage_packet_execution_traces": int(trace_step_counts.get("stage_packet_execution", 0)) >= len(EXPECTED["queries"]),
                 "reflects_provenance_verification_traces": int(trace_step_counts.get("provenance_verification", 0)) >= len(EXPECTED["queries"]),
                 "reflects_persisted_stage_runs": sum(int(count) for count in stage_run_counts.values()) >= len(EXPECTED["queries"]) * 6,
                 "stage_run_endpoint_has_runs": len(stage_run_items) >= len(EXPECTED["queries"]) * 6,
                 "stage_runs_have_safe_schema": all(
                     item.get("input_refs", {}).get("schema_version") == "orchestration_stage_run_input.v1"
                     and item.get("output_summary", {}).get("schema_version") == "orchestration_stage_run_output.v1"
+                    for item in stage_run_items
+                ),
+                "stage_runs_include_stage_packet_summaries": any(
+                    (item.get("output_summary", {}).get("stage_packet") or {}).get("schema_version") == "stage_packet.v1"
                     for item in stage_run_items
                 ),
                 "stage_runs_do_not_expose_raw_source_paths": "source_path" not in json.dumps(orchestration_stage_runs, sort_keys=True, default=str),
@@ -741,14 +828,17 @@ def run_eval() -> dict[str, Any]:
                 "readiness_status_counts_match_area_statuses": sum(int(value) for value in readiness_status_counts.values()) == len(readiness_areas),
                 "readiness_reflects_workspace_counts": int(readiness_snapshot.get("visible_artifact_count", 0)) >= len(uploaded_artifacts)
                 and int(readiness_snapshot.get("memory_object_count", 0)) > 0
-                and int(readiness_snapshot.get("stage_run_count", 0)) >= len(EXPECTED["queries"]) * 6,
+                and int(readiness_snapshot.get("stage_run_count", 0)) >= len(EXPECTED["queries"]) * 6
+                and int(readiness_snapshot.get("stage_packet_trace_count", 0)) >= len(EXPECTED["queries"])
+                and int(readiness_snapshot.get("claim_occurrence_count", 0)) > 0
+                and int(readiness_snapshot.get("scenario_run_count", 0)) > 0,
                 "readiness_names_required_future_gaps": contains_all_fragments(
                     readiness_text,
                     [
-                        "claim-occurrence",
-                        "concurrent sub-agent",
-                        "local/private LLM smoke",
-                        "Docker smoke eval",
+                        "customer-corpus evaluator",
+                        "external worker backends",
+                        "migration-version tooling",
+                        "Ollama smoke eval",
                     ],
                 ),
                 "readiness_links_website_promises_to_demo": contains_all_fragments(
@@ -767,14 +857,29 @@ def run_eval() -> dict[str, Any]:
             },
         },
         "temporal_knowledge_graph": {
+            "family_count": len(temporal_families),
             "occurrence_count": len(temporal_occurrences),
             "link_count": len(temporal_links),
             "checks": {
+                "has_persisted_families": bool(temporal_families)
+                and int(temporal_graph.get("sync_summary", {}).get("family_count", 0)) >= len(temporal_families),
                 "has_occurrences": bool(temporal_occurrences),
+                "sync_summary_records_projection": temporal_graph.get("sync_summary", {}).get("synced") is True
+                and int(temporal_graph.get("sync_summary", {}).get("occurrence_count", 0)) >= len(temporal_occurrences),
                 "has_evidence_backed_links": bool(temporal_links)
                 and all(link.get("evidence_artifact_id") and link.get("evidence_chunk_id") for link in temporal_links),
                 "occurrences_have_status": all(bool(occurrence.get("status")) for occurrence in temporal_occurrences),
-                "occurrences_have_claim_family": all(bool(occurrence.get("claim_family_key")) for occurrence in temporal_occurrences),
+                "occurrences_have_claim_family": all(
+                    bool(occurrence.get("claim_family_key")) and bool(occurrence.get("family_id"))
+                    for occurrence in temporal_occurrences
+                ),
+                "occurrences_have_validity_windows": all(
+                    bool(occurrence.get("valid_from")) and "valid_to" in occurrence
+                    for occurrence in temporal_occurrences
+                ),
+                "families_reference_active_occurrences": {
+                    family.get("active_occurrence_id") for family in temporal_families if family.get("active_occurrence_id")
+                }.issubset({occurrence.get("occurrence_id") for occurrence in temporal_occurrences}),
                 "links_reference_visible_occurrences": {
                     link.get("from_occurrence_id")
                     for link in temporal_links
@@ -788,8 +893,16 @@ def run_eval() -> dict[str, Any]:
         },
         "bounded_scenario_support": {
             "impact_count": len(scenario_items),
+            "scenario_run_id": scenario_run_id,
             "checks": {
                 "finds_evidence_backed_impacts": bool(scenario_items),
+                "persists_scenario_run": bool(scenario_run_id)
+                and scenario_run_id in {str(run.get("scenario_run_id")) for run in scenario_runs.get("runs", []) if isinstance(run, dict)},
+                "scenario_run_detail_round_trips_payload": scenario_run_detail.get("scenario_run_id") == scenario_run_id
+                and scenario_run_detail.get("result_payload", {}).get("scenario_packet", {}).get("packet_id") == scenario_packet.get("packet_id"),
+                "scenario_replay_is_stable_or_permission_bounded": scenario_replay.get("scenario_run_id") == scenario_run_id
+                and scenario_replay.get("verdict") in {"stable", "permission_limited"}
+                and scenario_replay.get("current_result", {}).get("scenario_packet", {}).get("schema_version") == "scenario_context_packet.v1",
                 "template_catalog_endpoint_lists_supported_templates": {
                     "launch_change",
                     "pricing_or_packaging",
@@ -873,6 +986,31 @@ def run_eval() -> dict[str, Any]:
                     for note in scenario_impact.get("uncertainty_notes", [])
                 ),
                 "recommends_followup_questions": len(scenario_impact.get("recommended_questions", [])) >= 3,
+            },
+        },
+        "local_private_llm": {
+            "gateway_status": local_llm_status.get("gateway_status"),
+            "smoke_status": local_llm_smoke.get("status"),
+            "features_enabled": local_llm_features_enabled,
+            "checks": {
+                "status_endpoint_reports_flags": isinstance(local_llm_status.get("feature_flags"), dict)
+                and {"extraction", "query_routing", "answer_synthesis", "signal_explanation"}.issubset(local_llm_status.get("feature_flags", {})),
+                "smoke_endpoint_status_is_valid": local_llm_smoke.get("status") in {"passed", "failed", "skipped"},
+                "disabled_mode_skips_generation": local_llm_features_enabled or local_llm_smoke.get("status") == "skipped",
+                "enabled_mode_has_ready_gateway": (not local_llm_features_enabled)
+                or (
+                    local_llm_status.get("gateway_status") == "ready"
+                    and local_llm_status.get("configured_model_available") is True
+                ),
+                "enabled_mode_smoke_passes": (not local_llm_features_enabled) or local_llm_smoke.get("status") == "passed",
+                "enabled_mode_query_uses_llm_boundary": (not local_llm_features_enabled)
+                or (
+                    "local_llm_intent" in json.dumps(llm_query_trace, sort_keys=True, default=str)
+                    or '"status": "applied"' in json.dumps(llm_query_trace, sort_keys=True, default=str)
+                ),
+                "llm_payloads_keep_authority_boundary": "trusted_write_allowed" in json.dumps(llm_query_trace, sort_keys=True, default=str)
+                if local_llm_features_enabled
+                else True,
             },
         },
         "contradictions": {
@@ -1047,6 +1185,10 @@ def run_eval() -> dict[str, Any]:
         "rejected artifact proactive signals",
     )
     signals_after_rejection = expect_list(request("/api/signals", headers={"Authorization": f"Bearer {token}"}), "signals after rejection")
+    temporal_after_rejection = expect_object(
+        request("/api/graph/temporal?limit=120", headers={"Authorization": f"Bearer {token}"}),
+        "temporal graph after rejected artifact",
+    )
     standalone["artifact_review_rejection_trust_boundary"] = {
         "artifact_id": reversal_artifact["artifact_id"],
         "review_status": rejected_review.get("review_status"),
@@ -1069,6 +1211,8 @@ def run_eval() -> dict[str, Any]:
             "persisted_signals_hide_rejected_source": all(
                 signal.get("source_artifact_id") != reversal_artifact["artifact_id"] for signal in signals_after_rejection
             ),
+            "temporal_graph_syncs_after_rejection": temporal_after_rejection.get("sync_summary", {}).get("synced") is True,
+            "temporal_graph_hides_rejected_source": not payload_contains_artifact_id(temporal_after_rejection, reversal_artifact["artifact_id"]),
         },
     }
 

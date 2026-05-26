@@ -533,17 +533,32 @@ export interface TargetReadinessRead {
 
 export interface TemporalGraphOccurrence {
   occurrence_id: string
+  family_id: string
   memory_type: string
   memory_id: string
   claim_family_key: string
   title_or_label: string
   observed_at: string
+  valid_from: string
+  valid_to: string | null
   source_artifact_id: string
   source_artifact_title: string
   source_chunk_id: string | null
   evidence_span: string | null
   status: string
   confidence_score: number
+}
+
+export interface TemporalClaimFamilyRead {
+  family_id: string
+  claim_family_key: string
+  memory_type: string
+  title_or_label: string
+  status: string
+  first_seen_at: string
+  latest_seen_at: string
+  active_occurrence_id: string | null
+  occurrence_count: number
 }
 
 export interface TemporalGraphLink {
@@ -558,8 +573,10 @@ export interface TemporalGraphLink {
 
 export interface TemporalGraphRead {
   workspace_id: string
+  families: TemporalClaimFamilyRead[]
   occurrences: TemporalGraphOccurrence[]
   links: TemporalGraphLink[]
+  sync_summary: Record<string, unknown>
 }
 
 export interface ScenarioImpactItem {
@@ -699,8 +716,58 @@ export interface ScenarioImpactRead {
   scenario_template: ScenarioTemplateRead
   candidate_templates: ScenarioTemplateRead[]
   scenario_packet: ScenarioContextPacketRead
+  scenario_run_id: string | null
   answer_text: string
   impacted_memory: ScenarioImpactItem[]
   recommended_questions: string[]
   uncertainty_notes: string[]
+}
+
+export interface ScenarioRunSummaryRead {
+  scenario_run_id: string
+  scenario_text_hash: string
+  packet_id: string
+  selected_template_key: string
+  selected_memory_count: number
+  candidate_memory_count: number
+  replay_verdict: string
+  created_at: string
+}
+
+export interface ScenarioRunRead {
+  scenario_run_id: string
+  workspace_id: string
+  created_by: string
+  scenario_text: string
+  scenario_text_hash: string
+  packet_id: string
+  selected_template_key: string
+  input_snapshot_hash: string
+  candidate_snapshot_hash: string
+  result_payload: ScenarioImpactRead
+  replay_summary: Record<string, unknown>
+  created_at: string
+}
+
+export interface ScenarioRunListRead {
+  workspace_id: string
+  generated_at: string
+  runs: ScenarioRunSummaryRead[]
+}
+
+export interface ScenarioReplayRead {
+  scenario_run_id: string
+  replayed_at: string
+  verdict: 'stable' | 'changed' | 'permission_limited'
+  original_packet_id: string
+  current_packet_id: string
+  original_template_key: string
+  current_template_key: string
+  input_snapshot_changed: boolean
+  candidate_snapshot_changed: boolean
+  selected_memory_kept: string[]
+  selected_memory_added: string[]
+  selected_memory_removed: string[]
+  summary: string
+  current_result: ScenarioImpactRead
 }

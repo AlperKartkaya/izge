@@ -164,6 +164,9 @@ Use these commands when moving the same company memory system across machines or
 # Prove the backend image can run the full seed/evidence/orchestration eval.
 scripts/docker-smoke-eval.sh
 
+# Prove the same eval with local/private Ollama routing plus backend LLM smoke.
+scripts/ollama-smoke-eval.sh
+
 # Export SQLite, uploaded artifacts, pasted text, and bootstrap credentials.
 scripts/docker-backup.sh
 
@@ -185,8 +188,8 @@ LLM features remain opt-in through the existing `IZGE_LOCAL_LLM_ENABLED`, routin
 ## UI surfaces added by this refactor
 
 - **Memory FS** — shows artifacts, safe logical locators, chunk/memory/signal counts, trust boundaries, database organization, and step-by-step company setup guidance.
-- **Graph** — includes a temporal knowledge graph panel showing claim occurrences and temporal edge count.
-- **Orchestrate** — shows bounded stage catalog, spawn policy, current runtime boundary, trace reflection counts, and bounded scenario impact lookup.
+- **Graph** — includes a temporal knowledge graph panel showing persisted claim families, claim occurrences, validity windows, and temporal edge count.
+- **Orchestrate** — shows bounded stage catalog, spawn policy, current runtime boundary, trace reflection counts, stage packet IDs, bounded scenario impact lookup, scenario run history, and replay verdicts.
 - **Readiness** — maps the website/PRD promises to current demo proof, scores target coverage, shows workspace counts, and ranks remaining implementation gaps.
 - **Query traces** — include typed context assembly and bounded orchestration trace steps.
 
@@ -207,6 +210,8 @@ The demo UI reads template prompts from `/api/scenario/templates` so the visible
 - selected memory refs, permission-filtered candidate memory snapshot refs, selected evidence refs, selected artifact IDs, omission reasons, and evidence budget;
 - a deterministic-selection replay contract that disallows forecasting and trusted writes.
 
+Scenario impact calls now persist `scenario_runs` rows. Operators can inspect `/api/scenario/runs`, open a stored run, and replay it through `/api/scenario/runs/{scenario_run_id}/replay`; the replay compares the stored packet/template/input/candidate hashes and selected memory set against current evidence and permissions.
+
 ## Evaluation coverage
 
 The isolated seed evaluation is the current portability/readiness gate:
@@ -222,14 +227,23 @@ The Docker equivalent is:
 scripts/docker-smoke-eval.sh
 ```
 
+The Ollama-backed equivalent is:
+
+```bash
+scripts/ollama-smoke-eval.sh
+```
+
+That script first verifies the configured model exists in Ollama, then runs the isolated seed evaluation with query routing and backend LLM smoke enabled through the local/private gateway. It defaults answer synthesis off so the portable smoke remains fast on small local models; set `IZGE_LLM_ANSWER_SYNTHESIS_ENABLED=true` for a deeper wording-generation run. It fails if the gateway is unavailable, the model is missing, LLM smoke fails, or the query trace cannot prove the AI-assisted boundary.
+
 In addition to the original lineage, contradiction, drift, next-action, proactive-signal, review-governance, and permission-redaction checks, the eval now verifies:
 
 - memory file-system roots, database blueprint, organization guide, safe logical locators, downstream counts, and absence of raw source paths;
-- temporal knowledge graph occurrences, claim-family keys, evidence-backed links, and absence of raw source paths;
-- bounded orchestration traces, typed context packet traces, provenance-verification traces, persisted stage-run ledgers, truthful stage statuses, spawn policy, and scoped reflection counts;
+- temporal knowledge graph persisted families, occurrences, validity windows, claim-family keys, evidence-backed links, projection sync summaries, and absence of raw source paths;
+- bounded orchestration traces, typed context packet traces, bounded parallel stage-packet traces, provenance-verification traces, persisted stage-run ledgers, truthful stage statuses, spawn policy, and scoped reflection counts;
 - target readiness coverage across evidence substrate, temporal KG, typed context, bounded orchestration, evidence-backed intelligence, private AI discipline, UI storytelling, bounded scenarios, and Docker portability;
-- bounded scenario support with all template probes, catalog endpoint alignment, typed scenario context packets, deterministic replay identity, evidence-backed impacted memory, and explicit “not unsupported forecasting” uncertainty;
-- member redaction across memory file-system, temporal graph, scenario impact, orchestration aggregate endpoints, and target readiness.
+- bounded scenario support with all template probes, catalog endpoint alignment, typed scenario context packets, persisted scenario runs, replay comparisons, deterministic replay identity, evidence-backed impacted memory, and explicit “not unsupported forecasting” uncertainty;
+- member redaction across memory file-system, temporal graph, scenario impact, scenario run/replay history, orchestration aggregate endpoints, and target readiness;
+- optional local/private LLM status, smoke, trace boundary, and fallback checks.
 
 ## Target readiness score
 
@@ -239,10 +253,10 @@ The response includes:
 
 - `target_score` — average readiness across implemented, partial, and planned areas;
 - `areas[]` — each website/PRD promise, current demo reflection, proof routes, UI surfaces, proof signals, remaining work, and risk notes;
-- `current_workspace_snapshot` — safe counts for artifacts, chunks, memory objects, graph edges, signals, query traces, stage runs, scenario templates, and local/private AI feature flags;
+- `current_workspace_snapshot` — safe counts for artifacts, chunks, memory objects, graph edges, claim families, claim occurrences, signals, query traces, stage packet traces, stage runs, scenario runs, scenario templates, and local/private AI feature flags/status;
 - `next_best_passes` — the implementation order that keeps evidence substrate and provenance gates ahead of multi-agent runtime expansion.
 
-This endpoint deliberately does not claim the future multi-agent runtime is complete. It marks the current orchestration as bounded and single-process while ranking true concurrent sub-agent execution, persisted claim occurrences, scenario-run history, Docker/LLM smoke automation, and production deployment hardening as remaining work.
+This endpoint now treats the local bounded parallel stage-packet runtime, temporal claim projection, and scenario replay history as implemented demo capabilities. It still ranks CI automation, richer customer-corpus answer-quality evaluators, optional external worker backends, migration-version tooling, and production deployment hardening as remaining work.
 
 ## Future implementation plan
 
@@ -254,8 +268,8 @@ This endpoint deliberately does not claim the future multi-agent runtime is comp
 
 ### Phase 2 — temporal KG persistence
 
-- Add `claim_families` and `claim_occurrences` tables once the read model stabilizes.
-- Persist status transitions such as first-seen, active, contested, stale, superseded.
+- Keep `claim_families` and `claim_occurrences` as a persisted projection over source memory rows.
+- Extend status-transition analytics beyond first-seen, active, contested, stale, and superseded.
 - Add graph timeline filters by claim family, artifact, owner, date, and status.
 
 ### Phase 3 — typed context packets
@@ -264,10 +278,10 @@ This endpoint deliberately does not claim the future multi-agent runtime is comp
 - Add packet size budgets, omission reasons, and verifier checks.
 - Make answer composition consume packet JSON rather than ad hoc payloads.
 
-### Phase 4 — real bounded sub-agent runtime
+### Phase 4 — bounded sub-agent runtime
 
-- Execute stages concurrently only when their inputs are independent.
-- Store stage runs and stage outputs in durable tables.
+- Continue executing independent read-only stages through the bounded local parallel stage-packet pool.
+- Add optional external worker backends only after preserving typed context packets and deterministic verifier behavior.
 - Let the orchestrator compare stage outputs, but keep provenance verifier deterministic.
 - Add replay mode for demos and audits.
 
@@ -277,9 +291,10 @@ This endpoint deliberately does not claim the future multi-agent runtime is comp
 - Promote startup schema readiness checks into explicit versioned migrations before changing, renaming, or dropping table shapes.
 - Add HTTPS and auth hardening for customer-controlled deployments.
 - Add CI automation around the documented Docker smoke eval.
+- Add CI/runner support for `scripts/ollama-smoke-eval.sh` where a local/private model is available.
 
 ### Phase 6 — scenario support expansion
 
-- Persist scenario packet runs so deterministic-selection summaries can be compared across time and replayed under current permissions.
+- Expand scenario packet run replay into longitudinal diff dashboards.
 - Keep outputs bounded to impacted memory and review questions unless trusted evidence supports stronger recommendations.
 - Add evaluator fixtures for unsupported-forecast refusal behavior.

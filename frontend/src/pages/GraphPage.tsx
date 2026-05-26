@@ -130,7 +130,7 @@ export function GraphPage() {
         <MetricCard label="Relationship types" value={Object.keys(summary?.edge_counts ?? {}).length || '—'} />
         <MetricCard label="Contradictions surfaced" value={contradictions.length} />
         <MetricCard label="Persisted signals" value={persistedSignals.length || nextActions.length} />
-        <MetricCard label="Temporal claims" value={temporalGraph?.occurrences.length ?? '—'} />
+        <MetricCard label="Temporal claims" value={temporalGraph?.occurrences.length ?? '—'} detail={`${temporalGraph?.families.length ?? 0} persisted families`} />
       </section>
 
       <Panel
@@ -141,6 +141,10 @@ export function GraphPage() {
           <div className="stack-sm">
             <dl className="meta-list compact-meta-list">
               <div>
+                <dt>Persisted families</dt>
+                <dd>{temporalGraph.families.length}</dd>
+              </div>
+              <div>
                 <dt>Visible occurrences</dt>
                 <dd>{temporalGraph.occurrences.length}</dd>
               </div>
@@ -148,7 +152,27 @@ export function GraphPage() {
                 <dt>Temporal links</dt>
                 <dd>{temporalGraph.links.length}</dd>
               </div>
+              <div>
+                <dt>Projection sync</dt>
+                <dd>{String(temporalGraph.sync_summary.synced ?? '—')}</dd>
+              </div>
             </dl>
+            <div className="stack-sm">
+              {temporalGraph.families.slice(0, 4).map((family) => (
+                <article key={family.family_id} className="panel-subtle stack-sm">
+                  <div className="timeline-card-head">
+                    <div>
+                      <p className="section-label">Claim family · {family.memory_type}</p>
+                      <p className="table-primary">{family.title_or_label}</p>
+                    </div>
+                    <StatusBadge value={formatLabel(family.status)} />
+                  </div>
+                  <p className="table-secondary">
+                    {family.claim_family_key} · {family.occurrence_count} occurrence(s) · latest {formatDateTime(family.latest_seen_at)}
+                  </p>
+                </article>
+              ))}
+            </div>
             {temporalGraph.occurrences.slice(0, 8).map((occurrence) => (
               <Link
                 key={occurrence.occurrence_id}
@@ -161,7 +185,8 @@ export function GraphPage() {
                     {formatLabel(occurrence.status)} · {occurrence.memory_type} · {formatDateTime(occurrence.observed_at)}
                   </p>
                   <p className="muted-copy">
-                    {occurrence.source_artifact_title} · family {occurrence.claim_family_key}
+                    {occurrence.source_artifact_title} · family {occurrence.claim_family_key} · valid {formatDateTime(occurrence.valid_from)}
+                    {occurrence.valid_to ? ` → ${formatDateTime(occurrence.valid_to)}` : ' → now'}
                   </p>
                 </div>
                 <span className="table-secondary">Confidence {formatPercent(occurrence.confidence_score)}</span>

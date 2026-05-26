@@ -207,6 +207,61 @@ class OrchestrationStageRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
+class ScenarioRun(Base):
+    __tablename__ = "scenario_runs"
+
+    scenario_run_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("scr"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False, index=True)
+    scenario_text: Mapped[str] = mapped_column(Text, nullable=False)
+    scenario_text_hash: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    packet_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    selected_template_key: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    input_snapshot_hash: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    candidate_snapshot_hash: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    scenario_packet: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    result_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    replay_summary: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class ClaimFamily(Base, TimestampMixin):
+    __tablename__ = "claim_families"
+    __table_args__ = (UniqueConstraint("workspace_id", "claim_family_key", name="uq_claim_family_workspace_key"),)
+
+    family_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("clf"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    claim_family_key: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    memory_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title_or_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="active", nullable=False, index=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    latest_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    active_occurrence_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class ClaimOccurrence(Base, TimestampMixin):
+    __tablename__ = "claim_occurrences"
+    __table_args__ = (UniqueConstraint("workspace_id", "memory_type", "memory_id", name="uq_claim_occurrence_memory"),)
+
+    occurrence_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("clo"))
+    family_id: Mapped[str] = mapped_column(ForeignKey("claim_families.family_id"), nullable=False, index=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    memory_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    memory_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_artifact_id: Mapped[str] = mapped_column(ForeignKey("artifacts.artifact_id"), nullable=False, index=True)
+    source_chunk_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_chunks.chunk_id"), index=True)
+    title_or_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    valid_from: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="active", nullable=False, index=True)
+    confidence_score: Mapped[float] = mapped_column(Float, default=0.35, nullable=False)
+    evidence_span: Mapped[str | None] = mapped_column(String(255))
+    payload_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+
+
 class Signal(Base, TimestampMixin):
     __tablename__ = "signals"
 

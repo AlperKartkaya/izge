@@ -30,6 +30,37 @@ REQUIRED_SCHEMA_COLUMNS: dict[str, set[str]] = {
         "output_summary",
         "created_at",
     },
+    "scenario_runs": {
+        "scenario_run_id",
+        "workspace_id",
+        "created_by",
+        "scenario_text_hash",
+        "packet_id",
+        "input_snapshot_hash",
+        "candidate_snapshot_hash",
+        "scenario_packet",
+        "result_payload",
+    },
+    "claim_families": {
+        "family_id",
+        "workspace_id",
+        "claim_family_key",
+        "status",
+        "first_seen_at",
+        "latest_seen_at",
+        "occurrence_count",
+    },
+    "claim_occurrences": {
+        "occurrence_id",
+        "family_id",
+        "workspace_id",
+        "memory_type",
+        "memory_id",
+        "source_artifact_id",
+        "observed_at",
+        "valid_from",
+        "status",
+    },
 }
 
 
