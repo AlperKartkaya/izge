@@ -37,15 +37,15 @@ export function QueryPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Interrogate institutional history"
-        title="Ask for lineage, conflict, drift, or the next justified move"
-        description="Write the question in plain language. Izge routes it into a fixed memory-analysis mode so the response stays evidence-backed instead of collapsing into a generic assistant reply."
+        eyebrow="Company questions"
+        title="Ask for evidence-backed answers"
+        description="Write the question in plain language. Izge routes it into a fixed memory-analysis mode so the response stays grounded in permitted artifacts and memory records."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <div className="two-column-layout">
-        <Panel title="Historical question" description="The system compares remembered decisions against later evidence and returns an inspectable reasoning path.">
+        <Panel title="Question" description="The system compares stored decisions, assumptions, constraints, outcomes, and commitments against later evidence and returns an inspectable reasoning path.">
           <form className="form-grid" onSubmit={handleSubmit}>
             <label className="field field-block">
               <span className="field-label">Question</span>
@@ -58,12 +58,12 @@ export function QueryPage() {
               />
             </label>
             <button type="submit" className="primary-button" disabled={isSubmitting}>
-              {isSubmitting ? 'Submitting…' : 'Reconstruct answer'}
+              {isSubmitting ? 'Submitting…' : 'Generate answer'}
             </button>
           </form>
         </Panel>
 
-        <Panel title="Memory-analysis modes" description="Starter questions stay anchored to the locked MVP modes: canonical demo, lineage, contradiction, drift, and next action.">
+        <Panel title="Starter questions" description="Use these to exercise lineage, contradiction, assumption drift, and next-action retrieval against the current workspace.">
           <div className="signal-grid">
             {starterPrompts.map((prompt) => (
               <button key={prompt} type="button" className="prompt-card" onClick={() => setQueryDraft({ sourcePrompt: promptFromUrl, text: prompt })}>

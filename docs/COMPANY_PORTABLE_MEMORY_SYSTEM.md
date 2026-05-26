@@ -75,7 +75,7 @@ Rules:
 - Signals are durable proactive findings from evidence-backed memory, not generic alerts.
 - Query traces must show route decision, bounded orchestration, typed context assembly, provenance verification, evidence selection, answer composition, and uncertainty.
 - Orchestration stage runs persist the replayable stage ledger for each bounded query execution without exposing raw source paths or hidden artifact content.
-- Orchestration jobs provide a portable DB-backed worker queue foundation: create a bounded payload, claim it with a lease, complete/fail/cancel it with structured result metadata, and expose safe job state through `/api/evidence-substrate/orchestration/jobs`.
+- Orchestration jobs provide a portable DB-backed worker queue: create a bounded payload, let the worker daemon claim it with a lease, complete/fail/cancel it with structured result metadata, and expose safe job state through `/api/evidence-substrate/orchestration/jobs`.
 - Scenario runs persist bounded impact packets for deterministic replay.
 - Audit events prove who uploaded, reviewed, queried, and changed governance state.
 
@@ -92,7 +92,7 @@ Recommended stage sequence:
 5. **Contradiction interrogator** — compare explicit conflicting memory pairs.
 6. **Assumption drift interrogator** — compare assumptions against later evidence and signals.
 7. **Guidance planner** — compose next actions from contradictions, stale assumptions, and commitments.
-8. **Worker queue dispatcher** — persist bounded asynchronous stage tasks in `orchestration_jobs` so a local or future external worker can claim, lease, complete, fail, and replay work without bypassing the typed context packet boundary.
+8. **Worker queue dispatcher** — persist bounded asynchronous stage tasks in `orchestration_jobs` so the local/deployed worker daemon can claim, lease, complete, fail, and replay work without bypassing the typed context packet boundary.
 9. **Provenance verifier** — reject unsupported stage output before it reaches the user.
 
 Every sub-agent/stage packet should include:
@@ -114,7 +114,7 @@ The current query runtime now persists this as a `context_packet.v1` trace paylo
 
 Each query also writes `orchestration_stage_runs` rows for the bounded stages. Those rows hold packet IDs, stage status, authority level, verifier status, and safe output summaries so the Orchestrate page can replay what happened without granting direct source-file access.
 
-Asynchronous or future external-agent work starts in `orchestration_jobs`: `/api/evidence-substrate/orchestration/jobs` enqueues bounded payloads, `/claim` assigns a lease to a worker, and `/{job_id}/complete` records terminal output. The queue is intentionally DB-backed first so it works on the same customer-controlled SQLite volume as the rest of the demo; distributed workers can be attached later without changing the evidence/provenance contract.
+Asynchronous worker-backed work starts in `orchestration_jobs`: `/api/evidence-substrate/orchestration/jobs` enqueues bounded payloads, `python -m app.worker` or the Docker `worker` service claims a lease, validates the payload, and records terminal output. The queue is intentionally DB-backed first so it works on the same customer-controlled SQLite volume as the rest of the app; more distributed worker topologies can be attached later without changing the evidence/provenance contract.
 
 Startup now runs Alembic-backed migration/version tooling. Fresh databases run the baseline revision; verified pre-Alembic SQLite databases are non-destructively repaired for legacy additive columns, stamped at head, and then checked by the portable-memory schema guard. Future schema changes should add explicit revisions under `backend/migrations/versions/` and be verified with `scripts/db-migrate.sh` plus `scripts/db-check.sh`.
 
@@ -278,7 +278,7 @@ The response includes:
 - `current_workspace_snapshot` — safe counts for artifacts, chunks, memory objects, graph edges, claim families, claim occurrences, signals, query traces, stage packet traces, stage runs, scenario runs, scenario templates, and local/private AI feature flags/status;
 - `next_best_passes` — the implementation order that keeps evidence substrate and provenance gates ahead of multi-agent runtime expansion.
 
-This endpoint now treats the local bounded parallel stage-packet runtime, DB-backed orchestration job foundation, temporal claim projection, migration-version tooling, and scenario replay history as implemented demo capabilities. It still ranks CI automation, more customer-corpus answer-quality evaluators beyond Northstar Payroll, external worker-process attachment, and production deployment hardening as remaining work.
+This endpoint now treats the local bounded parallel stage-packet runtime, DB-backed worker daemon, temporal claim projection, migration-version tooling, and scenario replay history as implemented capabilities. It still ranks CI automation, more customer-corpus answer-quality evaluators beyond Northstar Payroll, worker observability/retry/dead-letter hardening, and production deployment hardening as remaining work.
 
 ## Future implementation plan
 
@@ -303,7 +303,7 @@ This endpoint now treats the local bounded parallel stage-packet runtime, DB-bac
 ### Phase 4 — bounded sub-agent runtime
 
 - Continue executing independent read-only stages through the bounded local parallel stage-packet pool.
-- Attach optional external worker processes to `orchestration_jobs` only after preserving typed context packets and deterministic verifier behavior.
+- Extend the DB-backed worker daemon with metrics, bounded retry/backoff, dead-letter handling, and safe multi-worker deployment only after preserving typed context packets and deterministic verifier behavior.
 - Let the orchestrator compare stage outputs, but keep provenance verifier deterministic.
 - Add replay mode for demos and audits.
 

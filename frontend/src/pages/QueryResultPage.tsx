@@ -209,7 +209,7 @@ export function QueryResultPage() {
 
           <Panel
             title="Local LLM output"
-            description="A compact proof surface for the jury: what the private model helped with, and the exact answer wording it produced."
+            description="Shows what the private model helped with and the exact answer wording it produced, while deterministic evidence selection remains inspectable."
             aside={<StatusBadge value={llmApplied ? 'LLM applied' : 'Deterministic'} />}
           >
             <article className={synthesisStatus === 'applied' ? 'panel-subtle llm-output-card action-card' : 'panel-subtle llm-output-card'}>
@@ -486,7 +486,7 @@ export function QueryResultPage() {
 
             <details className="reasoning-disclosure panel section-panel">
               <summary>Inspectable reasoning path</summary>
-              <p className="section-description">Trace details remain available for trust and audit, but stay collapsed so the main answer is easy to read during a demo.</p>
+              <p className="section-description">Trace details remain available for trust and audit, but stay collapsed so the main answer stays readable during normal use.</p>
               {!trace ? (
                 <EmptyState title="Trace not loaded" description="The query result is visible, but the inspectable reasoning path could not be loaded." />
               ) : (

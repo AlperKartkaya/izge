@@ -17,6 +17,15 @@ def _utcnow() -> datetime:
     return datetime.utcnow()
 
 
+def _claimable_status_predicate(now: datetime):
+    return or_(
+        OrchestrationJob.status.in_(CLAIMABLE_JOB_STATUSES),
+        (OrchestrationJob.status == "claimed")
+        & (OrchestrationJob.lease_expires_at.is_not(None))
+        & (OrchestrationJob.lease_expires_at <= now),
+    )
+
+
 def enqueue_orchestration_job(
     db: Session,
     user: User,
@@ -63,17 +72,30 @@ def claim_next_orchestration_job(
     worker_id: str,
     lease_seconds: int = 90,
 ) -> OrchestrationJob | None:
+    return claim_next_orchestration_job_for_worker(
+        db,
+        worker_id=worker_id,
+        lease_seconds=lease_seconds,
+        workspace_id=user.workspace_id,
+    )
+
+
+def claim_next_orchestration_job_for_worker(
+    db: Session,
+    *,
+    worker_id: str,
+    lease_seconds: int = 90,
+    workspace_id: str | None = None,
+) -> OrchestrationJob | None:
     now = _utcnow()
+    query = select(OrchestrationJob).where(
+        _claimable_status_predicate(now),
+        OrchestrationJob.available_at <= now,
+    )
+    if workspace_id is not None:
+        query = query.where(OrchestrationJob.workspace_id == workspace_id)
     job = db.scalar(
-        select(OrchestrationJob)
-        .where(
-            OrchestrationJob.workspace_id == user.workspace_id,
-            or_(
-                OrchestrationJob.status.in_(CLAIMABLE_JOB_STATUSES),
-                (OrchestrationJob.status == "claimed") & (OrchestrationJob.lease_expires_at <= now),
-            ),
-            OrchestrationJob.available_at <= now,
-        )
+        query
         .order_by(OrchestrationJob.priority.asc(), OrchestrationJob.available_at.asc(), OrchestrationJob.created_at.asc())
         .limit(1)
     )
@@ -83,6 +105,25 @@ def claim_next_orchestration_job(
     job.lease_owner = worker_id
     job.claimed_at = now
     job.lease_expires_at = now + timedelta(seconds=lease_seconds)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def complete_orchestration_job_for_worker(
+    db: Session,
+    job: OrchestrationJob,
+    *,
+    result_json: dict[str, Any] | None = None,
+    status_value: str = "completed",
+    error_message: str | None = None,
+) -> OrchestrationJob:
+    if status_value not in TERMINAL_JOB_STATUSES:
+        raise ValueError("Job status must be terminal")
+    job.status = status_value
+    job.result_json = result_json or {}
+    job.error_message = error_message
+    job.completed_at = _utcnow()
     db.commit()
     db.refresh(job)
     return job
@@ -102,10 +143,10 @@ def complete_orchestration_job(
     job = db.scalar(select(OrchestrationJob).where(OrchestrationJob.job_id == job_id, OrchestrationJob.workspace_id == user.workspace_id))
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orchestration job not found")
-    job.status = status_value
-    job.result_json = result_json or {}
-    job.error_message = error_message
-    job.completed_at = _utcnow()
-    db.commit()
-    db.refresh(job)
-    return job
+    return complete_orchestration_job_for_worker(
+        db,
+        job,
+        result_json=result_json,
+        status_value=status_value,
+        error_message=error_message,
+    )

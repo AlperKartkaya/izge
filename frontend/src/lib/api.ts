@@ -5,6 +5,7 @@ import type {
   AssumptionDriftItem,
   AuditEventRead,
   ContradictionItem,
+  DatabaseOverviewRead,
   GraphNeighborhood,
   GraphSummary,
   GraphTimeline,
@@ -192,6 +193,14 @@ export const api = {
     })
   },
 
+  updateArtifactMetadata(token: string, artifactId: string, payload: { title: string }) {
+    return request<ArtifactDetail>(`/artifacts/${artifactId}/metadata`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify(payload),
+    })
+  },
+
   runIngestion(token: string, artifactId: string) {
     return request<IngestionJobRead>('/ingestion/run', {
       method: 'POST',
@@ -321,5 +330,9 @@ export const api = {
       method: 'POST',
       token,
     })
+  },
+
+  getDatabaseOverview(token: string) {
+    return request<DatabaseOverviewRead>('/admin/database', { token })
   },
 }

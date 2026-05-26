@@ -73,12 +73,23 @@ Deployment stance:
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -e .
+.venv/bin/python -m app.migration_tools upgrade
 .venv/bin/uvicorn app.main:app --reload
 ```
 
 The backend starts at `http://127.0.0.1:8000`. A default admin account is bootstrapped on first run — credentials are written to `backend/data/bootstrap_admin_credentials.json`.
 
 Override defaults with `IZGE_DEFAULT_ADMIN_EMAIL` and `IZGE_DEFAULT_ADMIN_PASSWORD`.
+
+### Worker daemon
+
+Run this in a second terminal when you want queued orchestration jobs to progress continuously:
+
+```bash
+scripts/orchestration-worker.sh --worker-id local-worker --poll-interval-seconds 2 --lease-seconds 120
+```
+
+The worker consumes `orchestration_jobs` from the same SQLite database, validates bounded payloads, records structured results, and rejects any job that asks for trusted writes outside the job result.
 
 ### Frontend
 
@@ -99,7 +110,14 @@ For a portable, company-controlled runtime with persisted SQLite and artifact st
 docker compose up --build
 ```
 
-Then open `http://localhost:8080`. The backend remains available at `http://localhost:8000`; credentials are generated into the persisted Docker volume at `/data/bootstrap_admin_credentials.json` when `IZGE_DEFAULT_ADMIN_PASSWORD` is empty.
+Then open `http://localhost:8080`. The backend remains available at `http://localhost:8000`. The local Compose profile starts three services: `backend`, `worker`, and `frontend`.
+
+Default local credentials:
+
+- email: `admin@example.com`
+- password: `change-me-admin`
+
+Change `IZGE_DEFAULT_ADMIN_PASSWORD` before any shared or production deployment.
 
 Run the migration/version checks and smoke evaluations before handing the system to a new company:
 
@@ -114,6 +132,9 @@ scripts/docker-smoke-eval.sh
 # One-company synthetic workflow evaluation with realistic artifacts, permissions,
 # scenario replay, rejection, and DB-backed orchestration job checks.
 scripts/synthetic-company-smoke-eval.sh
+
+# DB-backed worker daemon smoke evaluation.
+scripts/worker-smoke-eval.sh
 ```
 
 Back up and restore the persisted company memory volume with:
@@ -125,6 +146,19 @@ scripts/docker-restore.sh backups/<backup-file>.tar.gz --force
 ```
 
 The backup contains SQLite, uploaded artifact storage, pasted-text storage, and bootstrap credentials. Restore is intentionally explicit and refuses to run while Compose services are active unless `IZGE_RESTORE_ALLOW_RUNNING=1` is set.
+
+### Database and artifact storage management
+
+The application database is SQLite:
+
+- Local dev default: `backend/data/izge.db`
+- Docker Compose volume path: `/data/izge.db` inside the `izge_data` volume
+
+Uploaded files are stored under `IZGE_STORAGE_ROOT/<artifact_id>/source.<ext>`; pasted text is stored under `IZGE_PASTED_TEXT_ROOT/<artifact_id>/pasted.txt`. In local dev those roots default to `backend/data/storage` and `backend/data/pasted`; in Docker they map to `/data/storage` and `/data/pasted` inside the persisted volume.
+
+Admins can inspect this through the product UI at `/admin/data` (`Data` in the nav). That page shows table row counts, Alembic revision, artifact logical locators, physical storage paths, storage existence/size, checksums, ingestion/review state, and supported metadata edits.
+
+Supported edits should go through UI/API: artifact title, review status/notes, visibility scope, and permitted users. Raw source content is intentionally immutable for auditability; upload/paste a replacement artifact and reject or restrict the old one if document contents change. For local diagnostics only, you can inspect `backend/data/izge.db` with `sqlite3` or DB Browser for SQLite; production/shared deployments should use authenticated UI/API surfaces rather than raw SQL edits.
 
 ### Marketing website
 
@@ -193,6 +227,13 @@ cd backend
 ```
 
 These launch temporary backends, ingest controlled corpora, run locked query classes, check contradiction/drift provenance, verify permission-limited evidence redaction, exercise bounded scenario replay, and shut down. Nonzero exit means the demo confidence lane failed.
+
+Run the worker queue smoke when validating asynchronous orchestration:
+
+```bash
+cd backend
+.venv/bin/python -m manual_eval.run_worker_queue_smoke
+```
 
 ---
 

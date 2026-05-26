@@ -46,6 +46,10 @@ def _current_revision() -> str | None:
         return connection.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar_one_or_none()
 
 
+def current_revision() -> str | None:
+    return _current_revision()
+
+
 def upgrade_database() -> dict[str, str | None]:
     """Bring the configured company database to the Alembic head.
 

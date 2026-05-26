@@ -78,9 +78,9 @@ export function TargetReadinessPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Target readiness / promise coverage"
-        title="See how close Izge is to the company-portable memory-system target"
-        description="This page maps the public website and PRD promises to what the demo can prove right now: evidence substrate, temporal graph, typed context packets, bounded orchestration, private AI discipline, scenario support, and Docker portability."
+        eyebrow="Operational readiness"
+        title="Check company-portable memory-system coverage"
+        description="This page maps product and PRD requirements to current workspace proof: evidence substrate, temporal graph, typed context packets, bounded orchestration, private AI discipline, scenario support, and Docker portability."
         actions={
           <div className="inline-actions">
             <Link className="secondary-button" to="/memory-filesystem">
@@ -97,13 +97,13 @@ export function TargetReadinessPage() {
 
       <section className="metric-grid">
         <MetricCard label="Target score" value={readiness ? formatPercent(readiness.target_score) : '—'} detail="Average of implemented, partial, and planned target areas." />
-        <MetricCard label="Implemented" value={readiness ? statusCount(readiness, 'implemented') : '—'} detail="Promises reflected in the current demo with proof routes." />
+        <MetricCard label="Implemented" value={readiness ? statusCount(readiness, 'implemented') : '—'} detail="Requirements reflected in the current product surface with proof routes." />
         <MetricCard label="Partial" value={readiness ? statusCount(readiness, 'partial') : '—'} detail="Visible foundations exist, but stronger persistence/runtime/eval remains." />
         <MetricCard label="Planned" value={readiness ? statusCount(readiness, 'planned') : '—'} detail="Known target work not yet ready to claim." />
         <MetricCard label="Workspace proof" value={snapshotValue(snapshot, 'memory_object_count')} detail="Typed memory objects currently visible in this workspace." />
       </section>
 
-      <Panel title="Current workspace evidence snapshot" description="Fast proof that the readiness score is grounded in real workspace state, not static marketing copy.">
+      <Panel title="Current workspace evidence snapshot" description="Fast proof that the readiness score is grounded in real workspace state, not static copy.">
         {readiness ? (
           <div className="detail-grid">
             <article className="panel-subtle detail-card">
@@ -152,7 +152,7 @@ export function TargetReadinessPage() {
         )}
       </Panel>
 
-      <Panel title="Promise-to-demo coverage" description="Each area states the promise, the current demo reflection, proof routes, and the remaining work before we should call the target fully done.">
+      <Panel title="Requirement coverage" description="Each area states the requirement, current product reflection, proof routes, and remaining work before we should call the target fully done.">
         {readiness ? (
           <div className="stack-sm">
             {readiness.areas.map((area) => (
@@ -165,7 +165,7 @@ export function TargetReadinessPage() {
                   <StatusBadge value={formatLabel(area.status)} />
                 </div>
                 <p className="muted-copy">{area.promise}</p>
-                <p className="evidence-block">Demo reflection: {area.demo_reflection}</p>
+                <p className="evidence-block">Current reflection: {area.demo_reflection}</p>
 
                 <div className="two-column-layout">
                   <div className="panel-subtle stack-sm">
@@ -177,7 +177,7 @@ export function TargetReadinessPage() {
                     ))}
                   </div>
                   <div className="panel-subtle stack-sm">
-                    <p className="section-label">Demo surfaces</p>
+                    <p className="section-label">Product surfaces</p>
                     {area.demo_surfaces.map((surface) => (
                       <p key={`${area.area_key}-${surface}`} className="table-secondary">{surface}</p>
                     ))}

@@ -70,7 +70,7 @@ export function SignInPage() {
 
         <div className="panel-subtle auth-footnote">
           <p className="section-label">Seeded local admin</p>
-          <p className="muted-copy">Demo credentials are pre-filled so a jury reviewer can enter the workspace with one Sign in click when the backend demo env matches these values.</p>
+          <p className="muted-copy">Local credentials are pre-filled for development and Docker runs. Change them before any shared or production deployment.</p>
         </div>
       </section>
     </main>

@@ -22,7 +22,6 @@ export interface ArtifactRead {
   workspace_id: string
   title: string
   source_type: string
-  source_path: string
   mime_type: string
   uploaded_by: string
   visibility_scope: 'workspace' | 'restricted'
@@ -518,6 +517,43 @@ export interface OrchestrationJobListRead {
   workspace_id: string
   generated_at: string
   jobs: OrchestrationJobRead[]
+}
+
+export interface DatabaseTableRead {
+  table_name: string
+  row_count: number
+  write_surface: string
+  read_surface: string
+}
+
+export interface ArtifactStorageAdminRead {
+  artifact_id: string
+  title: string
+  source_type: string
+  logical_locator: string
+  source_path: string
+  storage_exists: boolean
+  byte_size: number | null
+  checksum_sha256: string | null
+  mime_type: string
+  ingestion_status: string
+  review_status: string
+  visibility_scope: string
+  chunk_count: number
+  memory_object_count: number
+  updated_at: string
+}
+
+export interface DatabaseOverviewRead {
+  workspace_id: string
+  generated_at: string
+  sqlite_path: string
+  storage_root: string
+  pasted_text_root: string
+  alembic_revision: string | null
+  tables: DatabaseTableRead[]
+  artifacts: ArtifactStorageAdminRead[]
+  management_notes: string[]
 }
 
 export type ReadinessAreaStatus = 'implemented' | 'partial' | 'planned'

@@ -75,6 +75,10 @@ class ArtifactReviewUpdate(BaseModel):
     review_notes: str | None = Field(default=None, max_length=1200)
 
 
+class ArtifactMetadataUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+
+
 class PastedTextCreate(BaseModel):
     title: str
     text: str = Field(min_length=1)
@@ -842,6 +846,43 @@ class OrchestrationJobListRead(BaseModel):
     workspace_id: str
     generated_at: datetime
     jobs: list[OrchestrationJobRead]
+
+
+class DatabaseTableRead(BaseModel):
+    table_name: str
+    row_count: int
+    write_surface: str
+    read_surface: str
+
+
+class ArtifactStorageAdminRead(BaseModel):
+    artifact_id: str
+    title: str
+    source_type: str
+    logical_locator: str
+    source_path: str
+    storage_exists: bool
+    byte_size: int | None
+    checksum_sha256: str | None
+    mime_type: str
+    ingestion_status: str
+    review_status: str
+    visibility_scope: str
+    chunk_count: int
+    memory_object_count: int
+    updated_at: datetime
+
+
+class DatabaseOverviewRead(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    sqlite_path: str
+    storage_root: str
+    pasted_text_root: str
+    alembic_revision: str | None
+    tables: list[DatabaseTableRead]
+    artifacts: list[ArtifactStorageAdminRead]
+    management_notes: list[str]
 
 
 ReadinessAreaStatus = Literal["implemented", "partial", "planned"]

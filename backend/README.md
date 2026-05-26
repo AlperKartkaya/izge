@@ -7,13 +7,20 @@ Minimal FastAPI + SQLite backend foundation for the locked Izge MVP.
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e .
+.venv/bin/python -m app.migration_tools upgrade
 .venv/bin/uvicorn app.main:app --reload
+```
+
+Run the DB-backed orchestration worker in another terminal when queued stage jobs should progress without manual claim/complete API calls:
+
+```bash
+../scripts/orchestration-worker.sh --worker-id local-worker --poll-interval-seconds 2 --lease-seconds 120
 ```
 
 ## Default seeded admin
 
 - email: `admin@example.com`
-- password: generated on first run and written to `data/bootstrap_admin_credentials.json`
+- password: `change-me-admin` by default, or generated on first run and written to `data/bootstrap_admin_credentials.json` when `IZGE_DEFAULT_ADMIN_PASSWORD` is empty
 
 Override these with `IZGE_DEFAULT_ADMIN_EMAIL` and `IZGE_DEFAULT_ADMIN_PASSWORD` if needed.
 
@@ -48,6 +55,12 @@ Run the one-company synthetic workflow evaluation for full end-to-end readiness 
 
 ```bash
 .venv/bin/python -m manual_eval.run_isolated_synthetic_company_workflow
+```
+
+Run the worker daemon smoke evaluation to prove a separate process consumes DB jobs:
+
+```bash
+.venv/bin/python -m manual_eval.run_worker_queue_smoke
 ```
 
 If you already have a backend running and want to evaluate that instance directly:

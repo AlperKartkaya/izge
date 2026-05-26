@@ -24,7 +24,7 @@ function signalCardClass(signalType: string): string {
 }
 
 export function DashboardPage() {
-  const { session, refreshUser } = useAuth()
+  const { session } = useAuth()
   const [summary, setSummary] = useState<GraphSummary | null>(null)
   const [artifacts, setArtifacts] = useState<ArtifactRead[]>([])
   const [contradictions, setContradictions] = useState<ContradictionItem[]>([])
@@ -53,7 +53,6 @@ export function DashboardPage() {
           api.listAssumptionDrift(session.token),
           api.listNextActions(session.token),
           api.listSignals(session.token),
-          refreshUser(),
         ])
 
         if (!cancelled) {
@@ -80,7 +79,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [refreshUser, session?.token])
+  }, [session?.token])
 
   const totalMemoryObjects = useMemo(
     () => Object.values(summary?.memory_counts ?? {}).reduce((total, count) => total + count, 0),
@@ -108,7 +107,7 @@ export function DashboardPage() {
       return {
         status: 'Needs source',
         title: 'Load evidence first',
-        detail: 'The demo path starts only after real artifacts exist in the workspace.',
+        detail: 'Operational use starts only after real artifacts exist in the workspace.',
         actionLabel: 'Load evidence',
         actionTo: '/artifacts',
       }
@@ -125,7 +124,7 @@ export function DashboardPage() {
     if (isAdmin && reviewQueue.length > 0) {
       return {
         status: 'Needs review',
-        title: 'Govern evidence before the demo',
+        title: 'Govern evidence before relying on answers',
         detail: `${reviewQueue.length} artifact(s) are waiting for admin review. Mark trusted evidence reviewed or reject it before presenting the reasoning path.`,
         actionLabel: 'Open review queue',
         actionTo: '/admin',
@@ -135,7 +134,7 @@ export function DashboardPage() {
       return {
         status: 'Needs signal',
         title: 'Generate a durable signal',
-        detail: 'Memory exists, but the strongest demo needs a persisted contradiction, drift, supersession, or next-action signal.',
+        detail: 'Memory exists, but the workspace is more useful after it has a persisted contradiction, drift, supersession, or next-action signal.',
         actionLabel: 'Inspect graph',
         actionTo: '/graph',
       }
@@ -144,7 +143,7 @@ export function DashboardPage() {
       status: 'Ready',
       title: 'Ready for the canonical question',
       detail: 'Source, reconstructed memory, and persisted signals are all present. Ask the question and drill into the linked evidence.',
-      actionLabel: 'Ask demo question',
+      actionLabel: 'Ask workspace question',
       actionTo: `/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`,
     }
   }, [isAdmin, latestCompletedArtifact, reviewQueue.length, topPersistedSignal, totalMemoryObjects])
@@ -152,16 +151,16 @@ export function DashboardPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Decision intelligence command board"
-        title="See what changed before the team moves again"
-        description="Izge turns artifacts into a hard-edged institutional record: decisions, later conflicts, drifting assumptions, evidence spans, and grounded next actions."
+        eyebrow="Workspace dashboard"
+        title="Review company memory before making decisions"
+        description="Track source artifacts, reconstructed memory, evidence review, contradictions, assumption drift, and recommended next actions in the current company workspace."
         actions={
           <div className="inline-actions">
             <Link className="secondary-button" to="/artifacts">
               Load evidence
             </Link>
             <Link className="primary-button" to="/query">
-              Interrogate history
+              Ask a question
             </Link>
           </div>
         }
@@ -170,7 +169,7 @@ export function DashboardPage() {
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <section className="metric-grid">
-        <MetricCard label="Trusted sources" value={summary?.artifact_count ?? '—'} detail="Visible artifacts accepted for trusted reasoning; rejected sources are excluded." />
+        <MetricCard label="Visible artifacts" value={summary?.artifact_count ?? '—'} detail="Documents and pasted records available in your permitted scope." />
         <MetricCard label="Memory objects" value={totalMemoryObjects || '—'} detail="Structured decisions, assumptions, constraints, outcomes, and commitments." />
         <MetricCard label="Active tensions" value={contradictions.length + assumptionDrift.length} detail="Contradictions and assumption drift visible in your permitted scope." />
         <MetricCard label="Persisted signals" value={persistedSignalCount || nextActions.length} detail="Durable proactive signals generated from ingested artifact impact." />
@@ -178,8 +177,8 @@ export function DashboardPage() {
       </section>
 
       <Panel
-        title="Canonical demo path"
-        description="One clean path for jury review: show source material, show memory construction, inspect a durable signal, ask the question, then drill into evidence."
+        title="Operational workflow"
+        description="Use this path during company onboarding: load source material, build memory, review generated signals, ask a grounded question, then inspect evidence."
         aside={
           <Link className="primary-button" to={demoReadiness.actionTo}>
             {demoReadiness.actionLabel}
@@ -189,7 +188,7 @@ export function DashboardPage() {
         <article className="panel-subtle stack-sm">
           <div className="timeline-card-head">
             <div>
-              <p className="section-label">Current proof state</p>
+              <p className="section-label">Current workspace state</p>
               <p className="table-primary">{demoReadiness.title}</p>
             </div>
             <StatusBadge value={demoReadiness.status} />
@@ -198,35 +197,35 @@ export function DashboardPage() {
         </article>
         <div className="signal-grid">
           <Link className="record-link signal-card panel-subtle" to="/artifacts">
-            <p className="section-label">1 / Source state</p>
-            <p className="signal-title">{latestCompletedArtifact?.title ?? 'Load the demo artifacts'}</p>
+            <p className="section-label">1 / Sources</p>
+            <p className="signal-title">{latestCompletedArtifact?.title ?? 'Load company artifacts'}</p>
             <p className="muted-copy">
               {latestCompletedArtifact
                 ? `Visible source ${latestCompletedArtifact.artifact_id} is ${formatLabel(latestCompletedArtifact.review_status)} and ready for evidence inspection.`
-                : 'Add or seed source artifacts before demonstrating institutional memory.'}
+                : 'Add or seed source artifacts before relying on workspace memory.'}
             </p>
           </Link>
           <Link className="record-link signal-card panel-subtle" to="/ingestion">
-            <p className="section-label">2 / Memory build</p>
+            <p className="section-label">2 / Memory construction</p>
             <p className="signal-title">{totalMemoryObjects || 0} reconstructed memory objects</p>
             <p className="muted-copy">Ingestion turns artifacts into decisions, assumptions, constraints, outcomes, commitments, and graph links.</p>
           </Link>
           {topPersistedSignal ? (
             <Link className={signalCardClass(topPersistedSignal.signal_type)} to={`/signals/${topPersistedSignal.signal_id}`}>
-              <p className="section-label">3 / Durable signal</p>
+              <p className="section-label">3 / Signal review</p>
               <p className="signal-title">{topPersistedSignal.title}</p>
               <p className="muted-copy">Open the persisted signal to inspect evidence, memory objects, and the intelligence path.</p>
             </Link>
           ) : (
             <Link className="record-link signal-card panel-subtle" to="/graph">
-              <p className="section-label">3 / Durable signal</p>
+              <p className="section-label">3 / Signal review</p>
               <p className="signal-title">No persisted signal yet</p>
               <p className="muted-copy">Run ingestion on conflicting or drifting evidence to create contradiction, drift, supersession, or next-action signals.</p>
             </Link>
           )}
           <Link className="record-link signal-card panel-subtle action-card" to={`/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`}>
             <p className="section-label">4 / Question</p>
-            <p className="signal-title">Ask what changed and what to do next</p>
+            <p className="signal-title">Ask for evidence-backed guidance</p>
             <p className="muted-copy">{canonicalDemoPrompt}</p>
           </Link>
         </div>
@@ -235,7 +234,7 @@ export function DashboardPage() {
       {isAdmin ? (
         <Panel
           title="Admin evidence review readiness"
-          description="This queue makes the memory boundary operational: review accepts evidence into trusted reasoning, rejection stores it but keeps it out of intelligence outputs."
+          description="Review accepts evidence into trusted reasoning. Rejection keeps the record stored for audit but excludes it from trusted intelligence outputs."
           aside={
             <Link className="secondary-button" to="/admin/users">
               Govern evidence
@@ -251,7 +250,7 @@ export function DashboardPage() {
             <article className="panel-subtle detail-card">
               <p className="section-label">Reviewed</p>
               <p className="table-primary">{reviewedArtifactCount} artifact(s)</p>
-              <p className="muted-copy">Explicitly accepted source material for trusted demo memory.</p>
+              <p className="muted-copy">Explicitly accepted source material for trusted workspace memory.</p>
             </article>
             <article className="panel-subtle detail-card">
               <p className="section-label">Rejected</p>
@@ -329,7 +328,7 @@ export function DashboardPage() {
         }
       >
         {contradictions.length === 0 && assumptionDrift.length === 0 && nextActions.length === 0 && persistedSignals.length === 0 ? (
-          <EmptyState title="No active signals yet" description="Run ingestion on demo artifacts to surface contradictions, drift, and grounded guidance." />
+          <EmptyState title="No active signals yet" description="Run ingestion on company artifacts to surface contradictions, drift, and grounded guidance." />
         ) : (
           <div className="signal-grid">
             {persistedSignals.slice(0, 3).map((signal) => (

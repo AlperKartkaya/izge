@@ -10,6 +10,7 @@ from app.models import Artifact, ArtifactChunk, User
 from app.schemas.api import (
     ArtifactChunkProvenance,
     ArtifactDetail,
+    ArtifactMetadataUpdate,
     ArtifactPermissionUpdate,
     ArtifactProactiveSignals,
     ArtifactRead,
@@ -186,6 +187,32 @@ def update_artifact_permissions(
         target_type="artifact",
         target_id=artifact.artifact_id,
         event_metadata={"visibility_scope": payload.visibility_scope, "permitted_user_ids": payload.permitted_user_ids},
+    )
+    return get_artifact(artifact_id, current_user, db)
+
+
+@router.patch("/{artifact_id}/metadata", response_model=ArtifactDetail)
+def update_artifact_metadata(
+    artifact_id: str,
+    payload: ArtifactMetadataUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ArtifactDetail:
+    require_admin(current_user)
+    artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
+    if artifact is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+    old_title = artifact.title
+    artifact.title = payload.title
+    db.commit()
+    log_event(
+        db,
+        workspace_id=current_user.workspace_id,
+        actor_user_id=current_user.user_id,
+        event_type="ARTIFACT_METADATA_UPDATED",
+        target_type="artifact",
+        target_id=artifact.artifact_id,
+        event_metadata={"old_title": old_title, "new_title": payload.title},
     )
     return get_artifact(artifact_id, current_user, db)
 

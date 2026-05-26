@@ -4,6 +4,7 @@ import { AppShell } from './layout/AppShell'
 import { AdminPage } from './pages/AdminPage'
 import { ArtifactsPage } from './pages/ArtifactsPage'
 import { AuditPage } from './pages/AuditPage'
+import { DataAdminPage } from './pages/DataAdminPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { GraphPage } from './pages/GraphPage'
 import { IngestionPage } from './pages/IngestionPage'
@@ -41,6 +42,7 @@ function App() {
         <Route path="readiness" element={<TargetReadinessPage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users" element={<AdminPage />} />
+        <Route path="admin/data" element={<DataAdminPage />} />
         <Route path="audit" element={<AuditPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

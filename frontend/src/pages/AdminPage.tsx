@@ -299,7 +299,7 @@ export function AdminPage() {
 
       <Panel
         title="Local/private LLM readiness"
-        description="Jury demo proof that app.izge.dev can reach a controlled private model gateway while deterministic memory and evidence logic remain the authority."
+        description="Operational proof that the deployment can reach a controlled private model gateway while deterministic memory and evidence logic remain the authority."
         aside={<StatusBadge value={llmStatusLabel(llmStatus)} />}
       >
         <div className="detail-grid">

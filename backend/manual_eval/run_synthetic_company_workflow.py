@@ -285,6 +285,19 @@ def standalone_checks(admin_token: str, uploaded: dict[str, dict[str, Any]], res
     temporal = expect_object(request("/api/graph/temporal?limit=180", headers={"Authorization": f"Bearer {admin_token}"}), "temporal graph")
     orchestration = expect_object(request("/api/evidence-substrate/orchestration", headers={"Authorization": f"Bearer {admin_token}"}), "orchestration blueprint")
     readiness = expect_object(request("/api/evidence-substrate/readiness", headers={"Authorization": f"Bearer {admin_token}"}), "target readiness")
+    database = expect_object(request("/api/admin/database", headers={"Authorization": f"Bearer {admin_token}"}), "admin database overview")
+    first_artifact = next(iter(uploaded.values()))
+    updated_title = f"{first_artifact['title']} (storage reviewed)"
+    metadata_updated = expect_object(
+        request(
+            f"/api/artifacts/{first_artifact['artifact_id']}/metadata",
+            method="PATCH",
+            data=json.dumps({"title": updated_title}).encode(),
+            headers=auth_headers(admin_token),
+        ),
+        "artifact metadata update",
+    )
+    database_after_metadata = expect_object(request("/api/admin/database", headers={"Authorization": f"Bearer {admin_token}"}), "admin database overview after metadata update")
     scenario = expect_object(
         request(
             "/api/scenario/impact",
@@ -349,6 +362,19 @@ def standalone_checks(admin_token: str, uploaded: dict[str, dict[str, Any]], res
                 "stage_catalog_includes_worker_queue": any(stage.get("stage_key") == "worker_queue_dispatcher" for stage in orchestration.get("stage_catalog", [])),
                 "spawn_policy_mentions_jobs": "orchestration_jobs" in serialize(orchestration),
                 "reflection_counts_jobs": isinstance(orchestration.get("current_reflection", {}).get("orchestration_job_count"), int),
+            }
+        },
+        "database_management": {
+            "checks": {
+                "admin_database_exposes_tables": {"artifacts", "artifact_chunks", "orchestration_jobs", "alembic_version"}.issubset(
+                    {str(table.get("table_name")) for table in database.get("tables", []) if isinstance(table, dict)}
+                ),
+                "admin_database_exposes_artifact_storage_paths": "source_path" in serialize(database)
+                and any(artifact.get("storage_exists") is True for artifact in database.get("artifacts", []) if isinstance(artifact, dict)),
+                "metadata_update_changes_title_without_source_edit": metadata_updated.get("title") == updated_title
+                and updated_title in serialize(database_after_metadata)
+                and first_artifact["artifact_id"] in serialize(database_after_metadata),
+                "database_management_notes_explain_immutability": "Raw source content is immutable" in serialize(database_after_metadata),
             }
         },
         "bounded_scenario_support": {

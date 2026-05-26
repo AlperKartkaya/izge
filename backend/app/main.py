@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import SessionLocal
+from app.routers.admin_data import router as admin_data_router
 from app.routers.analysis import router as analysis_router
 from app.routers.artifacts import router as artifacts_router
 from app.routers.audit import router as audit_router
@@ -54,3 +55,4 @@ app.include_router(analysis_router, prefix=settings.api_prefix)
 app.include_router(audit_router, prefix=settings.api_prefix)
 app.include_router(evidence_router, prefix=settings.api_prefix)
 app.include_router(scenario_router, prefix=settings.api_prefix)
+app.include_router(admin_data_router, prefix=settings.api_prefix)

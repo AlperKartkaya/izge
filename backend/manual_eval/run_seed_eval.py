@@ -836,7 +836,7 @@ def run_eval() -> dict[str, Any]:
                     readiness_text,
                     [
                         "customer-corpus evaluator",
-                        "external worker processes",
+                        "worker observability",
                         "Alembic revisions",
                         "Ollama smoke eval",
                     ],

@@ -3,13 +3,13 @@ import { useAuth } from '../auth/AuthContext'
 import { formatDateTime } from '../lib/format'
 
 const primaryNavigation = [
-  { to: '/', label: 'Command board', end: true },
-  { to: '/artifacts', label: 'Evidence' },
-  { to: '/ingestion', label: 'Build' },
-  { to: '/query', label: 'Interrogate' },
+  { to: '/', label: 'Dashboard', end: true },
+  { to: '/artifacts', label: 'Artifacts' },
+  { to: '/ingestion', label: 'Ingestion' },
+  { to: '/query', label: 'Questions' },
   { to: '/graph', label: 'Graph' },
   { to: '/memory-filesystem', label: 'Memory FS' },
-  { to: '/orchestration', label: 'Orchestrate' },
+  { to: '/orchestration', label: 'Jobs' },
   { to: '/readiness', label: 'Readiness' },
 ]
 
@@ -17,7 +17,7 @@ export function AppShell() {
   const { session, signOut } = useAuth()
   const isAdmin = session?.user.role === 'Admin'
   const navigationItems = isAdmin
-    ? [...primaryNavigation, { to: '/audit', label: 'Audit' }, { to: '/admin/users', label: 'Admin' }]
+    ? [...primaryNavigation, { to: '/admin/data', label: 'Data' }, { to: '/audit', label: 'Audit' }, { to: '/admin/users', label: 'Users' }]
     : [...primaryNavigation, { to: '/audit', label: 'Audit' }]
 
   return (
@@ -31,8 +31,8 @@ export function AppShell() {
       <header className="top-nav">
         <NavLink to="/" end className="brand-mark" aria-label="Izge home">
           <span className="brand-sigil">IZ</span>
-          <span>
-            <span className="brand-kicker">Decision memory</span>
+            <span>
+            <span className="brand-kicker">Company workspace</span>
             <span className="brand-name">Izge</span>
           </span>
         </NavLink>
@@ -59,17 +59,17 @@ export function AppShell() {
       <main className="workspace-column">
         <section className="workspace-header panel">
           <div className="brand-block">
-            <p className="eyebrow">Izge / disputed institutional memory</p>
-            <h1 className="brand-title">Memory that argues back</h1>
+            <p className="eyebrow">Izge workspace</p>
+            <h1 className="brand-title">Company memory operations</h1>
             <p className="page-description">
-              A local-first command surface for reconstructing decisions, finding contradictions, watching assumptions decay, and making the next move feel earned.
+              Upload company records, review trusted evidence, inspect reconstructed memory, ask grounded questions, and monitor bounded orchestration jobs from one operational workspace.
             </p>
           </div>
-          <div className="brand-proof-strip" aria-label="Izge reasoning modes">
-            <span>Lineage</span>
-            <span>Contradiction</span>
-            <span>Drift</span>
-            <span>Evidence</span>
+          <div className="brand-proof-strip" aria-label="Workspace operating areas">
+            <span>Artifacts</span>
+            <span>Review</span>
+            <span>Retrieval</span>
+            <span>Jobs</span>
           </div>
           <div className="hero-session panel-subtle">
             <p className="section-label">Current workspace</p>

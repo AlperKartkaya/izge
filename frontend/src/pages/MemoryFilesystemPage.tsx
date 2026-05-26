@@ -60,9 +60,9 @@ export function MemoryFilesystemPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Evidence substrate / memory file-system"
-        title="See how Izge organizes company memory"
-        description="This is the safe internal file-system view: source artifacts become chunks, chunks become typed memory, memory becomes graph edges, signals, traces, and evidence-backed answers."
+        eyebrow="Memory file-system"
+        title="See how company memory is organized"
+        description="Source artifacts become chunks, chunks become typed memory, and memory becomes graph edges, signals, traces, and evidence-backed answers. Admins can inspect physical storage paths on the Data page."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
@@ -140,7 +140,7 @@ export function MemoryFilesystemPage() {
         </Panel>
       </div>
 
-      <Panel title={selectedArtifact ? 'Selected artifact substrate' : 'Artifact substrate'} description="Safe metadata only: logical locators and checksums, not host filesystem paths.">
+      <Panel title={selectedArtifact ? 'Selected artifact substrate' : 'Artifact substrate'} description="Logical metadata for retrieval and trust; admin storage paths are available under Data.">
         {selectedArtifact ? (
           <div className="stack-md">
             <div className="detail-grid">

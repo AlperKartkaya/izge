@@ -8,7 +8,8 @@ services:
       IZGE_PASTED_TEXT_ROOT: /data/pasted
       IZGE_BOOTSTRAP_ADMIN_CREDENTIALS_PATH: /data/bootstrap_admin_credentials.json
       IZGE_DEFAULT_ADMIN_EMAIL: admin@example.com
-      IZGE_DEFAULT_ADMIN_PASSWORD: ""
+      IZGE_DEFAULT_ADMIN_PASSWORD: change-me-admin
+      IZGE_SYNC_DEFAULT_ADMIN_PASSWORD: "true"
       IZGE_LOCAL_LLM_BASE_URL: http://host.docker.internal:11434
     volumes:
       - izge_data:/data
@@ -22,6 +23,27 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  worker:
+    build:
+      context: ./backend
+    command: ["sh", "-c", "python -m app.migration_tools upgrade && python -m app.worker --worker-id docker-worker --poll-interval-seconds 2 --lease-seconds 120"]
+    environment:
+      IZGE_SQLITE_PATH: /data/izge.db
+      IZGE_STORAGE_ROOT: /data/storage
+      IZGE_PASTED_TEXT_ROOT: /data/pasted
+      IZGE_BOOTSTRAP_ADMIN_CREDENTIALS_PATH: /data/bootstrap_admin_credentials.json
+      IZGE_DEFAULT_ADMIN_EMAIL: admin@example.com
+      IZGE_DEFAULT_ADMIN_PASSWORD: change-me-admin
+      IZGE_SYNC_DEFAULT_ADMIN_PASSWORD: "true"
+      IZGE_LOCAL_LLM_BASE_URL: http://host.docker.internal:11434
+    volumes:
+      - izge_data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      backend:
+        condition: service_healthy
 
   frontend:
     build:

@@ -397,13 +397,13 @@ ORCHESTRATION_STAGE_CATALOG: list[dict[str, Any]] = [
         "stage_key": "worker_queue_dispatcher",
         "title": "DB-backed worker queue dispatcher",
         "agent_role": "orchestration_worker",
-        "purpose": "Persist bounded stage tasks in a portable database queue so a local or future external worker can claim, lease, complete, fail, and replay work without losing the typed context boundary.",
+        "purpose": "Persist bounded stage tasks in a portable database queue so a local or deployed worker daemon can claim, lease, complete, fail, and replay work without losing the typed context boundary.",
         "inputs": ["typed stage payload", "workspace boundary", "lease policy"],
         "outputs": ["queued job", "claim lease", "terminal result"],
         "deterministic_gate": "Workers can only claim queued jobs from the current workspace and must return terminal status plus structured result/error metadata.",
         "authority_level": "bounded_async_execution",
-        "current_reflection": "orchestration_jobs endpoint and migration-backed table",
-        "status": "implemented_as_db_backed_queue_foundation",
+        "current_reflection": "orchestration_jobs endpoint, app.worker daemon, Docker worker service, and migration-backed table",
+        "status": "implemented_as_db_backed_worker_queue",
     },
     {
         "stage_key": "provenance_verifier",
@@ -825,7 +825,7 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
             "status": "implemented",
             "score": 0.89,
             "promise": "An orchestrator may divide work into specialist stages, but every stage must receive a typed context packet and return cited output through deterministic gates.",
-            "demo_reflection": "The Orchestrate page shows a bounded stage catalog, spawn policy, current runtime boundary, persisted stage-run ledger, and stage_packet_execution traces from a bounded parallel local sub-agent pool.",
+            "demo_reflection": "The Orchestrate page shows a bounded stage catalog, spawn policy, current runtime boundary, persisted stage-run ledger, DB-backed job queue, worker lease/results, and stage_packet_execution traces from a bounded parallel local sub-agent pool.",
             "evidence_routes": ["/api/evidence-substrate/orchestration", "/api/evidence-substrate/orchestration/runs"],
             "demo_surfaces": ["/orchestration", "/query/:queryRunId"],
             "proof_signals": [
@@ -837,10 +837,10 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
                 _proof_signal("DB-backed orchestration jobs", snapshot["orchestration_job_count"], "/api/evidence-substrate/orchestration/jobs"),
             ],
             "remaining_work": [
-                "Connect optional external worker processes to the DB-backed job queue after the local bounded-pool contract remains stable.",
+                "Add production worker observability, retry/backoff policy, and dead-letter handling beyond the current bounded daemon.",
                 "Add richer replay comparison for stage packets beyond the current safe output summaries.",
             ],
-            "risks": ["The current queue foundation is database-backed and portable; distributed worker processes remain a later hardening step."],
+            "risks": ["The worker daemon is database-backed and portable; production hardening remains around metrics, autoscaling, and retry/dead-letter operations."],
         },
         {
             "area_key": "contradiction_drift_next_actions",
@@ -885,11 +885,11 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
         },
         {
             "area_key": "demo_ui_storytelling",
-            "title": "Demo UI / storytelling",
+            "title": "Customer operations UI",
             "status": "implemented",
-            "score": 0.88,
-            "promise": "The demo should make memory organization, graph reasoning, orchestration, evidence, and scenario support visible rather than hidden in backend internals.",
-            "demo_reflection": "Primary nav now covers Command Board, Evidence, Build, Interrogate, Graph, Memory FS, Orchestrate, and this Readiness page.",
+            "score": 0.9,
+            "promise": "The product workspace should make artifacts, memory organization, graph reasoning, orchestration jobs, evidence, database/storage inspection, and scenario support visible without marketing copy.",
+            "demo_reflection": "Primary nav now covers Dashboard, Artifacts, Ingestion, Questions, Graph, Memory FS, Jobs, Readiness, Data, Audit, and Users with a quieter operations layout.",
             "evidence_routes": [
                 "/api/evidence-substrate/filesystem",
                 "/api/graph/temporal",
@@ -897,17 +897,17 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
                 "/api/scenario/impact",
                 "/api/evidence-substrate/readiness",
             ],
-            "demo_surfaces": ["/", "/memory-filesystem", "/graph", "/orchestration", "/readiness"],
+            "demo_surfaces": ["/", "/artifacts", "/memory-filesystem", "/graph", "/orchestration", "/admin/data", "/readiness"],
             "proof_signals": [
-                _proof_signal("Visible demo surfaces", 5, "/readiness"),
+                _proof_signal("Visible operations surfaces", 7, "/readiness"),
                 _proof_signal("Scenario templates", snapshot["scenario_template_count"], "/api/scenario/templates"),
                 _proof_signal("Target score route", "available", "/api/evidence-substrate/readiness"),
             ],
             "remaining_work": [
-                "Add a one-click scripted demo runbook that starts from clean seed data and records the path.",
-                "Add per-company onboarding copy that separates operator setup from viewer storytelling.",
+                "Add a one-click scripted customer workspace reset/import runbook that starts from clean seed data and records the path.",
+                "Add per-company onboarding copy that separates operator setup from executive read-only review.",
             ],
-            "risks": ["The UI is now explicit, but browser QA should remain part of every visible demo pass."],
+            "risks": ["The UI is operational, but browser QA should remain part of every visible customer-demo pass."],
         },
         {
             "area_key": "bounded_scenario_support",
@@ -965,8 +965,8 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
         "next_best_passes": [
             "Add CI automation that runs deterministic seed eval, Docker smoke eval, and Ollama smoke eval when a model is available.",
             "Add more customer-corpus evaluator fixtures beyond the first synthetic company workflow, scoring answer usefulness against cited evidence.",
-            "Connect optional external worker processes to the DB-backed stage queue while preserving the bounded local-pool contract.",
-            "Promote the synthetic-company workflow eval into CI next to deterministic seed, Docker, and Ollama gates.",
+            "Add worker observability, retry/dead-letter policy, and CI worker smoke eval coverage around the DB-backed daemon.",
+            "Promote the synthetic-company and worker workflow evals into CI next to deterministic seed, Docker, and Ollama gates.",
         ],
         "evaluator_gate": {
             "name": "company_portable_memory_system_seed_eval",

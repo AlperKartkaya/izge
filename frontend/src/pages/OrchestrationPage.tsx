@@ -14,7 +14,7 @@ import type {
   ScenarioTemplateCatalogItem,
 } from '../lib/types'
 
-const DEFAULT_SCENARIO = 'Which evidence-backed memory should be reviewed if the company accelerates self-serve onboarding for enterprise expansion next quarter?'
+const DEFAULT_SCENARIO = 'Which evidence-backed memory should Northstar Payroll review if enterprise onboarding is accelerated before SOC 2 evidence is ready?'
 
 export function OrchestrationPage() {
   const { session } = useAuth()
@@ -123,9 +123,9 @@ export function OrchestrationPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Bounded internal orchestration"
-        title="See how Izge divides evidence work into gated stages"
-        description="This is the safe orchestration model: an orchestrator can divide work into bounded stages, but every stage returns cited evidence and passes deterministic provenance gates before it affects memory, graph, signals, or answers."
+        eyebrow="Jobs and orchestration"
+        title="Monitor bounded evidence work"
+        description="The orchestrator divides analysis into typed stages and DB-backed jobs. Each stage must use permitted inputs, return cited output, and pass deterministic provenance gates before it affects memory, graph, signals, or answers."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
@@ -139,7 +139,7 @@ export function OrchestrationPage() {
         <MetricCard label="Active signals" value={String(reflection.active_signal_count ?? '—')} />
       </section>
 
-      <Panel title="Current runtime boundary" description="Independent read-only specialist packets execute through a bounded local pool; deterministic gates still decide what can become trusted output.">
+      <Panel title="Runtime boundary" description="Read-only specialist packets run in a bounded local pool. Longer tasks can be queued for the worker daemon; deterministic gates still decide trusted output.">
         {blueprint ? <p className="evidence-block">{blueprint.current_runtime_note}</p> : <EmptyState title="Loading blueprint" description="The backend is preparing orchestration stage metadata." />}
       </Panel>
 
@@ -174,7 +174,7 @@ export function OrchestrationPage() {
         ) : null}
       </Panel>
 
-      <Panel title="Spawn policy" description="How a future orchestrator LLM may divide work without getting unrestricted authority.">
+      <Panel title="Spawn policy" description="How orchestration can divide work without granting unrestricted authority.">
         {blueprint ? (
           <div className="stack-sm">
             {blueprint.spawn_policy.map((rule) => <p key={rule} className="evidence-block">{rule}</p>)}
@@ -182,7 +182,7 @@ export function OrchestrationPage() {
         ) : null}
       </Panel>
 
-      <Panel title="Recent DB-backed job queue" description="Portable async-worker foundation: bounded payloads are queued, claimed with leases, and completed with structured results before future external agents can participate.">
+      <Panel title="Recent DB-backed job queue" description="Bounded payloads are queued in the database, claimed by the worker daemon with a lease, and completed with structured results.">
         {jobQueue && jobQueue.jobs.length > 0 ? (
           <div className="stack-sm">
             {jobQueue.jobs.slice(0, 8).map((job) => (
