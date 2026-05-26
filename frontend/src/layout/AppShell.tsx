@@ -49,8 +49,8 @@ export function AppShell() {
       <header className="top-nav">
         <NavLink to="/" end className="brand-mark" aria-label="Izge home">
           <span className="brand-sigil">IZ</span>
-            <span>
-            <span className="brand-kicker">Company workspace</span>
+          <span>
+            <span className="brand-kicker">Memory operations</span>
             <span className="brand-name">Izge</span>
           </span>
         </NavLink>
@@ -82,35 +82,6 @@ export function AppShell() {
       </header>
 
       <main className="workspace-column">
-        <section className="workspace-header panel">
-          <div className="brand-block">
-            <p className="eyebrow">Izge workspace</p>
-            <h1 className="brand-title">Company memory operations</h1>
-            <p className="page-description">
-              Upload company records, review trusted evidence, inspect reconstructed memory, ask grounded questions, and monitor bounded orchestration jobs from one operational workspace.
-            </p>
-          </div>
-          <div className="brand-proof-strip" aria-label="Workspace operating areas">
-            <span>Artifacts</span>
-            <span>Review</span>
-            <span>Retrieval</span>
-            <span>Jobs</span>
-          </div>
-          <div className="hero-session panel-subtle">
-            <p className="section-label">Current workspace</p>
-            <dl className="meta-list compact-meta-list">
-              <div>
-                <dt>User</dt>
-                <dd>{session?.user.display_name ?? 'Unknown'}</dd>
-              </div>
-              <div>
-                <dt>Workspace</dt>
-                <dd>{session?.user.workspace_id ?? 'Unavailable'}</dd>
-              </div>
-            </dl>
-          </div>
-        </section>
-
         <section className="workspace-content">
           <Outlet />
         </section>

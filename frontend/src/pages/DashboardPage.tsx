@@ -1,26 +1,39 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
+import { Callout, EmptyState, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { canonicalDemoPrompt } from '../lib/demo'
 import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { ArtifactRead, AssumptionDriftItem, ContradictionItem, GraphSummary, NextActionSignalItem, SignalRead } from '../lib/types'
 
-function signalCardClass(signalType: string): string {
+type DashboardSignalTone = 'critical' | 'drift' | 'action' | 'neutral'
+
+interface DashboardSignalRow {
+  id: string
+  type: string
+  title: string
+  summary: string
+  detail: string
+  tone: DashboardSignalTone
+  to?: string
+}
+
+function signalTone(signalType: string): DashboardSignalTone {
   if (signalType === 'contradiction') {
-    return 'record-link signal-card panel-subtle critical-card'
+    return 'critical'
   }
   if (signalType === 'assumption_drift') {
-    return 'record-link signal-card panel-subtle drift-card'
+    return 'drift'
   }
-  if (signalType === 'next_action') {
-    return 'record-link signal-card panel-subtle action-card'
+  if (signalType === 'next_action' || signalType === 'continuity_overlap') {
+    return 'action'
   }
-  if (signalType === 'continuity_overlap') {
-    return 'record-link signal-card panel-subtle action-card'
-  }
-  return 'record-link signal-card panel-subtle'
+  return 'neutral'
+}
+
+function decisionRowClass(tone: DashboardSignalTone): string {
+  return `decision-row decision-row-${tone}`
 }
 
 export function DashboardPage() {
@@ -102,12 +115,15 @@ export function DashboardPage() {
     artifacts.find((artifact) => artifact.review_status !== 'rejected') ??
     artifacts[0] ??
     null
+  const artifactCount = summary?.artifact_count ?? artifacts.length
+  const reviewedRatio = artifactCount > 0 ? reviewedArtifactCount / artifactCount : 0
+
   const demoReadiness = useMemo(() => {
     if (!latestCompletedArtifact) {
       return {
         status: 'Needs source',
         title: 'Load evidence first',
-        detail: 'Operational use starts only after real artifacts exist in the workspace.',
+        detail: 'Operational use starts only after real company artifacts exist in this workspace.',
         actionLabel: 'Load evidence',
         actionTo: '/artifacts',
       }
@@ -116,7 +132,7 @@ export function DashboardPage() {
       return {
         status: 'Needs memory',
         title: 'Run ingestion before reasoning',
-        detail: 'Artifacts exist, but the workspace still needs reconstructed memory objects before the intelligence path is credible.',
+        detail: 'Artifacts exist, but reconstructed memory objects are required before answers are credible.',
         actionLabel: 'Build memory',
         actionTo: '/ingestion',
       }
@@ -125,7 +141,7 @@ export function DashboardPage() {
       return {
         status: 'Needs review',
         title: 'Govern evidence before relying on answers',
-        detail: `${reviewQueue.length} artifact(s) are waiting for admin review. Mark trusted evidence reviewed or reject it before presenting the reasoning path.`,
+        detail: `${reviewQueue.length} artifact(s) are waiting for an admin trust decision.`,
         actionLabel: 'Open review queue',
         actionTo: '/admin',
       }
@@ -134,244 +150,383 @@ export function DashboardPage() {
       return {
         status: 'Needs signal',
         title: 'Generate a durable signal',
-        detail: 'Memory exists, but the workspace is more useful after it has a persisted contradiction, drift, supersession, or next-action signal.',
+        detail: 'Memory exists; persist a contradiction, drift, supersession, or next-action signal to make the workflow actionable.',
         actionLabel: 'Inspect graph',
         actionTo: '/graph',
       }
     }
     return {
       status: 'Ready',
-      title: 'Ready for the canonical question',
-      detail: 'Source, reconstructed memory, and persisted signals are all present. Ask the question and drill into the linked evidence.',
+      title: 'Ready for a grounded question',
+      detail: 'Source, reconstructed memory, review state, and durable signals are present.',
       actionLabel: 'Ask workspace question',
       actionTo: `/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`,
     }
   }, [isAdmin, latestCompletedArtifact, reviewQueue.length, topPersistedSignal, totalMemoryObjects])
 
+  const dashboardStats = useMemo(
+    () => [
+      {
+        label: 'Sources',
+        value: artifactCount,
+        detail: `${reviewQueue.length} awaiting review`,
+      },
+      {
+        label: 'Memory objects',
+        value: totalMemoryObjects,
+        detail: 'Structured decisions, assumptions, constraints, outcomes, and commitments',
+      },
+      {
+        label: 'Signals',
+        value: persistedSignalCount || nextActions.length,
+        detail: `${contradictions.length + assumptionDrift.length} active tensions`,
+      },
+      {
+        label: 'Review coverage',
+        value: artifactCount > 0 ? formatPercent(reviewedRatio) : '0%',
+        detail: `${reviewedArtifactCount} reviewed / ${rejectedArtifactCount} rejected`,
+      },
+    ],
+    [artifactCount, assumptionDrift.length, contradictions.length, nextActions.length, persistedSignalCount, rejectedArtifactCount, reviewQueue.length, reviewedArtifactCount, reviewedRatio, totalMemoryObjects],
+  )
+
+  const workflowSteps = useMemo(
+    () => [
+      {
+        step: '01',
+        label: 'Capture',
+        title: latestCompletedArtifact?.title ?? 'Load company evidence',
+        detail: latestCompletedArtifact
+          ? `${latestCompletedArtifact.artifact_id} is ${formatLabel(latestCompletedArtifact.ingestion_status)} and ${formatLabel(latestCompletedArtifact.review_status)}.`
+          : 'Upload files or paste source text before relying on company memory.',
+        status: latestCompletedArtifact ? formatLabel(latestCompletedArtifact.review_status) : 'Start here',
+        to: '/artifacts',
+      },
+      {
+        step: '02',
+        label: 'Build',
+        title: `${totalMemoryObjects} reconstructed memory objects`,
+        detail: 'Ingestion extracts decisions, assumptions, constraints, outcomes, commitments, provenance, and graph links.',
+        status: totalMemoryObjects > 0 ? 'Built' : 'Pending',
+        to: '/ingestion',
+      },
+      {
+        step: '03',
+        label: 'Govern',
+        title: isAdmin ? `${reviewQueue.length} evidence item(s) need review` : 'Evidence trust state is visible',
+        detail: 'Review status is part of the reasoning record so unsupported or rejected material stays traceable.',
+        status: reviewQueue.length > 0 ? 'Needs review' : 'Clear',
+        to: isAdmin ? '/admin' : '/audit',
+      },
+      {
+        step: '04',
+        label: 'Use',
+        title: topPersistedSignal?.title ?? 'Ask an evidence-backed question',
+        detail: topPersistedSignal ? 'Open the newest persisted signal or ask the canonical workspace question.' : canonicalDemoPrompt,
+        status: topPersistedSignal ? formatLabel(topPersistedSignal.signal_type) : 'Question',
+        to: topPersistedSignal ? `/signals/${topPersistedSignal.signal_id}` : `/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`,
+      },
+    ],
+    [isAdmin, latestCompletedArtifact, reviewQueue.length, topPersistedSignal, totalMemoryObjects],
+  )
+
+  const signalRows = useMemo<DashboardSignalRow[]>(() => {
+    const rows: DashboardSignalRow[] = [
+      ...persistedSignals.slice(0, 4).map((signal) => ({
+        id: signal.signal_id,
+        type: `Persisted ${formatLabel(signal.signal_type)}`,
+        title: signal.title,
+        summary: signal.summary,
+        detail: `${signal.source_artifact_title ?? signal.source_artifact_id ?? 'Unknown source'} · urgency ${formatPercent(signal.urgency_score)} · ${formatDateTime(signal.created_at)}`,
+        tone: signalTone(signal.signal_type),
+        to: `/signals/${signal.signal_id}`,
+      })),
+      ...contradictions.slice(0, 2).map((item) => ({
+        id: item.edge_id,
+        type: 'Contradiction',
+        title: `${item.from_title} ↔ ${item.to_title}`,
+        summary: item.evidence_provenance ?? 'Two pieces of memory conflict and require a decision.',
+        detail: `Topic ${item.topic_key} · confidence ${formatPercent(item.confidence_score)}`,
+        tone: 'critical' as const,
+      })),
+      ...assumptionDrift.slice(0, 2).map((item) => ({
+        id: item.assumption_id,
+        type: 'Assumption drift',
+        title: item.title_or_label,
+        summary: item.validity_notes || item.evidence_provenance || 'Later evidence weakened this assumption.',
+        detail: `Status ${formatLabel(item.status)} · topic ${item.topic_key}`,
+        tone: 'drift' as const,
+      })),
+      ...nextActions.slice(0, 2).map((item) => ({
+        id: item.signal_id,
+        type: 'Next action',
+        title: item.title,
+        summary: item.recommended_action,
+        detail: `Urgency ${formatPercent(item.urgency_score)} · uncertainty ${formatPercent(item.uncertainty_score)}`,
+        tone: 'action' as const,
+      })),
+    ]
+
+    return rows.slice(0, 8)
+  }, [assumptionDrift, contradictions, nextActions, persistedSignals])
+
+  const memoryComposition = useMemo(
+    () => Object.entries(summary?.memory_counts ?? {}).sort(([, firstCount], [, secondCount]) => secondCount - firstCount),
+    [summary],
+  )
+
+  const reasoningModes = [
+    ['Decision lineage', 'Understand why a decision exists', 'Timeline, owner, evidence, and related commitments'],
+    ['Contradiction analysis', 'Resolve conflicting claims', 'Conflicting memory objects with provenance and confidence'],
+    ['Assumption drift', 'Find stale operating assumptions', 'Assumptions whose validity changed after later evidence'],
+    ['Next-action guidance', 'Move from evidence to work', 'Recommended action with urgency, uncertainty, and supporting facts'],
+  ]
+
   return (
-    <div className="stack-xl">
-      <PageIntro
-        eyebrow="Workspace dashboard"
-        title="Review company memory before making decisions"
-        description="Track source artifacts, reconstructed memory, evidence review, contradictions, assumption drift, and recommended next actions in the current company workspace."
-        actions={
+    <div className="stack-xl dashboard-page">
+      <section className="dashboard-hero" aria-labelledby="dashboard-title">
+        <div className="dashboard-hero-copy">
+          <p className="eyebrow">Operations dashboard</p>
+          <h1 id="dashboard-title" className="brand-title">
+            Company memory control center
+          </h1>
+          <p className="page-description">
+            A practical operating view for source intake, evidence governance, memory reconstruction, signal review, and grounded answers.
+          </p>
           <div className="inline-actions">
-            <Link className="secondary-button" to="/artifacts">
-              Load evidence
+            <Link className="primary-button" to={demoReadiness.actionTo}>
+              {demoReadiness.actionLabel}
             </Link>
-            <Link className="primary-button" to="/query">
-              Ask a question
-            </Link>
+            <a className="secondary-button" href="/docs/IZGE_OFFICIAL_DOCUMENTATION.html">
+              Open docs
+            </a>
           </div>
-        }
-      />
+        </div>
 
-      {error ? <Callout tone="warning">{error}</Callout> : null}
-
-      <section className="metric-grid">
-        <MetricCard label="Visible artifacts" value={summary?.artifact_count ?? '—'} detail="Documents and pasted records available in your permitted scope." />
-        <MetricCard label="Memory objects" value={totalMemoryObjects || '—'} detail="Structured decisions, assumptions, constraints, outcomes, and commitments." />
-        <MetricCard label="Active tensions" value={contradictions.length + assumptionDrift.length} detail="Contradictions and assumption drift visible in your permitted scope." />
-        <MetricCard label="Persisted signals" value={persistedSignalCount || nextActions.length} detail="Durable proactive signals generated from ingested artifact impact." />
-        <MetricCard label="Needs review" value={reviewQueue.length} detail="Artifacts waiting for admin evidence governance." />
-      </section>
-
-      <Panel
-        title="Operational workflow"
-        description="Use this path during company onboarding: load source material, build memory, review generated signals, ask a grounded question, then inspect evidence."
-        aside={
-          <Link className="primary-button" to={demoReadiness.actionTo}>
-            {demoReadiness.actionLabel}
-          </Link>
-        }
-      >
-        <article className="panel-subtle stack-sm">
-          <div className="timeline-card-head">
+        <aside className="dashboard-hero-panel" aria-label="Current readiness and workspace boundary">
+          <div className="readiness-header">
             <div>
-              <p className="section-label">Current workspace state</p>
+              <p className="section-label">Current state</p>
               <p className="table-primary">{demoReadiness.title}</p>
             </div>
             <StatusBadge value={demoReadiness.status} />
           </div>
           <p className="muted-copy">{demoReadiness.detail}</p>
-        </article>
-        <div className="signal-grid">
-          <Link className="record-link signal-card panel-subtle" to="/artifacts">
-            <p className="section-label">1 / Sources</p>
-            <p className="signal-title">{latestCompletedArtifact?.title ?? 'Load company artifacts'}</p>
-            <p className="muted-copy">
-              {latestCompletedArtifact
-                ? `Visible source ${latestCompletedArtifact.artifact_id} is ${formatLabel(latestCompletedArtifact.review_status)} and ready for evidence inspection.`
-                : 'Add or seed source artifacts before relying on workspace memory.'}
-            </p>
-          </Link>
-          <Link className="record-link signal-card panel-subtle" to="/ingestion">
-            <p className="section-label">2 / Memory construction</p>
-            <p className="signal-title">{totalMemoryObjects || 0} reconstructed memory objects</p>
-            <p className="muted-copy">Ingestion turns artifacts into decisions, assumptions, constraints, outcomes, commitments, and graph links.</p>
-          </Link>
-          {topPersistedSignal ? (
-            <Link className={signalCardClass(topPersistedSignal.signal_type)} to={`/signals/${topPersistedSignal.signal_id}`}>
-              <p className="section-label">3 / Signal review</p>
-              <p className="signal-title">{topPersistedSignal.title}</p>
-              <p className="muted-copy">Open the persisted signal to inspect evidence, memory objects, and the intelligence path.</p>
-            </Link>
-          ) : (
-            <Link className="record-link signal-card panel-subtle" to="/graph">
-              <p className="section-label">3 / Signal review</p>
-              <p className="signal-title">No persisted signal yet</p>
-              <p className="muted-copy">Run ingestion on conflicting or drifting evidence to create contradiction, drift, supersession, or next-action signals.</p>
-            </Link>
-          )}
-          <Link className="record-link signal-card panel-subtle action-card" to={`/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`}>
-            <p className="section-label">4 / Question</p>
-            <p className="signal-title">Ask for evidence-backed guidance</p>
-            <p className="muted-copy">{canonicalDemoPrompt}</p>
-          </Link>
-        </div>
-      </Panel>
-
-      {isAdmin ? (
-        <Panel
-          title="Admin evidence review readiness"
-          description="Review accepts evidence into trusted reasoning. Rejection keeps the record stored for audit but excludes it from trusted intelligence outputs."
-          aside={
-            <Link className="secondary-button" to="/admin/users">
-              Govern evidence
-            </Link>
-          }
-        >
-          <div className="detail-grid">
-            <article className="panel-subtle detail-card">
-              <p className="section-label">Waiting</p>
-              <p className="table-primary">{reviewQueue.length} artifact(s)</p>
-              <p className="muted-copy">Submitted or ingested sources that need an admin trust decision.</p>
-            </article>
-            <article className="panel-subtle detail-card">
-              <p className="section-label">Reviewed</p>
-              <p className="table-primary">{reviewedArtifactCount} artifact(s)</p>
-              <p className="muted-copy">Explicitly accepted source material for trusted workspace memory.</p>
-            </article>
-            <article className="panel-subtle detail-card">
-              <p className="section-label">Rejected</p>
-              <p className="table-primary">{rejectedArtifactCount} artifact(s)</p>
-              <p className="muted-copy">Stored for audit/history but excluded from trusted reasoning support.</p>
-            </article>
-          </div>
-          {reviewQueue.length > 0 ? (
-            <div className="stack-sm">
-              <p className="section-label">Next sources to inspect</p>
-              {reviewQueue.slice(0, 4).map((artifact) => (
-                <Link key={artifact.artifact_id} className="record-link panel-subtle" to="/admin/users">
-                  <div>
-                    <p className="table-primary">{artifact.title}</p>
-                    <p className="table-secondary">
-                      {formatLabel(artifact.ingestion_status)} · updated {formatDateTime(artifact.updated_at)}
-                    </p>
-                  </div>
-                  <StatusBadge value={formatLabel(artifact.review_status)} />
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="muted-copy">No submitted or needs-review artifacts are waiting in the admin queue.</p>
-          )}
-        </Panel>
-      ) : null}
-
-      <div className="two-column-layout">
-        <Panel title="Reasoning modes, not chat modes" description="Each block is a fixed institutional-memory operation designed to expose why a recommendation is justified.">
-          <div className="signal-grid">
-            {[
-              ['Decision lineage', 'Trace who decided what, when, and under which source record.'],
-              ['Contradiction analysis', 'Make later claims visually collide with earlier commitments.'],
-              ['Assumption drift', 'Mark stale assumptions as operational risk, not weak metadata.'],
-              ['Next-action guidance', 'Recommend moves only after evidence, conflict, and uncertainty are visible.'],
-            ].map(([item, detail]) => (
-              <article key={item} className="signal-card panel-subtle">
-                <p className="signal-title">{item}</p>
-                <p className="muted-copy">{detail}</p>
-              </article>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel title="Current memory boundary" description="Scope and permissions are part of the reasoning record; hidden evidence must stay visible as a constraint.">
-          <dl className="meta-list">
+          <dl className="dashboard-meta-list">
             <div>
-              <dt>Name</dt>
+              <dt>User</dt>
               <dd>{session?.user.display_name ?? 'Unavailable'}</dd>
             </div>
             <div>
-              <dt>Email</dt>
-              <dd>{session?.user.email ?? 'Unavailable'}</dd>
+              <dt>Role</dt>
+              <dd>{session?.user.role ?? 'Unavailable'}</dd>
             </div>
             <div>
-              <dt>Workspace ID</dt>
+              <dt>Workspace</dt>
               <dd>{summary?.workspace_id ?? session?.user.workspace_id ?? 'Unavailable'}</dd>
             </div>
             <div>
-              <dt>Product stance</dt>
+              <dt>Stance</dt>
               <dd>Reconstruct first. Compare second. Recommend last.</dd>
             </div>
           </dl>
+        </aside>
+      </section>
+
+      {error ? <Callout tone="warning">{error}</Callout> : null}
+
+      <section className="dashboard-kpi-strip" aria-label="Current workspace health">
+        {dashboardStats.map((metric) => (
+          <article key={metric.label} className="dashboard-kpi">
+            <p className="section-label">{metric.label}</p>
+            <p className="dashboard-kpi-value">{metric.value}</p>
+            <p className="table-secondary">{metric.detail}</p>
+          </article>
+        ))}
+      </section>
+
+      <div className="dashboard-main-grid">
+        <Panel
+          title="Operating path"
+          description="A company-use demo should make the next step obvious without forcing users through a wall of similar cards."
+          aside={
+            <Link className="secondary-button" to={demoReadiness.actionTo}>
+              Continue
+            </Link>
+          }
+        >
+          <ol className="workflow-step-list">
+            {workflowSteps.map((step) => (
+              <li key={step.step} className="workflow-step">
+                <span className="workflow-step-index">{step.step}</span>
+                <div className="workflow-step-copy">
+                  <div className="workflow-step-head">
+                    <div>
+                      <p className="section-label">{step.label}</p>
+                      <p className="table-primary">{step.title}</p>
+                    </div>
+                    <StatusBadge value={step.status} />
+                  </div>
+                  <p className="muted-copy">{step.detail}</p>
+                </div>
+                <Link className="text-button" to={step.to}>
+                  Open
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </Panel>
+
+        {isAdmin ? (
+          <Panel
+            title="Evidence governance"
+            description="Trusted answers depend on an explicit source review state. Stored records remain auditable even when rejected."
+            aside={
+              <Link className="secondary-button" to="/admin/users">
+                Manage
+              </Link>
+            }
+          >
+            <dl className="review-ledger">
+              <div>
+                <dt>Waiting</dt>
+                <dd>{reviewQueue.length}</dd>
+              </div>
+              <div>
+                <dt>Reviewed</dt>
+                <dd>{reviewedArtifactCount}</dd>
+              </div>
+              <div>
+                <dt>Rejected</dt>
+                <dd>{rejectedArtifactCount}</dd>
+              </div>
+            </dl>
+            {reviewQueue.length > 0 ? (
+              <div className="review-queue-list">
+                {reviewQueue.slice(0, 4).map((artifact) => (
+                  <Link key={artifact.artifact_id} className="review-queue-row" to="/admin/users">
+                    <div>
+                      <p className="table-primary">{artifact.title}</p>
+                      <p className="table-secondary">
+                        {formatLabel(artifact.ingestion_status)} · updated {formatDateTime(artifact.updated_at)}
+                      </p>
+                    </div>
+                    <StatusBadge value={formatLabel(artifact.review_status)} />
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="muted-copy">No submitted or needs-review artifacts are waiting in the admin queue.</p>
+            )}
+          </Panel>
+        ) : (
+          <Panel title="Evidence boundary" description="Permissions and trust state remain part of every answer.">
+            <p className="muted-copy">
+              You are viewing the workspace as {session?.user.display_name ?? 'the current user'}. Restricted evidence stays out of answers when permissions do not allow it.
+            </p>
+          </Panel>
+        )}
+      </div>
+
+      <div className="dashboard-analysis-grid">
+        <Panel title="Reasoning modes" description="Modes are operational tools, not marketing copy or chat personas.">
+          <div className="table-wrap mode-table-wrap">
+            <table className="data-table mode-table">
+              <thead>
+                <tr>
+                  <th>Mode</th>
+                  <th>Use when</th>
+                  <th>Output</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reasoningModes.map(([mode, useWhen, output]) => (
+                  <tr key={mode}>
+                    <td>{mode}</td>
+                    <td>{useWhen}</td>
+                    <td>{output}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+
+        <Panel title="Memory composition" description="A compact graph of what ingestion reconstructed from company sources.">
+          {memoryComposition.length === 0 ? (
+            <EmptyState title="No memory graph yet" description="Run ingestion to populate the memory composition graph." />
+          ) : (
+            <div className="composition-chart" aria-label="Memory object composition">
+              {memoryComposition.map(([memoryType, count]) => {
+                const width = totalMemoryObjects > 0 ? Math.max(6, (count / totalMemoryObjects) * 100) : 0
+                return (
+                  <div key={memoryType} className="composition-row">
+                    <span>{formatLabel(memoryType)}</span>
+                    <span className="composition-track" aria-hidden="true">
+                      <span style={{ width: `${width}%` }} />
+                    </span>
+                    <strong>{count}</strong>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </Panel>
       </div>
 
       <Panel
         title="Signals requiring a decision"
-        description="Workspace-level contradiction, drift, and next-action guidance are first-class memory products, not analytics widgets."
+        description="Signals are shown as an action list so users can scan type, evidence, urgency, and next destination quickly."
         aside={
           <Link className="secondary-button" to="/graph">
             Inspect graph
           </Link>
         }
       >
-        {contradictions.length === 0 && assumptionDrift.length === 0 && nextActions.length === 0 && persistedSignals.length === 0 ? (
+        {signalRows.length === 0 ? (
           <EmptyState title="No active signals yet" description="Run ingestion on company artifacts to surface contradictions, drift, and grounded guidance." />
         ) : (
-          <div className="signal-grid">
-            {persistedSignals.slice(0, 3).map((signal) => (
-              <Link key={signal.signal_id} className={signalCardClass(signal.signal_type)} to={`/signals/${signal.signal_id}`}>
-                <p className="section-label">Persisted {formatLabel(signal.signal_type)}</p>
-                <p className="signal-title">{signal.title}</p>
-                <p className="muted-copy">{signal.summary}</p>
-                <p className="table-secondary">
-                  {signal.source_artifact_title ?? signal.source_artifact_id ?? 'Unknown source'} · urgency {formatPercent(signal.urgency_score)} · {formatDateTime(signal.created_at)}
-                </p>
-              </Link>
-            ))}
-            {contradictions.slice(0, 2).map((item) => (
-              <article key={item.edge_id} className="signal-card panel-subtle critical-card">
-                <p className="section-label">Contradiction</p>
-                <p className="signal-title">{item.from_title} ↔ {item.to_title}</p>
-                <p className="muted-copy">{item.evidence_provenance}</p>
-                <p className="table-secondary">Topic {item.topic_key} · confidence {formatPercent(item.confidence_score)}</p>
-              </article>
-            ))}
-            {assumptionDrift.slice(0, 2).map((item) => (
-              <article key={item.assumption_id} className="signal-card panel-subtle drift-card">
-                <p className="section-label">Assumption drift</p>
-                <p className="signal-title">{item.title_or_label}</p>
-                <p className="muted-copy">{item.validity_notes || item.evidence_provenance || 'Later evidence weakened this assumption.'}</p>
-                <p className="table-secondary">Status {formatLabel(item.status)} · topic {item.topic_key}</p>
-              </article>
-            ))}
-            {nextActions.slice(0, 2).map((item) => (
-              <article key={item.signal_id} className="signal-card panel-subtle action-card">
-                <p className="section-label">Next action</p>
-                <p className="signal-title">{item.title}</p>
-                <p className="muted-copy">{item.recommended_action}</p>
-                <p className="table-secondary">
-                  Urgency {formatPercent(item.urgency_score)} · uncertainty {formatPercent(item.uncertainty_score)}
-                </p>
-              </article>
-            ))}
+          <div className="decision-list">
+            {signalRows.map((row) => {
+              const content = (
+                <>
+                  <div className="decision-row-kind">
+                    <span>{row.type}</span>
+                  </div>
+                  <div className="decision-row-copy">
+                    <p className="table-primary">{row.title}</p>
+                    <p className="muted-copy">{row.summary}</p>
+                    <p className="table-secondary">{row.detail}</p>
+                  </div>
+                  <span className="decision-row-arrow" aria-hidden="true">
+                    {row.to ? '↗' : '•'}
+                  </span>
+                </>
+              )
+
+              return row.to ? (
+                <Link key={row.id} className={decisionRowClass(row.tone)} to={row.to}>
+                  {content}
+                </Link>
+              ) : (
+                <article key={row.id} className={decisionRowClass(row.tone)}>
+                  {content}
+                </article>
+              )
+            })}
           </div>
         )}
       </Panel>
 
-      <Panel title="Recent evidence entering memory" description="Sources are treated as inspectable provenance, not background files.">
+      <Panel
+        title="Recent evidence entering memory"
+        description="Sources are inspectable provenance, not background files."
+        aside={
+          <Link className="secondary-button" to="/artifacts">
+            View all
+          </Link>
+        }
+      >
         {isLoading ? <p className="muted-copy">Loading source inventory…</p> : null}
         {!isLoading && artifacts.length === 0 ? (
           <EmptyState title="No sources yet" description="Upload a file or submit pasted text to start reconstructing institutional memory." />
