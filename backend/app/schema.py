@@ -97,7 +97,7 @@ def assert_required_schema_ready(connection: Connection) -> None:
             problems.append(f"{table_name}: missing table")
     if problems:
         raise RuntimeError(
-            "Database schema is not ready for the portable memory/orchestration demo. "
+            "Database schema is not ready for the portable memory/orchestration runtime. "
             "Run `python -m app.migration_tools upgrade` against the target database before serving traffic: "
             + "; ".join(problems)
         )
@@ -113,7 +113,7 @@ def ensure_fts_table(connection: Connection) -> None:
 def ensure_legacy_schema_compatibility(target_engine: Engine = default_engine) -> None:
     """Non-destructive repair path for pre-Alembic local/company SQLite databases.
 
-    This preserves existing demo/company rows, creates missing additive tables from current
+    This preserves existing seeded/company rows, creates missing additive tables from current
     SQLAlchemy metadata, applies the historic additive column repairs, creates the FTS table,
     and then requires the schema checker to pass before migration tooling can stamp the DB.
     """

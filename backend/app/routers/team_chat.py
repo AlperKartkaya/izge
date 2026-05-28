@@ -15,6 +15,23 @@ from app.services.audit import log_event
 router = APIRouter(prefix="/team-chat", tags=["team-chat"])
 
 
+def _clean_thread_id(value: str | None) -> str:
+    raw_value = (value or "company-general").strip().lower()
+    cleaned = "".join(character for character in raw_value if character.isalnum() or character in {"-", "_", ":"})
+    return (cleaned or "company-general")[:80]
+
+
+def _clean_thread_title(value: str | None, thread_id: str) -> str:
+    fallback_titles = {
+        "company-general": "Company General",
+        "product-rollout": "Product Rollout",
+        "direct:employee1-employee2": "Employee 1 / Employee 2",
+        "customer-success": "Customer Success",
+    }
+    title = (value or fallback_titles.get(thread_id) or thread_id.replace("-", " ").replace(":", " / "))[:120].strip()
+    return title or "Company General"
+
+
 def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, User]) -> TeamChatMessageRead:
     author = author_by_id.get(message.author_user_id)
     return TeamChatMessageRead(
@@ -65,11 +82,18 @@ def create_team_chat_message(
     body = payload.body.strip()
     if not body:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Message body is required.")
+    thread_id = _clean_thread_id(payload.thread_id)
+    thread_title = _clean_thread_title(payload.thread_title, thread_id)
     message = CompanyChatMessage(
         workspace_id=current_user.workspace_id,
         author_user_id=current_user.user_id,
         body=body,
-        message_metadata={"channel": "company-general", "source": "izge-demo"},
+        message_metadata={
+            "channel": thread_id,
+            "thread_id": thread_id,
+            "thread_title": thread_title,
+            "source": "izge-product",
+        },
     )
     db.add(message)
     db.commit()
@@ -81,6 +105,6 @@ def create_team_chat_message(
         event_type="TEAM_CHAT_MESSAGE_CREATED",
         target_type="company_chat_message",
         target_id=message.message_id,
-        event_metadata={"channel": "company-general", "body_length": len(body)},
+        event_metadata={"channel": thread_id, "thread_id": thread_id, "thread_title": thread_title, "body_length": len(body)},
     )
     return _message_read_model(message, {current_user.user_id: current_user})

@@ -16,20 +16,27 @@ from app.services.audit import log_event
 from app.services.security import hash_password
 
 
-DEMO_MEMBER_PASSWORD = "change-me-employee"
-DEMO_OPS_PASSWORD = "change-me-ops"
+DEMO_EMPLOYEE_1_PASSWORD = "change-me-employee1"
+DEMO_EMPLOYEE_2_PASSWORD = "change-me-employee2"
+DEMO_EMPLOYEE_3_PASSWORD = "change-me-employee3"
 
 DEMO_USERS = [
     {
-        "display_name": "Demo Employee",
-        "email": "employee@example.com",
-        "password": DEMO_MEMBER_PASSWORD,
+        "display_name": "Employee 1",
+        "email": "employee1@example.com",
+        "password": DEMO_EMPLOYEE_1_PASSWORD,
         "role": "Member",
     },
     {
-        "display_name": "Operations Lead",
-        "email": "ops@example.com",
-        "password": DEMO_OPS_PASSWORD,
+        "display_name": "Employee 2",
+        "email": "employee2@example.com",
+        "password": DEMO_EMPLOYEE_2_PASSWORD,
+        "role": "Member",
+    },
+    {
+        "display_name": "Employee 3",
+        "email": "employee3@example.com",
+        "password": DEMO_EMPLOYEE_3_PASSWORD,
         "role": "Member",
     },
 ]
@@ -151,7 +158,7 @@ def _seed_demo_users(db: Session, workspace: Workspace) -> dict[str, User]:
                 event_type="USER_SEEDED",
                 target_type="user",
                 target_id=user.user_id,
-                event_metadata={"role": user.role, "email": user.email, "demo_employee": True},
+                event_metadata={"role": user.role, "email": user.email, "seeded_employee": True},
             )
         else:
             user.role = spec["role"]
@@ -196,11 +203,11 @@ def _seed_demo_artifacts(db: Session, *, workspace: Workspace, admin: User) -> N
             artifact.review_status = "reviewed"
             artifact.reviewed_by = admin.user_id
             artifact.reviewed_at = datetime.utcnow()
-            artifact.review_notes = "Seeded company demo artifact reviewed during bootstrap."
+            artifact.review_notes = "Seeded company artifact reviewed during bootstrap."
             db.commit()
         except Exception as exc:
             artifact.review_status = "needs_review"
-            artifact.review_notes = f"Seeded demo artifact needs manual review because ingestion failed: {exc}"
+            artifact.review_notes = f"Seeded artifact needs manual review because ingestion failed: {exc}"
             db.commit()
 
 
@@ -208,18 +215,60 @@ def _seed_demo_team_chat(db: Session, *, workspace: Workspace, users_by_email: d
     existing = db.scalar(select(CompanyChatMessage).where(CompanyChatMessage.workspace_id == workspace.workspace_id))
     if existing is not None:
         return
+
+    def thread_metadata(thread_id: str, thread_title: str, thread_kind: str = "channel") -> dict[str, object]:
+        return {
+            "channel": thread_id,
+            "thread_id": thread_id,
+            "thread_title": thread_title,
+            "thread_kind": thread_kind,
+            "seeded": True,
+        }
+
     seeded_turns = [
-        (users_by_email.get("employee@example.com") or admin, "I uploaded the customer success rollout notes. Can someone verify whether the beta escalation threshold is still 25 per week?"),
-        (users_by_email.get("ops@example.com") or admin, "Yes. The go/no-go packet still uses 25 beta escalations per week as the pause threshold, and Izge should cite the CS notes plus launch meeting notes."),
-        (admin, "I reviewed the seeded strategy report, roadmap deck, meeting notes, and internal chat export. Employees should use the assistant for evidence-backed answers and this team chat for coordination."),
+        (
+            users_by_email.get("employee1@example.com") or admin,
+            "The customer success rollout notes are uploaded. Can someone confirm whether the beta escalation threshold is still 25 per week?",
+            thread_metadata("company-general", "Company General"),
+        ),
+        (
+            users_by_email.get("employee2@example.com") or admin,
+            "Confirmed. The go/no-go packet still uses 25 beta escalations per week as the pause threshold.",
+            thread_metadata("company-general", "Company General"),
+        ),
+        (
+            admin,
+            "I reviewed the strategy report, roadmap deck, meeting notes, and internal chat export. Keep artifact-specific answers in the assistant and coordination here.",
+            thread_metadata("company-general", "Company General"),
+        ),
+        (
+            users_by_email.get("employee2@example.com") or admin,
+            "The roadmap deck still targets late Q2, but the April notes keep security and activation instrumentation as the actual gate.",
+            thread_metadata("product-rollout", "Product Rollout"),
+        ),
+        (
+            users_by_email.get("employee3@example.com") or admin,
+            "I will attach the rollback-owner matrix once engineering signs off.",
+            thread_metadata("product-rollout", "Product Rollout"),
+        ),
+        (
+            users_by_email.get("employee1@example.com") or admin,
+            "Can you review the beta segmentation update before I send it to customer success?",
+            thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
+        ),
+        (
+            users_by_email.get("employee2@example.com") or admin,
+            "Yes. Send it here after the last artifact review finishes.",
+            thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
+        ),
     ]
-    for author, body in seeded_turns:
+    for author, body, metadata in seeded_turns:
         db.add(
             CompanyChatMessage(
                 workspace_id=workspace.workspace_id,
                 author_user_id=author.user_id,
                 body=body,
-                message_metadata={"channel": "company-general", "seeded": True},
+                message_metadata=metadata,
             )
         )
     db.commit()
@@ -300,7 +349,7 @@ def seed_defaults(db: Session) -> None:
             event_type="USER_SEEDED_PASSWORD_SYNCED",
             target_type="user",
             target_id=admin.user_id,
-            event_metadata={"role": admin.role, "email": admin.email, "demo_sync": True},
+            event_metadata={"role": admin.role, "email": admin.email, "bootstrap_sync": True},
         )
 
 

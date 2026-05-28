@@ -115,10 +115,10 @@ def get_database_overview(current_user: User = Depends(get_current_user), db: Se
         tables=tables,
         artifacts=[_storage_record(db, artifact) for artifact in artifacts],
         management_notes=[
-            "Use this page and the API for supported inspection and metadata changes; avoid raw SQL edits outside local development.",
+            "Use this page and the API for supported inspection and metadata changes; avoid raw SQL edits against company data.",
             "Uploaded files are persisted under IZGE_STORAGE_ROOT/<artifact_id>/source.<ext>; pasted text is under IZGE_PASTED_TEXT_ROOT/<artifact_id>/pasted.txt.",
             "Raw source content is immutable for auditability. To change a document, upload or paste a replacement artifact and review/restrict the old one.",
             "Editable artifact fields today: title, review status/notes, visibility scope, and permitted users.",
-            "Local development can also inspect SQLite with sqlite3 or DB Browser for SQLite; production deployments should use authenticated UI/API surfaces.",
+            "Database-level access should be limited to authorized operators; day-to-day changes should use authenticated UI/API surfaces.",
         ],
     )

@@ -243,11 +243,11 @@ export const api = {
     return request<TeamChatThreadRead>(`/team-chat?limit=${limit}`, { token })
   },
 
-  createTeamChatMessage(token: string, body: string) {
+  createTeamChatMessage(token: string, body: string, options: { thread_id?: string; thread_title?: string } = {}) {
     return request<TeamChatMessageRead>('/team-chat', {
       method: 'POST',
       token,
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body, ...options }),
     })
   },
 

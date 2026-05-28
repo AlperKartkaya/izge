@@ -317,7 +317,7 @@ export function DataAdminPage() {
         )}
       </Panel>
 
-      <Panel title="How this database is managed" description="Use supported application surfaces first; raw database tools are for local diagnostics only.">
+      <Panel title="How this database is managed" description="Use supported application surfaces first; direct database tools are for operator diagnostics only.">
         <div className="detail-grid">
           <article className="panel-subtle detail-card">
             <p className="section-label">SQLite database</p>

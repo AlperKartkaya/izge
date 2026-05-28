@@ -46,6 +46,8 @@ class UserRead(UserBase):
 
 class TeamChatMessageCreate(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
+    thread_id: str | None = Field(default=None, min_length=1, max_length=80)
+    thread_title: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class TeamChatMessageRead(BaseModel):

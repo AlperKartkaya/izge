@@ -39,7 +39,7 @@ def process_job(job: OrchestrationJob, *, worker_id: str) -> tuple[str, dict[str
 
     The current worker is intentionally conservative: it validates a typed
     stage-packet payload, records deterministic evidence, and never performs
-    trusted writes outside the job result. That gives the demo a real daemon
+    trusted writes outside the job result. That gives the product a real daemon
     and Docker service without pretending that arbitrary agent execution is
     safe or production-hardened yet.
     """

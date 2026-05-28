@@ -165,7 +165,7 @@ export function TargetReadinessPage() {
                   <StatusBadge value={formatLabel(area.status)} />
                 </div>
                 <p className="muted-copy">{area.promise}</p>
-                <p className="evidence-block">Current reflection: {area.demo_reflection}</p>
+                <p className="evidence-block">Current product state: {area.demo_reflection}</p>
 
                 <div className="two-column-layout">
                   <div className="panel-subtle stack-sm">

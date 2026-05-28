@@ -87,7 +87,7 @@ def _memory_rows_for_workspace(db: Session, workspace_id: str) -> list[tuple[str
 def sync_temporal_claims(db: Session, *, workspace_id: str) -> dict[str, Any]:
     """Persist the temporal claim-family/occurrence projection from trusted memory rows.
 
-    The memory tables remain the source of truth. This projection gives the demo a first-class temporal KG substrate
+    The memory tables remain the source of truth. This projection gives the product a first-class temporal KG substrate
     with validity windows and status history that can be inspected, replayed, and permission-filtered on reads.
     """
 

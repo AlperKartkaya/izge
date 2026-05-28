@@ -764,7 +764,7 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
             "status": "implemented",
             "score": 0.92,
             "promise": "Artifacts enter as evidence roots, become ordered chunks, and are filtered by permissions and review state before retrieval or reasoning.",
-            "demo_reflection": "The demo exposes this as a memory file-system with safe artifact locators, checksums, chunk counts, memory coverage, trust boundaries, and organization guidance.",
+            "demo_reflection": "The product exposes this as a memory file-system with safe artifact locators, checksums, chunk counts, memory coverage, trust boundaries, and organization guidance.",
             "evidence_routes": ["/api/evidence-substrate/filesystem", "/api/artifacts", "/api/ingestion/run"],
             "demo_surfaces": ["/memory-filesystem", "/artifacts", "/ingestion"],
             "proof_signals": [
@@ -825,7 +825,7 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
             "status": "implemented",
             "score": 0.89,
             "promise": "An orchestrator may divide work into specialist stages, but every stage must receive a typed context packet and return cited output through deterministic gates.",
-            "demo_reflection": "The Orchestrate page shows a bounded stage catalog, spawn policy, current runtime boundary, persisted stage-run ledger, DB-backed job queue, worker lease/results, and stage_packet_execution traces from a bounded parallel local sub-agent pool.",
+            "demo_reflection": "The Orchestrate page shows a bounded stage catalog, spawn policy, current runtime boundary, persisted stage-run ledger, DB-backed job queue, worker lease/results, and stage_packet_execution traces from a bounded parallel sub-agent pool.",
             "evidence_routes": ["/api/evidence-substrate/orchestration", "/api/evidence-substrate/orchestration/runs"],
             "demo_surfaces": ["/orchestration", "/query/:queryRunId"],
             "proof_signals": [
@@ -907,7 +907,7 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
                 "Add a one-click scripted customer workspace reset/import runbook that starts from clean seed data and records the path.",
                 "Add per-company onboarding copy that separates operator setup from executive read-only review.",
             ],
-            "risks": ["The UI is operational, but browser QA should remain part of every visible customer-demo pass."],
+            "risks": ["The UI is operational, but browser QA should remain part of every visible customer release pass."],
         },
         {
             "area_key": "bounded_scenario_support",
@@ -936,14 +936,14 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
             "status": "implemented",
             "score": 0.86,
             "promise": "Docker Compose should start backend, frontend, persisted database/storage, and proxy on a clean company-controlled machine.",
-            "demo_reflection": "The project includes Compose runtime, persisted volumes, generated bootstrap admin credentials, backup/restore scripts, Docker smoke evaluation, and an Ollama-backed smoke/eval script.",
+            "demo_reflection": "The project includes Compose runtime, persisted volumes, seeded workspace identities, backup/restore scripts, Docker smoke evaluation, and an Ollama-backed smoke/eval script.",
             "evidence_routes": ["/health", "/api/evidence-substrate/readiness"],
             "demo_surfaces": ["Docker Compose runtime", "frontend proxy", "backend health"],
             "proof_signals": [
                 _proof_signal("Portable smoke gate", "documented"),
                 _proof_signal("Ollama smoke gate", "documented"),
                 _proof_signal("Persisted workspace volume", "yes"),
-                _proof_signal("Bootstrap credentials file", "generated on first run"),
+                _proof_signal("Seeded workspace identities", "configured"),
             ],
             "remaining_work": [
                 "Add CI automation around migration, Docker, synthetic-company, and Ollama smoke evals.",

@@ -30,7 +30,7 @@ For the MVP, local-first means **organization-controlled storage and inference**
 
 Deployment stance:
 - **Local development:** your laptop runs the frontend/backend and a local Ollama/Qwen model.
-- **Jury demo:** `app.izge.dev` runs on Izge-controlled EC2 with an EC2-local/private LLM gateway.
+- **Managed trial:** `app.izge.dev` can run on Izge-controlled EC2 with an EC2-local/private LLM gateway.
 - **Customer target:** self-hosted or customer-controlled deployment at an internal/customer URL, with customer-controlled storage and local/private inference.
 - **Commercial bridge:** Izge-managed single-tenant deployment may be used for pilots, but generic multi-tenant SaaS is not the core product identity.
 - **Future only:** employee-local/edge models may participate later, but they are not required for MVP correctness.
@@ -112,16 +112,29 @@ docker compose up --build
 
 Then open `http://localhost:8080`. The backend remains available at `http://localhost:8000`. The local Compose profile starts three services: `backend`, `worker`, and `frontend`.
 
-Default local credentials:
+Default workspace identities:
 
-- email: `admin@example.com`
-- password: `change-me-admin`
-- employee email: `employee@example.com`
-- employee password: `change-me-employee`
-- ops employee email: `ops@example.com`
-- ops employee password: `change-me-ops`
+- Admin: `admin@example.com` / `change-me-admin`
+- Employee 1: `employee1@example.com` / `change-me-employee1`
+- Employee 2: `employee2@example.com` / `change-me-employee2`
+- Employee 3: `employee3@example.com` / `change-me-employee3`
 
-Change `IZGE_DEFAULT_ADMIN_PASSWORD` before any shared or production deployment.
+Change `IZGE_DEFAULT_ADMIN_PASSWORD` and the seeded employee credentials before any shared or production deployment.
+
+Docker Compose attempts the local/private LLM path by default for extraction, query routing, answer synthesis, and signal explanation. To see live model-backed behavior from Docker, run an Ollama-compatible gateway on the host and make sure the configured model exists before starting Compose:
+
+```bash
+ollama pull qwen3.5:4b
+ollama serve
+docker compose up --build
+```
+
+Override the model or disable LLM features with environment variables when needed:
+
+```bash
+IZGE_LOCAL_LLM_MODEL=llama3.2:3b docker compose up --build
+IZGE_LOCAL_LLM_ENABLED=false docker compose up --build
+```
 
 Run the migration/version checks and smoke evaluations before handing the system to a new company:
 

@@ -159,7 +159,7 @@ The Docker volume `izge_data` stores:
 - `/data/pasted/`
 - `/data/bootstrap_admin_credentials.json`
 
-Because `IZGE_DEFAULT_ADMIN_PASSWORD` is empty in `docker-compose.yml`, the backend generates a bootstrap admin password and writes it to the persisted credentials file on first run.
+Docker Compose seeds the workspace identities used by the product sign-in screen (`admin@example.com`, `employee1@example.com`, `employee2@example.com`, and `employee3@example.com`) and persists the SQLite database plus artifact storage in `izge_data`. Rotate these credentials before a shared or production deployment.
 
 ### Company operator commands
 
@@ -190,13 +190,18 @@ scripts/docker-restore.sh backups/<backup-file>.tar.gz --force
 
 Restore refuses to run while Compose services are active unless `IZGE_RESTORE_ALLOW_RUNNING=1` is set. Backups are written under `backups/`, which is intentionally ignored by git because the archive can contain company data and credentials.
 
-If using a local/private LLM on the host machine, point the backend at it with:
+Docker Compose points the backend and worker at a host Ollama-compatible gateway and enables the bounded LLM features by default:
 
 ```yaml
+IZGE_LOCAL_LLM_ENABLED: "true"
 IZGE_LOCAL_LLM_BASE_URL: http://host.docker.internal:11434
+IZGE_LOCAL_LLM_MODEL: qwen3.5:4b
+IZGE_LLM_QUERY_ROUTING_ENABLED: "true"
+IZGE_LLM_ANSWER_SYNTHESIS_ENABLED: "true"
+IZGE_LLM_SIGNAL_EXPLANATION_ENABLED: "true"
 ```
 
-LLM features remain opt-in through the existing `IZGE_LOCAL_LLM_ENABLED`, routing, signal explanation, and answer synthesis flags.
+Run `ollama pull qwen3.5:4b` before `docker compose up --build`, or override `IZGE_LOCAL_LLM_MODEL` to a model that already exists on the host gateway. Deterministic fallback remains the safety path if the gateway is unavailable or a model returns invalid structured output.
 
 ## UI surfaces added by this refactor
 

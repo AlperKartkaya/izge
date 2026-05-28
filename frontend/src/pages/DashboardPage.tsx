@@ -345,7 +345,7 @@ export function DashboardPage() {
       <div className="dashboard-main-grid">
         <Panel
           title="Operating path"
-          description="A company-use demo should make the next step obvious without forcing users through a wall of similar cards."
+          description="The next operational step should be clear without forcing employees through a wall of similar cards."
           aside={
             <Link className="secondary-button" to={demoReadiness.actionTo}>
               Continue

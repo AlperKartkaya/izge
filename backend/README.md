@@ -24,10 +24,11 @@ Run the DB-backed orchestration worker in another terminal when queued stage job
 
 Override these with `IZGE_DEFAULT_ADMIN_EMAIL` and `IZGE_DEFAULT_ADMIN_PASSWORD` if needed.
 
-Seeded local employee users for demo inspection:
+Seeded employee users for workspace inspection:
 
-- `employee@example.com` / `change-me-employee`
-- `ops@example.com` / `change-me-ops`
+- `employee1@example.com` / `change-me-employee1`
+- `employee2@example.com` / `change-me-employee2`
+- `employee3@example.com` / `change-me-employee3`
 
 ## Database migration/version tooling
 
@@ -79,7 +80,8 @@ IZGE_EVAL_BASE_URL=http://127.0.0.1:8000 .venv/bin/python -m manual_eval.run_syn
 
 Izge keeps deterministic graph logic as the authority for memory objects,
 signal classification, persistence, permissions, and evidence links. Local LLM
-use is opt-in and scoped to bounded assistance:
+use is enabled by default in Docker Compose when a configured gateway/model is
+available, and remains scoped to bounded assistance:
 
 - `IZGE_LOCAL_LLM_ENABLED=true` upgrades artifact memory extraction through the
   configured Ollama-compatible gateway, with heuristic fallback.
