@@ -12,6 +12,7 @@ import { IngestionPage } from './pages/IngestionPage'
 import { MemoryFilesystemPage } from './pages/MemoryFilesystemPage'
 import { MemoryDetailPage } from './pages/MemoryDetailPage'
 import { OrchestrationPage } from './pages/OrchestrationPage'
+import { OperationsPage } from './pages/OperationsPage'
 import { QueryPage } from './pages/QueryPage'
 import { QueryResultPage } from './pages/QueryResultPage'
 import { SignalDetailPage } from './pages/SignalDetailPage'
@@ -69,6 +70,14 @@ function App() {
           <Route path="signals/:signalId" element={<SignalDetailPage />} />
           <Route path="memory/:memoryType/:memoryId" element={<MemoryDetailPage />} />
           <Route path="graph" element={<GraphPage />} />
+          <Route
+            path="operations"
+            element={
+              <AdminOnlyRoute>
+                <OperationsPage />
+              </AdminOnlyRoute>
+            }
+          />
           <Route
             path="memory-filesystem"
             element={

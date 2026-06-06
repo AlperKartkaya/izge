@@ -21,6 +21,7 @@ import type {
   TemporalGraphRead,
   OrchestrationBlueprintRead,
   OrchestrationJobListRead,
+  OperationsOverviewRead,
   OrchestrationStageRunsRead,
   MemoryFilesystemRead,
   NextActionSignalItem,
@@ -360,5 +361,9 @@ export const api = {
 
   getDatabaseOverview(token: string) {
     return request<DatabaseOverviewRead>('/admin/database', { token })
+  },
+
+  getOperationsOverview(token: string) {
+    return request<OperationsOverviewRead>('/operations/overview', { token })
   },
 }

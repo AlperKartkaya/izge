@@ -23,6 +23,7 @@ Frontend sign-in shortcut defaults can be overridden at build time with `VITE_DE
 | Start full local container runtime | `docker compose up -d --build` | Starts `backend`, `worker`, and `frontend`. |
 | Stop full local container runtime | `docker compose down` | Keeps the persisted host-mounted `backend/data` directory. |
 | Check service health | `docker compose ps` and `curl http://127.0.0.1:8000/health` | Backend should be healthy; worker should be running. |
+| Inspect control-room health | Open `/operations` as admin or call `/api/operations/overview` | Read-only overview of DB/storage, artifact coverage, memory freshness, worker queue, LLM, traces, and next actions. |
 | Validate Compose config | `docker compose config` | Proves anchors/env resolve before deploy changes. |
 | Run frontend quality gates | `cd frontend && npm run lint && npm run build` | Required after UI/CSS/TypeScript edits. |
 | Check backend syntax/schema | `cd backend && python3 -m compileall app && .venv/bin/python -m app.migration_tools check` | Required after backend or migration edits. |
@@ -40,11 +41,15 @@ Frontend sign-in shortcut defaults can be overridden at build time with `VITE_DE
 
 Use authenticated app surfaces before raw database access:
 
-1. `/admin/data` — SQLite path, storage roots, table counts, write/read surface map.
-2. `/artifacts` — uploaded/pasted source inventory, review status, preview/download.
-3. `/memory-filesystem` — logical memory layout and counts.
-4. `/audit` — governance and operator actions.
-5. `/readiness` — capability coverage, proof signals, and remaining work.
+1. `/operations` — admin control room for DB/storage, artifact coverage, memory freshness, worker queue, LLM, traces, and next actions.
+2. `/admin/data` — SQLite path, storage roots, table counts, write/read surface map.
+3. `/artifacts` — uploaded/pasted source inventory, review status, preview/download.
+4. `/memory-filesystem` — logical memory layout and counts.
+5. `/orchestration` — worker queue, bounded stage ledger, and scenario replay.
+6. `/audit` — governance and operator actions.
+7. `/readiness` — capability coverage, proof signals, and remaining work.
+
+The Operations page is intentionally read-only. Treat it as the first stop before changing data or infrastructure: it will call out missing source files, pending review, completed artifacts with no chunks/memory, queued or expired worker jobs, LLM gateway problems, and trace/replay coverage.
 
 Raw SQLite access is for diagnostics and backup validation only. Production/shared deployments should not modify trusted data through raw SQL because artifact source, memory extraction, audit, and permission records must stay consistent.
 

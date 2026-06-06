@@ -14,6 +14,7 @@ const employeeNavigation = [
 
 const adminNavigation = [
   { to: '/', label: 'Dashboard', end: true },
+  { to: '/operations', label: 'Operations' },
   { to: '/artifacts', label: 'Artifacts' },
   { to: '/ingestion', label: 'Ingestion' },
   { to: '/team-chat', label: 'Team chat' },

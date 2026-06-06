@@ -205,6 +205,7 @@ Run `ollama pull qwen3.5:4b` before `docker compose up --build`, or override `IZ
 
 ## UI surfaces added by this refactor
 
+- **Operations** — admin-only control room for database/storage integrity, artifact coverage, memory freshness, worker queue state, LLM gateway status, trace/replay counts, and operator next actions.
 - **Memory FS** — shows artifacts, safe logical locators, chunk/memory/signal counts, trust boundaries, database organization, and step-by-step company setup guidance.
 - **Graph** — includes a temporal knowledge graph panel showing persisted claim families, claim occurrences, validity windows, and temporal edge count.
 - **Orchestrate** — shows bounded stage catalog, spawn policy, current runtime boundary, trace reflection counts, stage packet IDs, bounded scenario impact lookup, scenario run history, and replay verdicts.

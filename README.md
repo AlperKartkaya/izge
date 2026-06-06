@@ -186,7 +186,7 @@ The application database is SQLite:
 
 Uploaded files are stored under `IZGE_STORAGE_ROOT/<artifact_id>/source.<ext>`; pasted text is stored under `IZGE_PASTED_TEXT_ROOT/<artifact_id>/pasted.txt`. In local dev and Docker Compose dev those roots are visible on the host at `backend/data/storage` and `backend/data/pasted`; inside Docker they map to `/data/storage` and `/data/pasted`.
 
-Admins can inspect this through the product UI at `/admin/data` (`Data` in the nav). That page shows table row counts, Alembic revision, artifact logical locators, physical storage paths, storage existence/size, checksums, ingestion/review state, and supported metadata edits.
+Admins should start with `/operations` (`Operations` in the nav). It is a read-only control room for database/storage health, artifact coverage, memory freshness, worker queue state, LLM status, trace/replay counts, and recommended next actions. For lower-level storage inspection, use `/admin/data` (`Data` in the nav). That page shows table row counts, Alembic revision, artifact logical locators, physical storage paths, storage existence/size, checksums, ingestion/review state, and supported metadata edits.
 
 Supported edits should go through UI/API: artifact title, review status/notes, visibility scope, and permitted users. Raw source content is intentionally immutable for auditability; upload/paste a replacement artifact and reject or restrict the old one if document contents change. For local diagnostics only, you can inspect `backend/data/izge.db` with `sqlite3` or DB Browser for SQLite; do not raw-edit rows while the app is running because that bypasses audit, ingestion, permissions, and artifact-storage consistency.
 

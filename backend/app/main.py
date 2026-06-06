@@ -14,6 +14,7 @@ from app.routers.auth import router as auth_router
 from app.routers.graph import router as graph_router
 from app.routers.ingestion import router as ingestion_router
 from app.routers.memory import router as memory_router
+from app.routers.operations import router as operations_router
 from app.routers.query import router as query_router
 from app.routers.scenario import router as scenario_router
 from app.routers.signals import router as signals_router
@@ -53,6 +54,7 @@ app.include_router(system_router, prefix=settings.api_prefix)
 app.include_router(team_chat_router, prefix=settings.api_prefix)
 app.include_router(graph_router, prefix=settings.api_prefix)
 app.include_router(memory_router, prefix=settings.api_prefix)
+app.include_router(operations_router, prefix=settings.api_prefix)
 app.include_router(analysis_router, prefix=settings.api_prefix)
 app.include_router(audit_router, prefix=settings.api_prefix)
 app.include_router(evidence_router, prefix=settings.api_prefix)

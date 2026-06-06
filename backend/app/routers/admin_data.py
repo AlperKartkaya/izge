@@ -14,6 +14,7 @@ from app.migration_tools import current_revision
 from app.models import Artifact, ArtifactChunk, Assumption, Commitment, Constraint, Decision, Outcome, User
 from app.schemas.api import ArtifactStorageAdminRead, DatabaseOverviewRead, DatabaseTableRead
 from app.services.permissions import require_admin
+from app.services.storage import resolve_artifact_source_path
 
 router = APIRouter(prefix="/admin/database", tags=["admin-data"])
 
@@ -65,16 +66,16 @@ def _artifact_memory_count(db: Session, artifact_id: str) -> int:
 
 
 def _storage_record(db: Session, artifact: Artifact) -> ArtifactStorageAdminRead:
-    source_path = Path(artifact.source_path)
-    storage_exists = source_path.exists()
-    byte_size = source_path.stat().st_size if storage_exists else None
+    source_path = resolve_artifact_source_path(source_path=artifact.source_path, artifact_id=artifact.artifact_id, source_type=artifact.source_type)
+    storage_exists = source_path is not None
+    byte_size = source_path.stat().st_size if source_path is not None else None
     chunk_count = int(db.scalar(select(func.count()).select_from(ArtifactChunk).where(ArtifactChunk.artifact_id == artifact.artifact_id)) or 0)
     return ArtifactStorageAdminRead(
         artifact_id=artifact.artifact_id,
         title=artifact.title,
         source_type=artifact.source_type,
         logical_locator=f"artifact://{artifact.artifact_id}/source",
-        source_path=str(source_path),
+        source_path=str(source_path or Path(artifact.source_path)),
         storage_exists=storage_exists,
         byte_size=byte_size,
         checksum_sha256=artifact.checksum_sha256,
