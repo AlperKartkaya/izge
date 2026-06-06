@@ -24,7 +24,7 @@ from app.config import get_settings
 from app.services.audit import log_event
 from app.services.permissions import list_permitted_user_ids, require_admin, require_artifact_access, set_artifact_permissions
 from app.services.querying import artifact_proactive_signals
-from app.services.storage import ensure_supported_upload, persist_pasted_text, persist_upload_bytes
+from app.services.storage import ensure_supported_upload, persist_pasted_text, persist_upload_bytes, resolve_artifact_source_path
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 
@@ -284,16 +284,8 @@ def _artifact_source_file(artifact: Artifact) -> Path:
     if not artifact.source_path or artifact.source_path == "pending":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact source file is not available yet")
 
-    try:
-        source_path = Path(artifact.source_path).expanduser().resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact source file is missing from storage") from exc
-
-    settings = get_settings()
-    allowed_roots = (settings.storage_path.resolve(strict=False), settings.pasted_storage_path.resolve(strict=False))
-    if not any(source_path.is_relative_to(root) for root in allowed_roots):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Artifact source path is outside managed storage")
-    if not source_path.is_file():
+    source_path = resolve_artifact_source_path(source_path=artifact.source_path, artifact_id=artifact.artifact_id, source_type=artifact.source_type)
+    if source_path is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact source path is not a file")
     return source_path
 

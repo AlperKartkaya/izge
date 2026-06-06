@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { AuthGate } from './auth/AuthContext'
+import { AuthGate, useAuth } from './auth/AuthContext'
 import { AppShell } from './layout/AppShell'
 import { AdminPage } from './pages/AdminPage'
 import { ArtifactsPage } from './pages/ArtifactsPage'
@@ -12,6 +12,7 @@ import { IngestionPage } from './pages/IngestionPage'
 import { MemoryFilesystemPage } from './pages/MemoryFilesystemPage'
 import { MemoryDetailPage } from './pages/MemoryDetailPage'
 import { OrchestrationPage } from './pages/OrchestrationPage'
+import { OperationsPage } from './pages/OperationsPage'
 import { QueryPage } from './pages/QueryPage'
 import { QueryResultPage } from './pages/QueryResultPage'
 import { SignalDetailPage } from './pages/SignalDetailPage'
@@ -27,6 +28,16 @@ function ScrollToTop() {
   }, [pathname])
 
   return null
+}
+
+function AdminOnlyRoute({ children }: { children: ReactNode }) {
+  const { session } = useAuth()
+
+  if (session?.user.role !== 'Admin') {
+    return <Navigate to="/" replace />
+  }
+
+  return <>{children}</>
 }
 
 function App() {
@@ -45,20 +56,84 @@ function App() {
         >
           <Route index element={<DashboardPage />} />
           <Route path="artifacts" element={<ArtifactsPage />} />
-          <Route path="ingestion" element={<IngestionPage />} />
+          <Route
+            path="ingestion"
+            element={
+              <AdminOnlyRoute>
+                <IngestionPage />
+              </AdminOnlyRoute>
+            }
+          />
           <Route path="team-chat" element={<TeamChatPage />} />
           <Route path="query" element={<QueryPage />} />
           <Route path="query/:queryRunId" element={<QueryResultPage />} />
           <Route path="signals/:signalId" element={<SignalDetailPage />} />
           <Route path="memory/:memoryType/:memoryId" element={<MemoryDetailPage />} />
           <Route path="graph" element={<GraphPage />} />
-          <Route path="memory-filesystem" element={<MemoryFilesystemPage />} />
-          <Route path="orchestration" element={<OrchestrationPage />} />
-          <Route path="readiness" element={<TargetReadinessPage />} />
-          <Route path="admin" element={<AdminPage />} />
-          <Route path="admin/users" element={<AdminPage />} />
-          <Route path="admin/data" element={<DataAdminPage />} />
-          <Route path="audit" element={<AuditPage />} />
+          <Route
+            path="operations"
+            element={
+              <AdminOnlyRoute>
+                <OperationsPage />
+              </AdminOnlyRoute>
+            }
+          />
+          <Route
+            path="memory-filesystem"
+            element={
+              <AdminOnlyRoute>
+                <MemoryFilesystemPage />
+              </AdminOnlyRoute>
+            }
+          />
+          <Route
+            path="orchestration"
+            element={
+              <AdminOnlyRoute>
+                <OrchestrationPage />
+              </AdminOnlyRoute>
+            }
+          />
+          <Route
+            path="readiness"
+            element={
+              <AdminOnlyRoute>
+                <TargetReadinessPage />
+              </AdminOnlyRoute>
+            }
+          />
+          <Route
+            path="admin"
+            element={
+              <AdminOnlyRoute>
+                <AdminPage />
+              </AdminOnlyRoute>
+            }
+          />
+          <Route
+            path="admin/users"
+            element={
+              <AdminOnlyRoute>
+                <AdminPage />
+              </AdminOnlyRoute>
+            }
+          />
+          <Route
+            path="admin/data"
+            element={
+              <AdminOnlyRoute>
+                <DataAdminPage />
+              </AdminOnlyRoute>
+            }
+          />
+          <Route
+            path="audit"
+            element={
+              <AdminOnlyRoute>
+                <AuditPage />
+              </AdminOnlyRoute>
+            }
+          />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

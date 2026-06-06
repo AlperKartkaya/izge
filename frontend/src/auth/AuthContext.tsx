@@ -35,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         if (!cancelled) {
+          void api.signOut().catch(() => undefined)
           setSession(null)
         }
       } finally {

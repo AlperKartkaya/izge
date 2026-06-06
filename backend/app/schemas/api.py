@@ -908,6 +908,70 @@ class DatabaseOverviewRead(BaseModel):
     management_notes: list[str]
 
 
+OperationsHealthStatus = Literal["healthy", "warning", "critical"]
+
+
+class OperationsIssueRead(BaseModel):
+    artifact_id: str
+    title: str
+    reason: str
+    ingestion_status: str
+    review_status: str
+    updated_at: datetime | None = None
+    source_path: str | None = None
+    chunk_count: int | None = None
+    memory_object_count: int | None = None
+
+
+class OperationsJobSummaryRead(BaseModel):
+    job_id: str
+    job_kind: str
+    stage_key: str | None = None
+    status: str
+    priority: int
+    lease_owner: str | None = None
+    lease_expires_at: datetime | None = None
+    available_at: datetime
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+    error_message: str | None = None
+
+
+class OperationsSectionRead(BaseModel):
+    status: OperationsHealthStatus
+    title: str
+    summary: str
+    metrics: dict[str, Any]
+    issues: list[OperationsIssueRead] = Field(default_factory=list)
+    latest_jobs: list[OperationsJobSummaryRead] = Field(default_factory=list)
+
+
+class OperationsActionRead(BaseModel):
+    severity: OperationsHealthStatus
+    title: str
+    description: str
+    route: str
+
+
+class OperationsLinkRead(BaseModel):
+    label: str
+    route: str
+    description: str
+
+
+class OperationsOverviewRead(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    schema_version: Literal["operations_overview.v1"]
+    overall_status: OperationsHealthStatus
+    health_score: float = Field(ge=0, le=1)
+    summary: dict[str, Any]
+    sections: dict[str, OperationsSectionRead]
+    next_actions: list[OperationsActionRead]
+    links: list[OperationsLinkRead]
+
+
 ReadinessAreaStatus = Literal["implemented", "partial", "planned"]
 
 

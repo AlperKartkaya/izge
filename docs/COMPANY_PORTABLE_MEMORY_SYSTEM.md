@@ -152,14 +152,14 @@ Then open:
 - Health through frontend proxy: `http://localhost:8080/health`
 - API through frontend proxy: `http://localhost:8080/api/...`
 
-The Docker volume `izge_data` stores:
+For local development, Docker Compose bind-mounts `backend/data` into the containers as `/data`. That visible host directory stores:
 
-- `/data/izge.db`
-- `/data/storage/`
-- `/data/pasted/`
-- `/data/bootstrap_admin_credentials.json`
+- `backend/data/izge.db` (`/data/izge.db` in containers)
+- `backend/data/storage/` (`/data/storage/` in containers)
+- `backend/data/pasted/` (`/data/pasted/` in containers)
+- `backend/data/bootstrap_admin_credentials.json` (`/data/bootstrap_admin_credentials.json` in containers)
 
-Docker Compose seeds the workspace identities used by the product sign-in screen (`admin@example.com`, `employee1@example.com`, `employee2@example.com`, and `employee3@example.com`) and persists the SQLite database plus artifact storage in `izge_data`. Rotate these credentials before a shared or production deployment.
+Docker Compose seeds the workspace identities used by the product sign-in screen (`admin@example.com`, `employee1@example.com`, `employee2@example.com`, and `employee3@example.com`) and persists the SQLite database plus artifact storage in `backend/data`. Rotate these credentials before a shared or production deployment.
 
 ### Company operator commands
 
@@ -205,6 +205,7 @@ Run `ollama pull qwen3.5:4b` before `docker compose up --build`, or override `IZ
 
 ## UI surfaces added by this refactor
 
+- **Operations** — admin-only control room for database/storage integrity, artifact coverage, memory freshness, worker queue state, LLM gateway status, trace/replay counts, and operator next actions.
 - **Memory FS** — shows artifacts, safe logical locators, chunk/memory/signal counts, trust boundaries, database organization, and step-by-step company setup guidance.
 - **Graph** — includes a temporal knowledge graph panel showing persisted claim families, claim occurrences, validity windows, and temporal edge count.
 - **Orchestrate** — shows bounded stage catalog, spawn policy, current runtime boundary, trace reflection counts, stage packet IDs, bounded scenario impact lookup, scenario run history, and replay verdicts.

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 import re
 from typing import Literal
 
@@ -27,6 +26,7 @@ from app.models import (
 )
 from app.services import LocalLLMError, run_structured_local_prompt
 from app.services.audit import log_event
+from app.services.storage import resolve_artifact_source_path
 
 MEMORY_MODELS = {
     "decision": (Decision, "decision_id"),
@@ -236,7 +236,9 @@ class LLMExtractionEnvelope(BaseModel):
 
 def extract_text_for_artifact(artifact: Artifact) -> str:
     settings = get_settings()
-    path = Path(artifact.source_path)
+    path = resolve_artifact_source_path(source_path=artifact.source_path, artifact_id=artifact.artifact_id, source_type=artifact.source_type)
+    if path is None:
+        raise FileNotFoundError("Artifact source file is missing from managed storage")
     suffix = path.suffix.lower()
     if suffix == ".pdf":
         reader = PdfReader(str(path), strict=True)

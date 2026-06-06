@@ -573,6 +573,69 @@ export interface DatabaseOverviewRead {
   management_notes: string[]
 }
 
+export type OperationsHealthStatus = 'healthy' | 'warning' | 'critical'
+
+export interface OperationsIssueRead {
+  artifact_id: string
+  title: string
+  reason: string
+  ingestion_status: string
+  review_status: string
+  updated_at: string | null
+  source_path: string | null
+  chunk_count: number | null
+  memory_object_count: number | null
+}
+
+export interface OperationsJobSummaryRead {
+  job_id: string
+  job_kind: string
+  stage_key: string | null
+  status: string
+  priority: number
+  lease_owner: string | null
+  lease_expires_at: string | null
+  available_at: string
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+  error_message: string | null
+}
+
+export interface OperationsSectionRead {
+  status: OperationsHealthStatus
+  title: string
+  summary: string
+  metrics: Record<string, unknown>
+  issues: OperationsIssueRead[]
+  latest_jobs: OperationsJobSummaryRead[]
+}
+
+export interface OperationsActionRead {
+  severity: OperationsHealthStatus
+  title: string
+  description: string
+  route: string
+}
+
+export interface OperationsLinkRead {
+  label: string
+  route: string
+  description: string
+}
+
+export interface OperationsOverviewRead {
+  workspace_id: string
+  generated_at: string
+  schema_version: 'operations_overview.v1'
+  overall_status: OperationsHealthStatus
+  health_score: number
+  summary: Record<string, unknown>
+  sections: Record<string, OperationsSectionRead>
+  next_actions: OperationsActionRead[]
+  links: OperationsLinkRead[]
+}
+
 export type ReadinessAreaStatus = 'implemented' | 'partial' | 'planned'
 
 export interface TargetReadinessProofSignal {
