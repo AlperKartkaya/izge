@@ -6,10 +6,10 @@ import {
   type FormEventHandler,
 } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { Callout, EmptyState, StatusBadge } from '../components/ui'
+import { Callout, EmptyState } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime } from '../lib/format'
-import type { TeamChatMessageRead } from '../lib/types'
+import type { TeamChatMessageRead, UserRead } from '../lib/types'
 
 interface ConversationSummary {
   id: string
@@ -17,17 +17,40 @@ interface ConversationSummary {
   description: string
   icon: string
   kind: 'channel' | 'direct'
+  searchText: string
   lastMessage: TeamChatMessageRead | null
   messages: TeamChatMessageRead[]
 }
 
-const DEFAULT_CONVERSATIONS: ConversationSummary[] = [
+const EMPLOYEE_DIRECTORY = [
+  {
+    handle: 'employee1',
+    email: 'employee1@example.com',
+    displayName: 'Employee 1',
+    icon: 'E1',
+  },
+  {
+    handle: 'employee2',
+    email: 'employee2@example.com',
+    displayName: 'Employee 2',
+    icon: 'E2',
+  },
+  {
+    handle: 'employee3',
+    email: 'employee3@example.com',
+    displayName: 'Employee 3',
+    icon: 'E3',
+  },
+]
+
+const DEFAULT_CHANNELS: ConversationSummary[] = [
   {
     id: 'company-general',
     title: 'Company General',
     description: 'Workspace updates',
     icon: 'CG',
     kind: 'channel',
+    searchText: 'company general workspace updates',
     lastMessage: null,
     messages: [],
   },
@@ -37,15 +60,7 @@ const DEFAULT_CONVERSATIONS: ConversationSummary[] = [
     description: 'Launch and readiness work',
     icon: 'PR',
     kind: 'channel',
-    lastMessage: null,
-    messages: [],
-  },
-  {
-    id: 'direct:employee1-employee2',
-    title: 'Employee 1 / Employee 2',
-    description: 'Direct conversation',
-    icon: 'E1',
-    kind: 'direct',
+    searchText: 'product rollout launch readiness',
     lastMessage: null,
     messages: [],
   },
@@ -55,6 +70,7 @@ const DEFAULT_CONVERSATIONS: ConversationSummary[] = [
     description: 'Customer-facing follow-ups',
     icon: 'CS',
     kind: 'channel',
+    searchText: 'customer success customer-facing follow-ups',
     lastMessage: null,
     messages: [],
   },
@@ -72,6 +88,78 @@ function metadataString(
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function employeeHandleForUser(user: UserRead | undefined): string | null {
+  if (!user) {
+    return null
+  }
+  const byEmail = EMPLOYEE_DIRECTORY.find(
+    (employee) => employee.email === user.email.toLowerCase(),
+  )
+  if (byEmail) {
+    return byEmail.handle
+  }
+  const normalizedName = user.display_name.toLowerCase().replace(/\s+/g, '')
+  return (
+    EMPLOYEE_DIRECTORY.find((employee) => employee.handle === normalizedName)
+      ?.handle ?? null
+  )
+}
+
+function directThreadId(leftHandle: string, rightHandle: string): string {
+  return `direct:${[leftHandle, rightHandle].sort().join('-')}`
+}
+
+function directConversationTitle(
+  threadId: string,
+  currentUser: UserRead | undefined,
+): string {
+  const currentHandle = employeeHandleForUser(currentUser)
+  const handles = threadId.replace(/^direct:/, '').split('-')
+  const partnerHandle =
+    handles.find((handle) => handle !== currentHandle) ?? handles[0]
+  return (
+    EMPLOYEE_DIRECTORY.find((employee) => employee.handle === partnerHandle)
+      ?.displayName ?? threadId.replace(/^direct:/, '').replace(/-/g, ' / ')
+  )
+}
+
+function directConversationIcon(
+  threadId: string,
+  currentUser: UserRead | undefined,
+): string {
+  const title = directConversationTitle(threadId, currentUser)
+  return (
+    EMPLOYEE_DIRECTORY.find((employee) => employee.displayName === title)
+      ?.icon ?? initials(title)
+  )
+}
+
+function defaultConversationsForUser(
+  user: UserRead | undefined,
+): ConversationSummary[] {
+  const currentHandle = employeeHandleForUser(user)
+  if (!currentHandle || user?.role === 'Admin') {
+    return DEFAULT_CHANNELS.map((conversation) => ({
+      ...conversation,
+      messages: [],
+      lastMessage: null,
+    }))
+  }
+
+  return EMPLOYEE_DIRECTORY.filter(
+    (employee) => employee.handle !== currentHandle,
+  ).map((employee) => ({
+    id: directThreadId(currentHandle, employee.handle),
+    title: employee.displayName,
+    description: 'Direct conversation',
+    icon: employee.icon,
+    kind: 'direct',
+    searchText: `${employee.displayName} ${employee.handle} ${employee.email}`,
+    lastMessage: null,
+    messages: [],
+  }))
+}
+
 function threadIdForMessage(message: TeamChatMessageRead) {
   return (
     metadataString(message, 'thread_id') ||
@@ -81,18 +169,19 @@ function threadIdForMessage(message: TeamChatMessageRead) {
 }
 
 function threadTitleForMessage(message: TeamChatMessageRead, threadId: string) {
-  return (
-    metadataString(message, 'thread_title') ||
-    DEFAULT_CONVERSATIONS.find((conversation) => conversation.id === threadId)
-      ?.title ||
-    threadId.replace(/[-:]/g, ' ')
-  )
+  return threadId.startsWith('direct:')
+    ? directConversationTitle(threadId, undefined)
+    : metadataString(message, 'thread_title') ||
+        DEFAULT_CHANNELS.find((conversation) => conversation.id === threadId)
+          ?.title ||
+        threadId.replace(/[-:]/g, ' ')
 }
 
 function threadKindForMessage(
   message: TeamChatMessageRead,
 ): 'channel' | 'direct' {
-  return metadataString(message, 'thread_kind') === 'direct'
+  return metadataString(message, 'thread_kind') === 'direct' ||
+    threadIdForMessage(message).startsWith('direct:')
     ? 'direct'
     : 'channel'
 }
@@ -108,10 +197,11 @@ function initials(value: string) {
 
 function buildConversations(
   messages: TeamChatMessageRead[],
+  currentUser: UserRead | undefined,
 ): ConversationSummary[] {
   const conversations = new Map<string, ConversationSummary>()
 
-  DEFAULT_CONVERSATIONS.forEach((conversation) => {
+  defaultConversationsForUser(currentUser).forEach((conversation) => {
     conversations.set(conversation.id, {
       ...conversation,
       messages: [],
@@ -121,19 +211,32 @@ function buildConversations(
 
   messages.forEach((message) => {
     const threadId = threadIdForMessage(message)
+    const threadKind = threadKindForMessage(message)
+    if (currentUser?.role !== 'Admin' && threadKind !== 'direct') {
+      return
+    }
     const existing = conversations.get(threadId)
-    const title = existing?.title || threadTitleForMessage(message, threadId)
+    const title =
+      existing?.title ||
+      (threadId.startsWith('direct:')
+        ? directConversationTitle(threadId, currentUser)
+        : threadTitleForMessage(message, threadId))
     const nextMessages = [...(existing?.messages ?? []), message]
     conversations.set(threadId, {
       id: threadId,
       title,
       description:
         existing?.description ||
-        (threadKindForMessage(message) === 'direct'
+        (threadKind === 'direct'
           ? 'Direct conversation'
           : 'Conversation'),
-      icon: existing?.icon || initials(title),
-      kind: existing?.kind || threadKindForMessage(message),
+      icon:
+        existing?.icon ||
+        (threadId.startsWith('direct:')
+          ? directConversationIcon(threadId, currentUser)
+          : initials(title)),
+      kind: existing?.kind || threadKind,
+      searchText: existing?.searchText || `${title} ${threadId}`,
       lastMessage: message,
       messages: nextMessages,
     })
@@ -150,14 +253,30 @@ function buildConversations(
       return rightTime - leftTime
     }
     return (
-      DEFAULT_CONVERSATIONS.findIndex(
+      defaultConversationsForUser(currentUser).findIndex(
         (conversation) => conversation.id === left.id,
       ) -
-      DEFAULT_CONVERSATIONS.findIndex(
+      defaultConversationsForUser(currentUser).findIndex(
         (conversation) => conversation.id === right.id,
       )
     )
   })
+}
+
+function messageReceiptState(
+  message: TeamChatMessageRead,
+  messageIndex: number,
+  messages: TeamChatMessageRead[],
+  currentUserId: string | undefined,
+): 'delivered' | 'seen' | null {
+  if (!currentUserId || message.author_user_id !== currentUserId) {
+    return null
+  }
+
+  const laterReply = messages
+    .slice(messageIndex + 1)
+    .some((nextMessage) => nextMessage.author_user_id !== currentUserId)
+  return laterReply ? 'seen' : 'delivered'
 }
 
 export function TeamChatPage() {
@@ -167,6 +286,7 @@ export function TeamChatPage() {
   const [activeConversationId, setActiveConversationId] =
     useState('company-general')
   const [draft, setDraft] = useState('')
+  const [conversationSearch, setConversationSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
@@ -208,15 +328,29 @@ export function TeamChatPage() {
     }
   }, [session?.token])
 
-  const conversations = useMemo(() => buildConversations(messages), [messages])
+  const conversations = useMemo(
+    () => buildConversations(messages, session?.user),
+    [messages, session?.user],
+  )
+  const filteredConversations = useMemo(() => {
+    const query = conversationSearch.trim().toLowerCase()
+    if (!query) {
+      return conversations
+    }
+    return conversations.filter((conversation) =>
+      `${conversation.title} ${conversation.description} ${conversation.searchText}`
+        .toLowerCase()
+        .includes(query),
+    )
+  }, [conversationSearch, conversations])
   const activeConversation = useMemo(
     () =>
       conversations.find(
         (conversation) => conversation.id === activeConversationId,
       ) ??
       conversations[0] ??
-      DEFAULT_CONVERSATIONS[0],
-    [activeConversationId, conversations],
+      defaultConversationsForUser(session?.user)[0],
+    [activeConversationId, conversations, session?.user],
   )
   const activeMessages = activeConversation.messages
 
@@ -242,6 +376,7 @@ export function TeamChatPage() {
       const created = await api.createTeamChatMessage(session.token, trimmed, {
         thread_id: activeConversation.id,
         thread_title: activeConversation.title,
+        thread_kind: activeConversation.kind,
       })
       setMessages((current) => [...current, created])
       setDraft('')
@@ -291,10 +426,24 @@ export function TeamChatPage() {
         >
           <div className="team-chat-conversations-head">
             <p className="section-label">Conversations</p>
-            <span className="conversation-count">{conversations.length}</span>
+            <span className="conversation-count">
+              {filteredConversations.length}
+            </span>
           </div>
+          <label className="field team-chat-search-field">
+            <span className="field-label">Search employee</span>
+            <input
+              type="search"
+              value={conversationSearch}
+              onChange={(event) => setConversationSearch(event.target.value)}
+              placeholder="employee1, employee2…"
+            />
+          </label>
           <div className="team-chat-conversation-list">
-            {conversations.map((conversation) => (
+            {filteredConversations.length === 0 ? (
+              <p className="muted-copy">No employee conversation found.</p>
+            ) : null}
+            {filteredConversations.map((conversation) => (
               <button
                 key={conversation.id}
                 type="button"
@@ -356,9 +505,15 @@ export function TeamChatPage() {
                 description="Start the conversation."
               />
             ) : null}
-            {activeMessages.map((message) => {
+            {activeMessages.map((message, messageIndex) => {
               const isOwnMessage =
                 message.author_user_id === session?.user.user_id
+              const receiptState = messageReceiptState(
+                message,
+                messageIndex,
+                activeMessages,
+                session?.user.user_id,
+              )
               return (
                 <article
                   key={message.message_id}
@@ -368,28 +523,30 @@ export function TeamChatPage() {
                       : 'team-chat-message'
                   }
                 >
-                  <div className="chat-message-head">
-                    <div>
-                      <p className="table-primary">
-                        {message.author_display_name}
-                      </p>
-                      <p className="table-secondary">
-                        {formatDateTime(message.created_at)}
-                      </p>
-                    </div>
-                    <StatusBadge value={roleLabel(message.author_role)} />
-                  </div>
                   <p className="chat-message-copy">{message.body}</p>
+                  <div className="message-bubble-meta">
+                    <span>{formatDateTime(message.created_at)}</span>
+                    {isOwnMessage && receiptState ? (
+                      <span
+                        className={`message-receipt message-receipt-${receiptState}`}
+                        aria-label={receiptState === 'seen' ? 'Seen' : 'Delivered'}
+                      >
+                        ✓✓
+                      </span>
+                    ) : (
+                      <span>{message.author_display_name}</span>
+                    )}
+                  </div>
                 </article>
               )
             })}
             {isSending ? (
               <article className="team-chat-message team-chat-message-own chat-message-pending">
-                <div className="chat-message-head">
-                  <p className="table-primary">{session?.user.display_name}</p>
-                  <p className="table-secondary">Sending…</p>
-                </div>
                 <p className="chat-message-copy">{draft.trim()}</p>
+                <div className="message-bubble-meta">
+                  <span>Sending…</span>
+                  <span className="message-receipt">✓</span>
+                </div>
               </article>
             ) : null}
             <div ref={threadEndRef} />

@@ -315,7 +315,7 @@ export function DashboardPage() {
     () => [
       {
         title: 'Ask Izge',
-        detail: 'Get a grounded answer from company memory and the artifacts you can access.',
+        detail: 'Ask questions grounded in your permitted artifacts.',
         meta: totalMemoryObjects > 0 ? `${totalMemoryObjects} memory object${totalMemoryObjects === 1 ? '' : 's'} available` : 'Works best after evidence is processed',
         to: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
         cta: 'Ask now',
@@ -324,7 +324,7 @@ export function DashboardPage() {
       },
       {
         title: 'Continue team chat',
-        detail: 'Coordinate with coworkers without leaving the workspace where evidence lives.',
+        detail: 'Message coworkers without leaving the workspace.',
         meta: 'Company conversations stay in context',
         to: '/team-chat',
         cta: 'Open chat',
@@ -333,7 +333,7 @@ export function DashboardPage() {
       },
       {
         title: 'Open evidence',
-        detail: 'Preview source material, check status, and add useful company context.',
+        detail: 'Preview accessible sources and check their status.',
         meta: `${accessibleArtifacts.length} accessible source${accessibleArtifacts.length === 1 ? '' : 's'}`,
         to: '/artifacts',
         cta: 'View evidence',
@@ -342,7 +342,7 @@ export function DashboardPage() {
       },
       {
         title: 'Inspect graph',
-        detail: signalRows[0]?.title ?? 'Explore how decisions, assumptions, commitments, and evidence connect.',
+        detail: signalRows[0]?.title ?? 'Explore linked decisions, assumptions, and evidence.',
         meta: signalRows.length > 0 ? `${signalRows.length} focus item${signalRows.length === 1 ? '' : 's'}` : 'No urgent signals yet',
         to: signalRows[0]?.to ?? '/graph',
         cta: signalRows.length > 0 ? 'Review signal' : 'Open graph',
@@ -365,10 +365,10 @@ export function DashboardPage() {
           <div className="employee-hero-copy">
             <p className="eyebrow">Employee workspace</p>
             <h1 id="employee-home-title" className="brand-title">
-              Finish work with company memory.
+              Get work done with company memory.
             </h1>
             <p className="page-description">
-              Ask Izge, open evidence, and coordinate with your team using only the company artifacts you are allowed to access.
+              Ask, check evidence, or message coworkers. Izge uses only the artifacts you are allowed to access.
             </p>
             <div className="employee-hero-actions">
               <Link className="primary-button" to={`/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`}>
@@ -388,7 +388,10 @@ export function DashboardPage() {
               </div>
               <StatusBadge value={employeeReadiness.status} />
             </div>
-            <p className="muted-copy">{employeeReadiness.detail}</p>
+            <details className="employee-focus-details">
+              <summary>Details</summary>
+              <p className="muted-copy">{employeeReadiness.detail}</p>
+            </details>
             <Link className="secondary-button" to={employeeReadiness.to}>
               {employeeReadiness.actionLabel}
             </Link>
@@ -426,7 +429,7 @@ export function DashboardPage() {
         <div className="employee-content-grid">
           <Panel
             title="Work queue"
-            description="Signals and next actions that can change what the team should do next."
+            description="Current signals that need attention."
             aside={
               <Link className="secondary-button" to="/graph">
                 Open graph
@@ -437,13 +440,18 @@ export function DashboardPage() {
             {!isLoading && signalRows.length === 0 ? (
               <EmptyState
                 title="No active focus items"
-                description="When Izge finds contradictions, drift, or next actions in accessible evidence, they will appear here."
+                description="Signals appear here when accessible evidence needs action."
               />
             ) : null}
             {signalRows.length > 0 ? (
               <div className="employee-work-list">
                 {signalRows.slice(0, 5).map((row) => (
-                  <Link key={row.id} className={`employee-work-item employee-work-item-${row.tone}`} to={row.to ?? '/graph'}>
+                  <Link
+                    key={row.id}
+                    className={`employee-work-item employee-work-item-${row.tone}`}
+                    to={row.to ?? '/graph'}
+                    title={`${row.title}. ${row.summary}. ${row.detail}`}
+                  >
                     <span className="employee-work-kind">{row.type}</span>
                     <span className="employee-work-copy">
                       <span className="table-primary">{row.title}</span>
@@ -461,7 +469,7 @@ export function DashboardPage() {
 
           <Panel
             title="Recent evidence"
-            description="Accessible company sources you can open before asking or answering."
+            description="Accessible company sources."
             aside={
               <Link className="secondary-button" to="/artifacts">
                 View all

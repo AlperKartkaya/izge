@@ -39,6 +39,14 @@ interface ChatMessage {
   relatedSignals?: SignalRead[]
 }
 
+interface ChatThread {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  messages: ChatMessage[]
+}
+
 function createMessageId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
@@ -46,14 +54,76 @@ function createMessageId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-function chatStorageKey(
+function legacyChatStorageKey(
   workspaceId: string | undefined,
   userId: string | undefined,
 ): string {
   return `izge-chat-session:${workspaceId || 'workspace'}:${userId || 'user'}`
 }
 
-function loadStoredMessages(storageKey: string): ChatMessage[] {
+function chatThreadsStorageKey(
+  workspaceId: string | undefined,
+  userId: string | undefined,
+): string {
+  return `izge-chat-threads:${workspaceId || 'workspace'}:${userId || 'user'}`
+}
+
+function isValidChatMessage(
+  message: ChatMessage | null | undefined,
+): message is ChatMessage {
+  return Boolean(
+    message &&
+      (message.role === 'user' || message.role === 'assistant') &&
+      typeof message.content === 'string',
+  )
+}
+
+function titleFromMessages(messages: ChatMessage[]): string {
+  const firstUserMessage = messages.find((message) => message.role === 'user')
+  const rawTitle = firstUserMessage?.content.trim() || 'New chat'
+  return rawTitle.length > 48 ? `${rawTitle.slice(0, 47)}…` : rawTitle
+}
+
+function createChatThread(messages: ChatMessage[] = []): ChatThread {
+  const now = new Date().toISOString()
+  return {
+    id: createMessageId(),
+    title: titleFromMessages(messages),
+    createdAt: messages[0]?.createdAt ?? now,
+    updatedAt: messages.at(-1)?.createdAt ?? now,
+    messages,
+  }
+}
+
+function normalizeThread(
+  rawThread: Partial<ChatThread> | null | undefined,
+): ChatThread | null {
+  if (!rawThread || !Array.isArray(rawThread.messages)) {
+    return null
+  }
+  const messages = rawThread.messages.filter(isValidChatMessage)
+  return {
+    id: typeof rawThread.id === 'string' ? rawThread.id : createMessageId(),
+    title:
+      typeof rawThread.title === 'string' && rawThread.title.trim()
+        ? rawThread.title.trim()
+        : titleFromMessages(messages),
+    createdAt:
+      typeof rawThread.createdAt === 'string'
+        ? rawThread.createdAt
+        : messages[0]?.createdAt ?? new Date().toISOString(),
+    updatedAt:
+      typeof rawThread.updatedAt === 'string'
+        ? rawThread.updatedAt
+        : messages.at(-1)?.createdAt ?? new Date().toISOString(),
+    messages,
+  }
+}
+
+function loadStoredThreads(
+  storageKey: string,
+  legacyStorageKey: string,
+): ChatThread[] {
   if (typeof window === 'undefined') {
     return []
   }
@@ -61,32 +131,47 @@ function loadStoredMessages(storageKey: string): ChatMessage[] {
   try {
     const parsed = JSON.parse(
       window.localStorage.getItem(storageKey) || '[]',
+    ) as Partial<ChatThread>[]
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed
+        .map(normalizeThread)
+        .filter((thread): thread is ChatThread => thread !== null)
+    }
+  } catch {
+    // Fall through to legacy session migration.
+  }
+
+  try {
+    const legacyMessages = JSON.parse(
+      window.localStorage.getItem(legacyStorageKey) || '[]',
     ) as ChatMessage[]
-    return Array.isArray(parsed)
-      ? parsed.filter(
-          (message) =>
-            message &&
-            (message.role === 'user' || message.role === 'assistant') &&
-            typeof message.content === 'string',
-        )
+    const messages = Array.isArray(legacyMessages)
+      ? legacyMessages.filter(isValidChatMessage)
       : []
+    return messages.length > 0 ? [createChatThread(messages)] : []
   } catch {
     return []
   }
 }
 
-function persistStoredMessages(storageKey: string, messages: ChatMessage[]) {
+function persistStoredThreads(storageKey: string, threads: ChatThread[]) {
   if (typeof window === 'undefined') {
     return
   }
 
-  const compactMessages = messages.slice(-24).map((message) => ({
-    ...message,
-    supportingEvidence: message.supportingEvidence?.slice(0, 6),
-    supportingNodes: message.supportingNodes?.slice(0, 8),
-    relatedSignals: message.relatedSignals?.slice(0, 4),
-  }))
-  window.localStorage.setItem(storageKey, JSON.stringify(compactMessages))
+  const compactThreads = threads
+    .slice(0, 16)
+    .map((thread) => ({
+      ...thread,
+      title: thread.title || titleFromMessages(thread.messages),
+      messages: thread.messages.slice(-24).map((message) => ({
+        ...message,
+        supportingEvidence: message.supportingEvidence?.slice(0, 6),
+        supportingNodes: message.supportingNodes?.slice(0, 8),
+        relatedSignals: message.relatedSignals?.slice(0, 4),
+      })),
+    }))
+  window.localStorage.setItem(storageKey, JSON.stringify(compactThreads))
 }
 
 function buildSessionAwareQuery(
@@ -232,12 +317,23 @@ export function QueryPage() {
   const { session } = useAuth()
   const promptFromUrl = searchParams.get('prompt')
   const storageKey = useMemo(
-    () => chatStorageKey(session?.user.workspace_id, session?.user.user_id),
+    () =>
+      chatThreadsStorageKey(session?.user.workspace_id, session?.user.user_id),
     [session?.user.user_id, session?.user.workspace_id],
   )
-  const [messages, setMessages] = useState<ChatMessage[]>(() =>
-    loadStoredMessages(storageKey),
+  const legacyStorageKey = useMemo(
+    () =>
+      legacyChatStorageKey(session?.user.workspace_id, session?.user.user_id),
+    [session?.user.user_id, session?.user.workspace_id],
   )
+  const [threads, setThreads] = useState<ChatThread[]>(() => {
+    const storedThreads = loadStoredThreads(storageKey, legacyStorageKey)
+    return storedThreads.length > 0 ? storedThreads : [createChatThread()]
+  })
+  const [activeThreadId, setActiveThreadId] = useState(
+    () => threads[0]?.id ?? '',
+  )
+  const [historyCollapsed, setHistoryCollapsed] = useState(false)
   const [queryDraftState, setQueryDraftState] = useState({
     sourcePrompt: promptFromUrl,
     text: promptFromUrl || '',
@@ -259,6 +355,14 @@ export function QueryPage() {
       ? queryDraftState.text
       : promptFromUrl || queryDraftState.text
 
+  const activeThread = useMemo(
+    () =>
+      threads.find((thread) => thread.id === activeThreadId) ??
+      threads[0] ??
+      null,
+    [activeThreadId, threads],
+  )
+  const messages = useMemo(() => activeThread?.messages ?? [], [activeThread])
   const assistantMessages = useMemo(
     () => messages.filter((message) => message.role === 'assistant'),
     [messages],
@@ -273,8 +377,30 @@ export function QueryPage() {
   const llmCopy = llmStatusCopy(llmStatus, llmStatusError)
 
   useEffect(() => {
-    persistStoredMessages(storageKey, messages)
-  }, [messages, storageKey])
+    const storedThreads = loadStoredThreads(storageKey, legacyStorageKey)
+    const nextThreads =
+      storedThreads.length > 0 ? storedThreads : [createChatThread()]
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) {
+        return
+      }
+      setThreads(nextThreads)
+      setActiveThreadId(nextThreads[0]?.id ?? '')
+      setActiveAssistantId(null)
+      setActiveTrace(null)
+      setActiveStageRuns([])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [legacyStorageKey, storageKey])
+
+  useEffect(() => {
+    if (threads.length > 0) {
+      persistStoredThreads(storageKey, threads)
+    }
+  }, [storageKey, threads])
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ block: 'end' })
@@ -353,6 +479,50 @@ export function QueryPage() {
     }
   }, [activeAssistant?.queryRunId, session?.token])
 
+  function updateActiveThreadMessages(
+    updater: (currentMessages: ChatMessage[]) => ChatMessage[],
+  ) {
+    setThreads((currentThreads) =>
+      currentThreads.map((thread) => {
+        if (thread.id !== activeThreadId) {
+          return thread
+        }
+        const nextMessages = updater(thread.messages)
+        return {
+          ...thread,
+          title: titleFromMessages(nextMessages),
+          updatedAt: nextMessages.at(-1)?.createdAt ?? new Date().toISOString(),
+          messages: nextMessages,
+        }
+      }),
+    )
+  }
+
+  function selectThread(threadId: string) {
+    setActiveThreadId(threadId)
+    setActiveAssistantId(null)
+    setActiveTrace(null)
+    setActiveStageRuns([])
+  }
+
+  function handleNewChat() {
+    const nextThread = createChatThread()
+    setThreads((currentThreads) => [nextThread, ...currentThreads])
+    selectThread(nextThread.id)
+    setQueryDraftState({ sourcePrompt: promptFromUrl, text: '' })
+    setError(null)
+  }
+
+  function handleDeleteThread(threadId: string) {
+    const remainingThreads = threads.filter((thread) => thread.id !== threadId)
+    const nextThreads =
+      remainingThreads.length > 0 ? remainingThreads : [createChatThread()]
+    setThreads(nextThreads)
+    if (threadId === activeThreadId) {
+      selectThread(nextThreads[0].id)
+    }
+  }
+
   const handleSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault()
     if (!session?.token) {
@@ -374,7 +544,7 @@ export function QueryPage() {
     const previousMessages = messages
     const queryText = buildSessionAwareQuery(previousMessages, trimmedQuestion)
 
-    setMessages((current) => [...current, userMessage])
+    updateActiveThreadMessages((current) => [...current, userMessage])
     setQueryDraftState({ sourcePrompt: promptFromUrl, text: '' })
     setIsSubmitting(true)
     setError(null)
@@ -382,10 +552,10 @@ export function QueryPage() {
     try {
       const result = await api.submitQuery(session.token, queryText)
       const assistantMessage = resultToAssistantMessage(result)
-      setMessages((current) => [...current, assistantMessage])
+      updateActiveThreadMessages((current) => [...current, assistantMessage])
       setActiveAssistantId(assistantMessage.id)
     } catch (caughtError) {
-      setMessages((current) =>
+      updateActiveThreadMessages((current) =>
         current.filter((message) => message.id !== userMessage.id),
       )
       setQueryDraftState({
@@ -402,14 +572,6 @@ export function QueryPage() {
     }
   }
 
-  function handleClearChat() {
-    setMessages([])
-    setActiveAssistantId(null)
-    setActiveTrace(null)
-    setActiveStageRuns([])
-    setError(null)
-  }
-
   return (
     <div className="full-chat-page assistant-clean-page">
       <header className="assistant-topbar assistant-clean-topbar">
@@ -417,8 +579,7 @@ export function QueryPage() {
           <p className="eyebrow">Company assistant</p>
           <h2 className="page-title">Ask Izge</h2>
           <p className="page-description">
-            Ask about company documents, decisions, risks, owners, and
-            follow-ups.
+            Answers use only the company memory your account can access.
           </p>
         </div>
         <div className="assistant-status-row" aria-label="Assistant controls">
@@ -432,8 +593,8 @@ export function QueryPage() {
           <button
             type="button"
             className="secondary-button"
-            onClick={handleClearChat}
-            disabled={messages.length === 0 || isSubmitting}
+            onClick={handleNewChat}
+            disabled={isSubmitting}
           >
             New chat
           </button>
@@ -442,7 +603,55 @@ export function QueryPage() {
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
-      <div className="assistant-workspace assistant-workspace-clean">
+      <div className={historyCollapsed ? 'assistant-workspace assistant-workspace-history-collapsed' : 'assistant-workspace assistant-workspace-with-history'}>
+        <aside className="assistant-history-sidebar panel-subtle" aria-label="Saved assistant chats">
+          <div className="assistant-history-head">
+            <div>
+              <p className="section-label">History</p>
+              {!historyCollapsed ? (
+                <p className="table-secondary">{threads.length} saved chat{threads.length === 1 ? '' : 's'}</p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={historyCollapsed ? 'Show chat history' : 'Hide chat history'}
+              onClick={() => setHistoryCollapsed((current) => !current)}
+            >
+              {historyCollapsed ? '›' : '‹'}
+            </button>
+          </div>
+          {!historyCollapsed ? (
+            <div className="assistant-history-list">
+              {threads.map((thread) => (
+                <article
+                  key={thread.id}
+                  className={thread.id === activeThreadId ? 'assistant-history-item assistant-history-item-active' : 'assistant-history-item'}
+                >
+                  <button
+                    type="button"
+                    className="assistant-history-select"
+                    onClick={() => selectThread(thread.id)}
+                  >
+                    <span className="table-primary">{thread.title}</span>
+                    <span className="table-secondary">
+                      {thread.messages.length} message{thread.messages.length === 1 ? '' : 's'} · {formatDateTime(thread.updatedAt)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="table-action-link assistant-history-delete"
+                    onClick={() => handleDeleteThread(thread.id)}
+                    disabled={isSubmitting}
+                    aria-label={`Delete chat ${thread.title}`}
+                  >
+                    Delete
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </aside>
         <section
           className="assistant-main assistant-main-clean panel-subtle"
           aria-label="Assistant conversation"
@@ -452,8 +661,8 @@ export function QueryPage() {
               <div className="chat-empty-state assistant-empty-state panel-subtle">
                 <p className="table-primary">What do you need to know?</p>
                 <p className="muted-copy">
-                  Izge answers from the company artifacts and memory records
-                  your account can access.
+                  Ask a short work question. Open details only when you need
+                  sources or trace.
                 </p>
                 <div className="assistant-empty-prompts">
                   {workspaceStarterPrompts.slice(0, 3).map((prompt) => (
@@ -535,24 +744,31 @@ export function QueryPage() {
 
                         {message.supportingEvidence &&
                         message.supportingEvidence.length > 0 ? (
-                          <ol className="chat-citations">
-                            {message.supportingEvidence
-                              .slice(0, 3)
-                              .map((evidence) => (
-                                <li
-                                  key={`${message.id}-${evidence.artifact_id}-${evidence.chunk_id || evidence.excerpt.slice(0, 24)}`}
-                                >
-                                  <strong>{evidence.artifact_title}</strong>
-                                  <span>{evidence.excerpt}</span>
-                                </li>
-                              ))}
-                          </ol>
+                          <details className="chat-detail-disclosure">
+                            <summary>
+                              Sources · {message.supportingEvidence.length}
+                            </summary>
+                            <ol className="chat-citations">
+                              {message.supportingEvidence
+                                .slice(0, 3)
+                                .map((evidence) => (
+                                  <li
+                                    key={`${message.id}-${evidence.artifact_id}-${evidence.chunk_id || evidence.excerpt.slice(0, 24)}`}
+                                  >
+                                    <strong>{evidence.artifact_title}</strong>
+                                    <span>{evidence.excerpt}</span>
+                                  </li>
+                                ))}
+                            </ol>
+                          </details>
                         ) : null}
 
                         {message.recommendedNextActions &&
                         message.recommendedNextActions.length > 0 ? (
-                          <div className="assistant-next-actions">
-                            <p className="section-label">Next actions</p>
+                          <details className="chat-detail-disclosure">
+                            <summary>
+                              Next actions · {message.recommendedNextActions.length}
+                            </summary>
                             <ul className="bullet-list compact-list">
                               {message.recommendedNextActions
                                 .slice(0, 3)
@@ -560,7 +776,7 @@ export function QueryPage() {
                                   <li key={action}>{action}</li>
                                 ))}
                             </ul>
-                          </div>
+                          </details>
                         ) : null}
 
                         {inspectorOpen ? (

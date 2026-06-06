@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -34,12 +35,15 @@ def _clean_thread_title(value: str | None, thread_id: str) -> str:
 
 def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, User]) -> TeamChatMessageRead:
     author = author_by_id.get(message.author_user_id)
+    author_role: Literal["Admin", "Member"] = "Member"
+    if author and author.role == "Admin":
+        author_role = "Admin"
     return TeamChatMessageRead(
         message_id=message.message_id,
         workspace_id=message.workspace_id,
         author_user_id=message.author_user_id,
         author_display_name=author.display_name if author else "Unknown user",
-        author_role=author.role if author and author.role in {"Admin", "Member"} else "Member",
+        author_role=author_role,
         body=message.body,
         message_metadata=message.message_metadata or {},
         created_at=message.created_at,
@@ -92,6 +96,7 @@ def create_team_chat_message(
             "channel": thread_id,
             "thread_id": thread_id,
             "thread_title": thread_title,
+            "thread_kind": payload.thread_kind,
             "source": "izge-product",
         },
     )
@@ -105,6 +110,6 @@ def create_team_chat_message(
         event_type="TEAM_CHAT_MESSAGE_CREATED",
         target_type="company_chat_message",
         target_id=message.message_id,
-        event_metadata={"channel": thread_id, "thread_id": thread_id, "thread_title": thread_title, "body_length": len(body)},
+        event_metadata={"channel": thread_id, "thread_id": thread_id, "thread_title": thread_title, "thread_kind": payload.thread_kind, "body_length": len(body)},
     )
     return _message_read_model(message, {current_user.user_id: current_user})

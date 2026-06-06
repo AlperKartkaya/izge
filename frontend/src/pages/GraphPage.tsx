@@ -327,6 +327,9 @@ export function GraphPage() {
   }
 
   function handleGraphWheel(event: ReactWheelEvent<SVGSVGElement>) {
+    if (!event.ctrlKey && !event.metaKey) {
+      return
+    }
     event.preventDefault()
     const bounds = event.currentTarget.getBoundingClientRect()
     const center = {
@@ -494,7 +497,7 @@ export function GraphPage() {
                   Reset
                 </button>
                 <span className="graph-toolbar-hint">
-                  Wheel to zoom. Drag the canvas to move.
+                  Pinch to zoom. Drag the canvas to move.
                 </span>
               </div>
               <svg
