@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import { canonicalDemoPrompt } from '../lib/demo'
+import { canonicalWorkspacePrompt } from '../lib/workspacePrompts'
 import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { ArtifactRead, AssumptionDriftItem, ContradictionItem, GraphSummary, NextActionSignalItem, SignalRead } from '../lib/types'
 
@@ -118,7 +118,7 @@ export function DashboardPage() {
   const artifactCount = summary?.artifact_count ?? artifacts.length
   const reviewedRatio = artifactCount > 0 ? reviewedArtifactCount / artifactCount : 0
 
-  const demoReadiness = useMemo(() => {
+  const workspaceReadiness = useMemo(() => {
     if (!latestCompletedArtifact) {
       return {
         status: 'Needs source',
@@ -160,7 +160,7 @@ export function DashboardPage() {
       title: 'Ready for a grounded question',
       detail: 'Source, reconstructed memory, review state, and durable signals are present.',
       actionLabel: 'Ask workspace question',
-      actionTo: `/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`,
+      actionTo: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
     }
   }, [isAdmin, latestCompletedArtifact, reviewQueue.length, topPersistedSignal, totalMemoryObjects])
 
@@ -222,9 +222,9 @@ export function DashboardPage() {
         step: '04',
         label: 'Use',
         title: topPersistedSignal?.title ?? 'Ask an evidence-backed question',
-        detail: topPersistedSignal ? 'Open the newest persisted signal or ask the canonical workspace question.' : canonicalDemoPrompt,
+        detail: topPersistedSignal ? 'Open the newest persisted signal or ask the canonical workspace question.' : canonicalWorkspacePrompt,
         status: topPersistedSignal ? formatLabel(topPersistedSignal.signal_type) : 'Question',
-        to: topPersistedSignal ? `/signals/${topPersistedSignal.signal_id}` : `/query?prompt=${encodeURIComponent(canonicalDemoPrompt)}`,
+        to: topPersistedSignal ? `/signals/${topPersistedSignal.signal_id}` : `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
       },
     ],
     [isAdmin, latestCompletedArtifact, reviewQueue.length, topPersistedSignal, totalMemoryObjects],
@@ -294,8 +294,8 @@ export function DashboardPage() {
             A practical operating view for source intake, evidence governance, memory reconstruction, signal review, and grounded answers.
           </p>
           <div className="inline-actions">
-            <Link className="primary-button" to={demoReadiness.actionTo}>
-              {demoReadiness.actionLabel}
+            <Link className="primary-button" to={workspaceReadiness.actionTo}>
+              {workspaceReadiness.actionLabel}
             </Link>
           </div>
         </div>
@@ -304,11 +304,11 @@ export function DashboardPage() {
           <div className="readiness-header">
             <div>
               <p className="section-label">Current state</p>
-              <p className="table-primary">{demoReadiness.title}</p>
+              <p className="table-primary">{workspaceReadiness.title}</p>
             </div>
-            <StatusBadge value={demoReadiness.status} />
+            <StatusBadge value={workspaceReadiness.status} />
           </div>
-          <p className="muted-copy">{demoReadiness.detail}</p>
+          <p className="muted-copy">{workspaceReadiness.detail}</p>
           <dl className="dashboard-meta-list">
             <div>
               <dt>User</dt>
@@ -347,7 +347,7 @@ export function DashboardPage() {
           title="Operating path"
           description="The next operational step should be clear without forcing employees through a wall of similar cards."
           aside={
-            <Link className="secondary-button" to={demoReadiness.actionTo}>
+            <Link className="secondary-button" to={workspaceReadiness.actionTo}>
               Continue
             </Link>
           }

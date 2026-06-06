@@ -1,28 +1,31 @@
+x-izge-backend-common: &izge-backend-common
+  build:
+    context: ./backend
+  environment:
+    IZGE_SQLITE_PATH: /data/izge.db
+    IZGE_STORAGE_ROOT: /data/storage
+    IZGE_PASTED_TEXT_ROOT: /data/pasted
+    IZGE_BOOTSTRAP_ADMIN_CREDENTIALS_PATH: /data/bootstrap_admin_credentials.json
+    IZGE_DEFAULT_ADMIN_EMAIL: admin@example.com
+    IZGE_DEFAULT_ADMIN_PASSWORD: change-me-admin
+    IZGE_SYNC_DEFAULT_ADMIN_PASSWORD: "true"
+    IZGE_LOCAL_LLM_ENABLED: "${IZGE_LOCAL_LLM_ENABLED:-true}"
+    IZGE_LOCAL_LLM_BASE_URL: "${IZGE_LOCAL_LLM_BASE_URL:-http://host.docker.internal:11434}"
+    IZGE_LOCAL_LLM_MODEL: "${IZGE_LOCAL_LLM_MODEL:-qwen3.5:4b}"
+    IZGE_LOCAL_LLM_TIMEOUT_SECONDS: "${IZGE_LOCAL_LLM_TIMEOUT_SECONDS:-60}"
+    IZGE_LLM_QUERY_ROUTING_ENABLED: "${IZGE_LLM_QUERY_ROUTING_ENABLED:-true}"
+    IZGE_LLM_ANSWER_SYNTHESIS_ENABLED: "${IZGE_LLM_ANSWER_SYNTHESIS_ENABLED:-true}"
+    IZGE_LLM_SIGNAL_EXPLANATION_ENABLED: "${IZGE_LLM_SIGNAL_EXPLANATION_ENABLED:-true}"
+  volumes:
+    - izge_data:/data
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
 services:
   backend:
-    build:
-      context: ./backend
-    environment:
-      IZGE_SQLITE_PATH: /data/izge.db
-      IZGE_STORAGE_ROOT: /data/storage
-      IZGE_PASTED_TEXT_ROOT: /data/pasted
-      IZGE_BOOTSTRAP_ADMIN_CREDENTIALS_PATH: /data/bootstrap_admin_credentials.json
-      IZGE_DEFAULT_ADMIN_EMAIL: admin@example.com
-      IZGE_DEFAULT_ADMIN_PASSWORD: change-me-admin
-      IZGE_SYNC_DEFAULT_ADMIN_PASSWORD: "true"
-      IZGE_LOCAL_LLM_ENABLED: "${IZGE_LOCAL_LLM_ENABLED:-true}"
-      IZGE_LOCAL_LLM_BASE_URL: "${IZGE_LOCAL_LLM_BASE_URL:-http://host.docker.internal:11434}"
-      IZGE_LOCAL_LLM_MODEL: "${IZGE_LOCAL_LLM_MODEL:-qwen3.5:4b}"
-      IZGE_LOCAL_LLM_TIMEOUT_SECONDS: "${IZGE_LOCAL_LLM_TIMEOUT_SECONDS:-60}"
-      IZGE_LLM_QUERY_ROUTING_ENABLED: "${IZGE_LLM_QUERY_ROUTING_ENABLED:-true}"
-      IZGE_LLM_ANSWER_SYNTHESIS_ENABLED: "${IZGE_LLM_ANSWER_SYNTHESIS_ENABLED:-true}"
-      IZGE_LLM_SIGNAL_EXPLANATION_ENABLED: "${IZGE_LLM_SIGNAL_EXPLANATION_ENABLED:-true}"
-    volumes:
-      - izge_data:/data
+    <<: *izge-backend-common
     ports:
       - "127.0.0.1:8000:8000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"]
       interval: 10s
@@ -31,28 +34,8 @@ services:
       start_period: 10s
 
   worker:
-    build:
-      context: ./backend
+    <<: *izge-backend-common
     command: ["sh", "-c", "python -m app.migration_tools upgrade && python -m app.worker --worker-id docker-worker --poll-interval-seconds 2 --lease-seconds 120"]
-    environment:
-      IZGE_SQLITE_PATH: /data/izge.db
-      IZGE_STORAGE_ROOT: /data/storage
-      IZGE_PASTED_TEXT_ROOT: /data/pasted
-      IZGE_BOOTSTRAP_ADMIN_CREDENTIALS_PATH: /data/bootstrap_admin_credentials.json
-      IZGE_DEFAULT_ADMIN_EMAIL: admin@example.com
-      IZGE_DEFAULT_ADMIN_PASSWORD: change-me-admin
-      IZGE_SYNC_DEFAULT_ADMIN_PASSWORD: "true"
-      IZGE_LOCAL_LLM_ENABLED: "${IZGE_LOCAL_LLM_ENABLED:-true}"
-      IZGE_LOCAL_LLM_BASE_URL: "${IZGE_LOCAL_LLM_BASE_URL:-http://host.docker.internal:11434}"
-      IZGE_LOCAL_LLM_MODEL: "${IZGE_LOCAL_LLM_MODEL:-qwen3.5:4b}"
-      IZGE_LOCAL_LLM_TIMEOUT_SECONDS: "${IZGE_LOCAL_LLM_TIMEOUT_SECONDS:-60}"
-      IZGE_LLM_QUERY_ROUTING_ENABLED: "${IZGE_LLM_QUERY_ROUTING_ENABLED:-true}"
-      IZGE_LLM_ANSWER_SYNTHESIS_ENABLED: "${IZGE_LLM_ANSWER_SYNTHESIS_ENABLED:-true}"
-      IZGE_LLM_SIGNAL_EXPLANATION_ENABLED: "${IZGE_LLM_SIGNAL_EXPLANATION_ENABLED:-true}"
-    volumes:
-      - izge_data:/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       backend:
         condition: service_healthy

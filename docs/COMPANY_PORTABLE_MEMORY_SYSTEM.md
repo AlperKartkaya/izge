@@ -1,6 +1,6 @@
 # Company-portable memory system refactor
 
-This document captures the implementation contract for turning Izge from a single demo into a company-portable memory system that can run on any customer-controlled machine while preserving the PRD promises: evidence-backed answers, contradiction/drift detection, explicit memory organization, and governed AI assistance.
+This document captures the implementation contract for turning Izge into a company-portable memory system that can run on any customer-controlled machine while preserving the PRD promises: evidence-backed answers, contradiction/drift detection, explicit memory organization, and governed AI assistance.
 
 ## Target end state
 
@@ -10,7 +10,7 @@ Izge should be deployable for any company as a self-contained workspace with:
 2. **Temporal knowledge graph** — extracted decisions, assumptions, constraints, outcomes, and commitments become claim occurrences that can be active, contested, stale, superseded, or first-seen across time.
 3. **Typed context assembly** — query-time context is assembled from typed memory objects, graph neighbors, selected evidence, omitted-evidence reasons, and uncertainty notes instead of handing raw documents to an LLM.
 4. **Bounded internal orchestration** — an orchestrator may divide work into specialist stages, but each stage receives a typed context packet and returns cited output that passes deterministic provenance gates.
-5. **Demo UI/storytelling** — the app shows the memory file-system, graph, orchestration, evidence, and scenario impact surfaces directly instead of asking viewers to infer them from backend internals.
+5. **Product UI/storytelling** — the app shows the memory file-system, graph, orchestration, evidence, and scenario impact surfaces directly instead of asking viewers to infer them from backend internals.
 6. **Bounded scenario support** — scenario questions identify which known assumptions, commitments, constraints, decisions, and outcomes need review; they do not fabricate forecasts.
 7. **Portable runtime** — Docker Compose starts the backend, frontend, SQLite database, persisted artifact storage, and reverse proxy on a clean machine.
 
@@ -208,7 +208,7 @@ Run `ollama pull qwen3.5:4b` before `docker compose up --build`, or override `IZ
 - **Memory FS** — shows artifacts, safe logical locators, chunk/memory/signal counts, trust boundaries, database organization, and step-by-step company setup guidance.
 - **Graph** — includes a temporal knowledge graph panel showing persisted claim families, claim occurrences, validity windows, and temporal edge count.
 - **Orchestrate** — shows bounded stage catalog, spawn policy, current runtime boundary, trace reflection counts, stage packet IDs, bounded scenario impact lookup, scenario run history, and replay verdicts.
-- **Readiness** — maps the website/PRD promises to current demo proof, scores target coverage, shows workspace counts, and ranks remaining implementation gaps.
+- **Readiness** — maps the website/PRD promises to current product proof, scores target coverage, shows workspace counts, and ranks remaining implementation gaps.
 - **Query traces** — include typed context assembly and bounded orchestration trace steps.
 
 ## Bounded scenario templates
@@ -221,7 +221,7 @@ Scenario support is now a template-guided impact lookup. It classifies the scena
 - **Compliance, security, or audit requirement** — security approval, compliance, privacy, legal, audit, and regulatory-risk changes.
 - **Org, ownership, or staffing change** — owner, team, reorg, support, staffing, process, and handoff changes.
 
-The demo UI reads template prompts from `/api/scenario/templates` so the visible company lenses stay aligned with the backend catalog. Every scenario response includes a `scenario_context_packet.v1` with:
+The scenario UI reads template prompts from `/api/scenario/templates` so the visible company lenses stay aligned with the backend catalog. Every scenario response includes a `scenario_context_packet.v1` with:
 
 - packet id derived from scenario hash, input snapshot, classifier version, template-catalog version, structured deterministic ranking recipe, selected memory IDs, candidate snapshot hash, and budget limit;
 - primary template plus candidate template lenses when a scenario spans multiple domains;
@@ -279,7 +279,7 @@ In addition to the original lineage, contradiction, drift, next-action, proactiv
 The response includes:
 
 - `target_score` — average readiness across implemented, partial, and planned areas;
-- `areas[]` — each website/PRD promise, current demo reflection, proof routes, UI surfaces, proof signals, remaining work, and risk notes;
+- `areas[]` — each website/PRD promise, current product reflection, proof routes, UI surfaces, proof signals, remaining work, and risk notes;
 - `current_workspace_snapshot` — safe counts for artifacts, chunks, memory objects, graph edges, claim families, claim occurrences, signals, query traces, stage packet traces, stage runs, scenario runs, scenario templates, and local/private AI feature flags/status;
 - `next_best_passes` — the implementation order that keeps evidence substrate and provenance gates ahead of multi-agent runtime expansion.
 
@@ -310,7 +310,7 @@ This endpoint now treats the local bounded parallel stage-packet runtime, DB-bac
 - Continue executing independent read-only stages through the bounded local parallel stage-packet pool.
 - Extend the DB-backed worker daemon with metrics, bounded retry/backoff, dead-letter handling, and safe multi-worker deployment only after preserving typed context packets and deterministic verifier behavior.
 - Let the orchestrator compare stage outputs, but keep provenance verifier deterministic.
-- Add replay mode for demos and audits.
+- Add replay mode for audits and operator rehearsals.
 
 ### Phase 5 — company deployment hardening
 

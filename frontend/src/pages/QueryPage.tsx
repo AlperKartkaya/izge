@@ -9,7 +9,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import { starterPrompts } from '../lib/demo'
+import { workspaceStarterPrompts } from '../lib/workspacePrompts'
 import { formatDateTime, formatLabel } from '../lib/format'
 import type {
   EvidenceReference,
@@ -456,7 +456,7 @@ export function QueryPage() {
                   your account can access.
                 </p>
                 <div className="assistant-empty-prompts">
-                  {starterPrompts.slice(0, 3).map((prompt) => (
+                  {workspaceStarterPrompts.slice(0, 3).map((prompt) => (
                     <button
                       key={prompt}
                       type="button"

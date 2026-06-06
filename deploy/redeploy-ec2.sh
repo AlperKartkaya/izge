@@ -207,7 +207,7 @@ curl -fsS --retry 10 --retry-connrefused --retry-delay 2 -H 'Host: app.izge.dev'
 if [[ "$RUN_EVAL" == "1" ]]; then
   log "Running isolated backend seed eval"
   if ! sudo -u izge bash -lc "cd '$REMOTE_APP_ROOT/backend' && /srv/izge/venv/bin/python -m manual_eval.run_isolated_seed_eval"; then
-    warn "Seed eval failed. Deploy is still published; inspect backend logs before demo."
+    warn "Seed eval failed. Deploy is still published; inspect backend logs before relying on it."
     exit 1
   fi
 fi

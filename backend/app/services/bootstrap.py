@@ -16,32 +16,32 @@ from app.services.audit import log_event
 from app.services.security import hash_password
 
 
-DEMO_EMPLOYEE_1_PASSWORD = "change-me-employee1"
-DEMO_EMPLOYEE_2_PASSWORD = "change-me-employee2"
-DEMO_EMPLOYEE_3_PASSWORD = "change-me-employee3"
+DEFAULT_EMPLOYEE_1_PASSWORD = "change-me-employee1"
+DEFAULT_EMPLOYEE_2_PASSWORD = "change-me-employee2"
+DEFAULT_EMPLOYEE_3_PASSWORD = "change-me-employee3"
 
-DEMO_USERS = [
+DEFAULT_EMPLOYEE_USERS = [
     {
         "display_name": "Employee 1",
         "email": "employee1@example.com",
-        "password": DEMO_EMPLOYEE_1_PASSWORD,
+        "password": DEFAULT_EMPLOYEE_1_PASSWORD,
         "role": "Member",
     },
     {
         "display_name": "Employee 2",
         "email": "employee2@example.com",
-        "password": DEMO_EMPLOYEE_2_PASSWORD,
+        "password": DEFAULT_EMPLOYEE_2_PASSWORD,
         "role": "Member",
     },
     {
         "display_name": "Employee 3",
         "email": "employee3@example.com",
-        "password": DEMO_EMPLOYEE_3_PASSWORD,
+        "password": DEFAULT_EMPLOYEE_3_PASSWORD,
         "role": "Member",
     },
 ]
 
-DEMO_ARTIFACT_SPECS = [
+DEFAULT_ARTIFACT_SPECS = [
     {
         "title": "Northstar Payroll Q2 Product Strategy Report",
         "filename": "northstar-q2-product-strategy-report.pdf",
@@ -136,9 +136,9 @@ def _minimal_pdf_bytes(title: str, lines: list[str]) -> bytes:
     return bytes(pdf)
 
 
-def _seed_demo_users(db: Session, workspace: Workspace) -> dict[str, User]:
+def _seed_default_users(db: Session, workspace: Workspace) -> dict[str, User]:
     users_by_email: dict[str, User] = {}
-    for spec in DEMO_USERS:
+    for spec in DEFAULT_EMPLOYEE_USERS:
         user = db.scalar(select(User).where(User.email == spec["email"]))
         if user is None:
             user = User(
@@ -170,11 +170,11 @@ def _seed_demo_users(db: Session, workspace: Workspace) -> dict[str, User]:
     return users_by_email
 
 
-def _seed_demo_artifacts(db: Session, *, workspace: Workspace, admin: User) -> None:
+def _seed_default_artifacts(db: Session, *, workspace: Workspace, admin: User) -> None:
     from app.services.ingestion import run_ingestion
     from app.services.storage import persist_upload_bytes
 
-    for spec in DEMO_ARTIFACT_SPECS:
+    for spec in DEFAULT_ARTIFACT_SPECS:
         existing = db.scalar(select(Artifact).where(Artifact.workspace_id == workspace.workspace_id, Artifact.title == spec["title"]))
         if existing is not None:
             continue
@@ -211,7 +211,7 @@ def _seed_demo_artifacts(db: Session, *, workspace: Workspace, admin: User) -> N
             db.commit()
 
 
-def _seed_demo_team_chat(db: Session, *, workspace: Workspace, users_by_email: dict[str, User], admin: User) -> None:
+def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email: dict[str, User], admin: User) -> None:
     existing = db.scalar(select(CompanyChatMessage).where(CompanyChatMessage.workspace_id == workspace.workspace_id))
     if existing is not None:
         return
@@ -353,6 +353,6 @@ def seed_defaults(db: Session) -> None:
         )
 
 
-    demo_users = _seed_demo_users(db, workspace)
-    _seed_demo_artifacts(db, workspace=workspace, admin=admin)
-    _seed_demo_team_chat(db, workspace=workspace, users_by_email=demo_users, admin=admin)
+    default_users = _seed_default_users(db, workspace)
+    _seed_default_artifacts(db, workspace=workspace, admin=admin)
+    _seed_default_team_chat(db, workspace=workspace, users_by_email=default_users, admin=admin)

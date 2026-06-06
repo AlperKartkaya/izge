@@ -54,11 +54,16 @@ Deployment stance:
 ├── backend/    # FastAPI + SQLite backend
 ├── frontend/   # React + TypeScript + Vite web app
 ├── website/    # Static marketing site (izge.dev)
-├── deploy/     # EC2 deploy script, Nginx & systemd configs
-└── docs/       # Product specs, architecture & implementation docs
+├── deploy/     # Deploy script, Nginx & systemd configs
+├── scripts/    # Operator scripts for DB, worker, Docker, LLM, backup and smoke gates
+└── docs/       # Product specs, architecture, operations & implementation docs
 ```
 
 ---
+
+## Operations control map
+
+Use `docs/OPERATIONS.md` as the single operator index for runtime topology, service control, database/storage locations, backup/restore, smoke gates, and deployment improvement rules.
 
 ## Quickstart
 
@@ -227,9 +232,9 @@ Add `--run-eval` to run the isolated seed evaluation after deploy.
 
 ---
 
-## Demo readiness evaluation
+## Product readiness evaluation
 
-Run the isolated seed evaluation before a live MVP demo:
+Run the isolated seed evaluation before relying on a live managed trial or release candidate:
 
 ```bash
 cd backend
@@ -243,7 +248,7 @@ cd backend
 .venv/bin/python -m manual_eval.run_isolated_synthetic_company_workflow
 ```
 
-These launch temporary backends, ingest controlled corpora, run locked query classes, check contradiction/drift provenance, verify permission-limited evidence redaction, exercise bounded scenario replay, and shut down. Nonzero exit means the demo confidence lane failed.
+These launch temporary backends, ingest controlled corpora, run locked query classes, check contradiction/drift provenance, verify permission-limited evidence redaction, exercise bounded scenario replay, and shut down. Nonzero exit means the product confidence lane failed.
 
 Run the worker queue smoke when validating asynchronous orchestration:
 

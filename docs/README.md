@@ -31,8 +31,9 @@ Keep these files at the root of `docs/` because project prompts and repo guidanc
 - `SECURITY_GOVERNANCE.md`
 - `DEPLOYMENT_MVP.md`
 - `COMPANY_PORTABLE_MEMORY_SYSTEM.md`
+- `OPERATIONS.md`
 
-### UX, evaluation, and implementation
+### UX, operations, evaluation, and implementation
 
 - `UI_UX_SPEC.md`
 - `../website/docs/MEMORY_WEAVE_METAPHOR_SPEC.md`

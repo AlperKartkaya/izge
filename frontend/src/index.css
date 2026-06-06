@@ -2063,7 +2063,7 @@ body::after {
   }
 }
 
-/* Demo readability pass: no persistent headers while scrolling. */
+/* Readability pass: no persistent headers while scrolling. */
 .top-nav,
 .page-intro {
   position: relative;
@@ -3212,7 +3212,7 @@ body:not(:has(.theme-toggle)) {
   }
 }
 
-/* Desktop correction: keep navigation discoverable and hero split visible on common demo widths. */
+/* Desktop correction: keep navigation discoverable and hero split visible on common desktop widths. */
 .nav-group {
   flex-wrap: wrap !important;
   overflow: visible !important;
@@ -3279,7 +3279,7 @@ body:not(:has(.theme-toggle)) {
   }
 }
 
-/* Make the cockpit useful above the fold on 1280x720 demo screens. */
+/* Make the cockpit useful above the fold on 1280x720 desktop screens. */
 .dashboard-hero {
   align-items: center !important;
   padding: clamp(1.2rem, 2.25vw, 2rem) !important;
@@ -3312,7 +3312,7 @@ body:not(:has(.theme-toggle)) {
   font-size: clamp(2.4rem, 5vw, 4.55rem) !important;
 }
 
-/* Customer-demo hardening: role clarity, long-data safety, chat, docs/auth theme parity. */
+/* Customer-product hardening: role clarity, long-data safety, chat, docs/auth theme parity. */
 .chat-launcher {
   display: inline-flex;
   min-height: 40px;

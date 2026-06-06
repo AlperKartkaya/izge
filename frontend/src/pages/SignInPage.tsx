@@ -10,9 +10,13 @@ import {
 } from '../lib/theme'
 
 const ADMIN_EMAIL =
-  import.meta.env.VITE_DEMO_ADMIN_EMAIL?.trim() || 'admin@example.com'
+  import.meta.env.VITE_DEFAULT_ADMIN_EMAIL?.trim() ||
+  import.meta.env.VITE_DEMO_ADMIN_EMAIL?.trim() ||
+  'admin@example.com'
 const ADMIN_PASSWORD =
-  import.meta.env.VITE_DEMO_ADMIN_PASSWORD?.trim() || 'change-me-admin'
+  import.meta.env.VITE_DEFAULT_ADMIN_PASSWORD?.trim() ||
+  import.meta.env.VITE_DEMO_ADMIN_PASSWORD?.trim() ||
+  'change-me-admin'
 
 interface FastLoginAccount {
   label: string

@@ -481,7 +481,7 @@ def build_orchestration_blueprint(db: Session, user: User) -> dict[str, Any]:
         "execution_model": "bounded_parallel_stage_orchestration",
         "current_runtime_note": (
             "The current runtime executes independent read-only specialist stage packets in a bounded local parallel pool after "
-            "typed context assembly. This demonstrates the orchestrator/sub-agent contract without granting unrestricted database "
+            "typed context assembly. This shows the orchestrator/sub-agent contract without granting unrestricted database "
             "authority: every packet remains evidence-scoped, queueable work has a lease/terminal result, and all output must pass deterministic provenance and permission gates."
         ),
         "stage_catalog": ORCHESTRATION_STAGE_CATALOG,
@@ -881,7 +881,7 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
                 "Keep recording deployment-specific local/private LLM smoke evidence for every customer machine.",
                 "Add answer-quality evaluator fixtures that compare meaningful responses against cited evidence.",
             ],
-            "risks": ["If local LLM features are disabled or the model is absent, Izge remains deterministic but cannot demonstrate private inference assistance live."],
+            "risks": ["If local LLM features are disabled or the model is absent, Izge remains deterministic but cannot show private inference assistance live."],
         },
         {
             "area_key": "demo_ui_storytelling",
@@ -889,7 +889,7 @@ def build_target_readiness(db: Session, user: User) -> dict[str, Any]:
             "status": "implemented",
             "score": 0.9,
             "promise": "The product workspace should make artifacts, memory organization, graph reasoning, orchestration jobs, evidence, database/storage inspection, and scenario support visible without marketing copy.",
-            "demo_reflection": "Primary nav now covers Dashboard, Artifacts, Ingestion, Questions, Graph, Memory FS, Jobs, Readiness, Data, Audit, and Users with a quieter operations layout.",
+            "demo_reflection": "Primary nav now covers Dashboard, Artifacts, Ingestion, Assistant, Graph, Memory FS, Jobs, Readiness, Data, Audit, and Users with a quieter operations layout.",
             "evidence_routes": [
                 "/api/evidence-substrate/filesystem",
                 "/api/graph/temporal",
