@@ -197,7 +197,7 @@ export function SignalDetailPage() {
             </Panel>
           </div>
 
-          <Panel title="Persisted signal payload" description="Raw signal payload is shown as an audit surface for demo and implementation verification, not as the primary product reading.">
+          <Panel title="Persisted signal payload" description="Raw signal payload is shown as an audit surface for implementation verification, not as the primary product reading.">
             <div className="panel-subtle stack-sm">
               <p className="section-label">Payload keys</p>
               <p className="table-secondary">{Object.keys(detail.payload_json).join(', ') || 'No payload keys recorded.'}</p>

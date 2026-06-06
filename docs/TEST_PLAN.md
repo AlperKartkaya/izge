@@ -59,3 +59,36 @@ The product should support:
 
 ## Final test rule
 If the system produces eloquent nonsense, weakly justified contradictions, or uninspectable recommendations, it fails.
+
+## Synthetic company workflow gate
+
+Use the Northstar Payroll one-company corpus to test real-world workflow readiness beyond endpoint shape checks:
+
+```bash
+cd backend
+.venv/bin/python -m manual_eval.run_isolated_synthetic_company_workflow
+```
+
+This gate verifies: artifact ingestion, meaningful query answers for lineage/contradiction/drift/next action, memory file-system organization, temporal KG projection, bounded scenario replay, prompt-injection boundary, member redaction of restricted evidence, rejected-artifact exclusion, target readiness reflection, and DB-backed orchestration job enqueue/claim/complete behavior.
+
+## Worker daemon gate
+
+Use the worker smoke when validating that queued orchestration jobs progress without manual API claim/complete calls:
+
+```bash
+cd backend
+.venv/bin/python -m manual_eval.run_worker_queue_smoke
+```
+
+This gate launches an isolated backend, enqueues two DB jobs, runs `python -m app.worker` as a separate process, verifies the bounded job completes, and verifies a payload requesting trusted writes is rejected.
+
+## Migration/version gate
+
+Before schema-affecting changes or Docker/customer handoff, run:
+
+```bash
+scripts/db-migrate.sh
+scripts/db-check.sh
+```
+
+Fresh databases must upgrade to the current Alembic head. Verified pre-Alembic SQLite databases can be stamped through `scripts/db-stamp-current.sh` after the compatibility checker passes.

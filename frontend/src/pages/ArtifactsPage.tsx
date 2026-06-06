@@ -229,9 +229,9 @@ export function ArtifactsPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Evidence intake"
-        title="Load the record before the system reasons"
-        description="Capture roadmap history, meeting notes, product decisions, and copied snippets as inspectable evidence. Izge does not reason from vibes; it reasons from artifacts."
+        eyebrow="Artifact intake"
+        title="Add company source material"
+        description="Upload files or paste internal notes that should become searchable, reviewable evidence. Source content is stored immutably; metadata, review status, and permissions are managed after intake."
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
@@ -248,9 +248,22 @@ export function ArtifactsPage() {
                 required
               />
             </label>
-            <label className="field">
+            <label className="field field-block">
               <span className="field-label">File</span>
-              <input type="file" accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} required />
+              <span className={uploadFile ? 'file-drop-zone file-drop-zone-active' : 'file-drop-zone'}>
+                <span className="file-upload-icon" aria-hidden="true">⇧</span>
+                <span className="file-drop-copy">
+                  <strong>{uploadFile ? uploadFile.name : 'Choose a source file'}</strong>
+                  <span>{uploadFile ? 'Ready to store. Choose again to replace before submitting.' : 'PDF, Markdown, or plain text. Click anywhere in this area.'}</span>
+                </span>
+                <input
+                  className="file-input"
+                  type="file"
+                  accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf"
+                  onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                  required
+                />
+              </span>
             </label>
             <label className="field">
               <span className="field-label">Visibility</span>
@@ -293,7 +306,7 @@ export function ArtifactsPage() {
           </form>
         </Panel>
 
-        <Panel title="Capture raw institutional memory" description="Use for meeting excerpts, copied notes, or historical snippets that should join the evidence record.">
+        <Panel title="Paste text artifact" description="Use for meeting excerpts, copied notes, or historical snippets that should join the evidence record without uploading a file.">
           <form className="form-grid" onSubmit={handlePastedText}>
             <label className="field">
               <span className="field-label">Title</span>
@@ -355,7 +368,7 @@ export function ArtifactsPage() {
       </div>
 
       <div className="two-column-layout wide-right-column">
-        <Panel title="Evidence inventory" description="Visible artifacts and their current ingestion state.">
+        <Panel title="Artifact inventory" description="Visible source records and their current ingestion/review state.">
           {artifacts.length === 0 ? (
             <EmptyState title="No artifacts available" description="Add a file or pasted text artifact to begin populating evidence." />
           ) : (
@@ -368,6 +381,7 @@ export function ArtifactsPage() {
                     <th>Status</th>
                     <th>Review</th>
                     <th>Updated</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -379,7 +393,9 @@ export function ArtifactsPage() {
                     >
                       <td>
                         <div>
-                          <p className="table-primary">{artifact.title}</p>
+                          <button type="button" className="row-title-button" onClick={() => void handleArtifactSelection(artifact.artifact_id)}>
+                            {artifact.title}
+                          </button>
                           <p className="table-secondary">{artifact.artifact_id}</p>
                         </div>
                       </td>
@@ -391,6 +407,16 @@ export function ArtifactsPage() {
                         <StatusBadge value={formatLabel(artifact.review_status)} />
                       </td>
                       <td>{formatDateTime(artifact.updated_at)}</td>
+                      <td>
+                        <div className="table-action-group" onClick={(event) => event.stopPropagation()}>
+                          <a className="table-action-link" href={api.artifactPreviewUrl(artifact.artifact_id)} target="_blank" rel="noreferrer">
+                            Preview
+                          </a>
+                          <a className="table-action-link" href={api.artifactDownloadUrl(artifact.artifact_id)}>
+                            Download
+                          </a>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -399,11 +425,20 @@ export function ArtifactsPage() {
           )}
         </Panel>
 
-        <Panel title="Selected evidence detail" description="Detail pane backed by `/api/artifacts/:id`, including provenance and extraction state.">
+        <Panel title="Selected artifact detail" description="Inspect ingestion state, provenance, extracted text, review status, and generated signals for the selected artifact.">
           {!selectedArtifact ? (
             <EmptyState title="Select an artifact" description="Choose an artifact from the inventory to inspect extracted text previews and permissions." />
           ) : (
             <div className="stack-lg">
+              <div className="artifact-action-strip">
+                <a className="secondary-button" href={api.artifactPreviewUrl(selectedArtifact.artifact_id)} target="_blank" rel="noreferrer">
+                  Preview source
+                </a>
+                <a className="secondary-button" href={api.artifactDownloadUrl(selectedArtifact.artifact_id)}>
+                  Download source
+                </a>
+              </div>
+
               <dl className="meta-list">
                 <div>
                   <dt>Artifact ID</dt>
@@ -422,6 +457,14 @@ export function ArtifactsPage() {
                   <dd>{selectedArtifact.original_filename ?? 'Pasted text'}</dd>
                 </div>
                 <div>
+                  <dt>Logical locator</dt>
+                  <dd>artifact://{selectedArtifact.artifact_id}/source</dd>
+                </div>
+                <div>
+                  <dt>Checksum</dt>
+                  <dd>{selectedArtifact.checksum_sha256 ?? 'Not recorded'}</dd>
+                </div>
+                <div>
                   <dt>Review status</dt>
                   <dd>
                     <StatusBadge value={formatLabel(selectedArtifact.review_status)} />
@@ -432,8 +475,11 @@ export function ArtifactsPage() {
                   <dd>{selectedArtifact.reviewed_at ? formatDateTime(selectedArtifact.reviewed_at) : 'Not reviewed yet'}</dd>
                 </div>
               </dl>
+              <Callout>
+                Source content is immutable for auditability. Use the Data page to inspect the stored path or edit the title; upload a replacement artifact if document contents need to change.
+              </Callout>
               <div className="panel-subtle stack-sm">
-                <p className="section-label">Admin memory preparation</p>
+                <p className="section-label">Admin review</p>
                 {isAdmin ? (
                   <>
                     <p className="muted-copy">

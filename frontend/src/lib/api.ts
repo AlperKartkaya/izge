@@ -5,6 +5,7 @@ import type {
   AssumptionDriftItem,
   AuditEventRead,
   ContradictionItem,
+  DatabaseOverviewRead,
   GraphNeighborhood,
   GraphSummary,
   GraphTimeline,
@@ -12,11 +13,24 @@ import type {
   LocalLLMSmokeRead,
   LocalLLMStatusRead,
   MemoryDetail,
+  ScenarioImpactRead,
+  ScenarioReplayRead,
+  ScenarioRunListRead,
+  ScenarioRunRead,
+  ScenarioTemplateCatalogItem,
+  TemporalGraphRead,
+  OrchestrationBlueprintRead,
+  OrchestrationJobListRead,
+  OrchestrationStageRunsRead,
+  MemoryFilesystemRead,
   NextActionSignalItem,
   QueryResult,
   QueryTraceRead,
   SignalDetail,
   SignalRead,
+  TeamChatMessageRead,
+  TeamChatThreadRead,
+  TargetReadinessRead,
   TokenResponse,
   UserRead,
   UserRole,
@@ -123,6 +137,14 @@ export const api = {
     return request<ArtifactDetail>(`/artifacts/${artifactId}`, { token })
   },
 
+  artifactPreviewUrl(artifactId: string) {
+    return `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/preview`
+  },
+
+  artifactDownloadUrl(artifactId: string) {
+    return `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/download`
+  },
+
   getArtifactSignals(token: string, artifactId: string) {
     return request<ArtifactProactiveSignals>(`/artifacts/${artifactId}/signals`, { token })
   },
@@ -181,6 +203,14 @@ export const api = {
     })
   },
 
+  updateArtifactMetadata(token: string, artifactId: string, payload: { title: string }) {
+    return request<ArtifactDetail>(`/artifacts/${artifactId}/metadata`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify(payload),
+    })
+  },
+
   runIngestion(token: string, artifactId: string) {
     return request<IngestionJobRead>('/ingestion/run', {
       method: 'POST',
@@ -207,6 +237,18 @@ export const api = {
 
   getQueryTrace(token: string, queryRunId: string) {
     return request<QueryTraceRead>(`/query/${queryRunId}/trace`, { token })
+  },
+
+  listTeamChatMessages(token: string, limit = 80) {
+    return request<TeamChatThreadRead>(`/team-chat?limit=${limit}`, { token })
+  },
+
+  createTeamChatMessage(token: string, body: string, options: { thread_id?: string; thread_title?: string } = {}) {
+    return request<TeamChatMessageRead>('/team-chat', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ body, ...options }),
+    })
   },
 
   getGraphSummary(token: string) {
@@ -253,10 +295,70 @@ export const api = {
     return request<LocalLLMStatusRead>('/system/llm-status', { token })
   },
 
+
+  getMemoryFilesystem(token: string) {
+    return request<MemoryFilesystemRead>('/evidence-substrate/filesystem', { token })
+  },
+
+  getOrchestrationBlueprint(token: string) {
+    return request<OrchestrationBlueprintRead>('/evidence-substrate/orchestration', { token })
+  },
+
+  getTargetReadiness(token: string) {
+    return request<TargetReadinessRead>('/evidence-substrate/readiness', { token })
+  },
+
+  listOrchestrationStageRuns(token: string, limit = 40, queryRunId?: string) {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (queryRunId) {
+      params.set('query_run_id', queryRunId)
+    }
+    return request<OrchestrationStageRunsRead>(`/evidence-substrate/orchestration/runs?${params.toString()}`, { token })
+  },
+
+  listOrchestrationJobs(token: string, limit = 20) {
+    return request<OrchestrationJobListRead>(`/evidence-substrate/orchestration/jobs?limit=${limit}`, { token })
+  },
+
+  getTemporalGraph(token: string, limit = 80) {
+    return request<TemporalGraphRead>(`/graph/temporal?limit=${limit}`, { token })
+  },
+
+  runScenarioImpact(token: string, scenarioText: string, limit = 10) {
+    return request<ScenarioImpactRead>('/scenario/impact', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ scenario_text: scenarioText, limit }),
+    })
+  },
+
+  listScenarioRuns(token: string, limit = 30) {
+    return request<ScenarioRunListRead>(`/scenario/runs?limit=${limit}`, { token })
+  },
+
+  getScenarioRun(token: string, scenarioRunId: string) {
+    return request<ScenarioRunRead>(`/scenario/runs/${scenarioRunId}`, { token })
+  },
+
+  replayScenarioRun(token: string, scenarioRunId: string) {
+    return request<ScenarioReplayRead>(`/scenario/runs/${scenarioRunId}/replay`, {
+      method: 'POST',
+      token,
+    })
+  },
+
+  listScenarioTemplates(token: string) {
+    return request<ScenarioTemplateCatalogItem[]>('/scenario/templates', { token })
+  },
+
   runLocalLLMSmoke(token: string) {
     return request<LocalLLMSmokeRead>('/system/llm-smoke', {
       method: 'POST',
       token,
     })
+  },
+
+  getDatabaseOverview(token: string) {
+    return request<DatabaseOverviewRead>('/admin/database', { token })
   },
 }

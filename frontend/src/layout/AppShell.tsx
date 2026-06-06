@@ -1,21 +1,32 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { formatDateTime } from '../lib/format'
+import { applyThemePreference, nextThemePreference, readInitialThemePreference, type ThemePreference } from '../lib/theme'
 
 const primaryNavigation = [
-  { to: '/', label: 'Command board', end: true },
-  { to: '/artifacts', label: 'Evidence' },
-  { to: '/ingestion', label: 'Build' },
-  { to: '/query', label: 'Interrogate' },
+  { to: '/', label: 'Dashboard', end: true },
+  { to: '/artifacts', label: 'Artifacts' },
+  { to: '/ingestion', label: 'Ingestion' },
+  { to: '/team-chat', label: 'Team chat' },
   { to: '/graph', label: 'Graph' },
+  { to: '/memory-filesystem', label: 'Memory FS' },
+  { to: '/orchestration', label: 'Jobs' },
+  { to: '/readiness', label: 'Readiness' },
 ]
 
 export function AppShell() {
   const { session, signOut } = useAuth()
+  const [theme, setTheme] = useState<ThemePreference>(() => readInitialThemePreference())
   const isAdmin = session?.user.role === 'Admin'
   const navigationItems = isAdmin
-    ? [...primaryNavigation, { to: '/audit', label: 'Audit' }, { to: '/admin/users', label: 'Admin' }]
-    : [...primaryNavigation, { to: '/audit', label: 'Audit' }]
+    ? [...primaryNavigation, { to: '/admin/data', label: 'Data' }, { to: '/audit', label: 'Audit' }, { to: '/admin/users', label: 'Users' }]
+    : primaryNavigation
+  const nextTheme = nextThemePreference(theme)
+
+  useEffect(() => {
+    applyThemePreference(theme)
+  }, [theme])
 
   return (
     <div className="app-frame">
@@ -29,7 +40,7 @@ export function AppShell() {
         <NavLink to="/" end className="brand-mark" aria-label="Izge home">
           <span className="brand-sigil">IZ</span>
           <span>
-            <span className="brand-kicker">Decision memory</span>
+            <span className="brand-kicker">Memory operations</span>
             <span className="brand-name">Izge</span>
           </span>
         </NavLink>
@@ -40,12 +51,27 @@ export function AppShell() {
               {item.label}
             </NavLink>
           ))}
+          <a className="nav-link" href="/docs/IZGE_OFFICIAL_DOCUMENTATION.html">
+            Docs
+          </a>
         </nav>
 
         <div className="session-cluster">
+          <NavLink
+            to="/query"
+            className={({ isActive }) => (isActive ? 'chat-launcher chat-launcher-active' : 'chat-launcher')}
+            aria-label="Open company memory chat"
+          >
+            <span aria-hidden="true" className="chat-launcher-icon">💬</span>
+            <span className="chat-launcher-label">Chat</span>
+          </NavLink>
+          <button type="button" className="theme-toggle" aria-label={`Switch to ${nextTheme} theme`} aria-pressed={theme === 'light'} onClick={() => setTheme(nextTheme)}>
+            <span aria-hidden="true" className="theme-toggle-icon">{theme === 'dark' ? '☀' : '☾'}</span>
+            <span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+          </button>
           <div className="identity-block">
             <p className="identity-name">{session?.user.display_name}</p>
-            <p className="identity-meta">{session?.user.role} / {formatDateTime(session?.expiresAt)}</p>
+            <p className="identity-meta">{session?.user.role} / {session?.expiresAt ? formatDateTime(session.expiresAt) : 'Active session'}</p>
           </div>
           <button type="button" className="text-button" onClick={signOut}>
             Sign out
@@ -54,35 +80,6 @@ export function AppShell() {
       </header>
 
       <main className="workspace-column">
-        <section className="workspace-header panel">
-          <div className="brand-block">
-            <p className="eyebrow">Izge / disputed institutional memory</p>
-            <h1 className="brand-title">Memory that argues back</h1>
-            <p className="page-description">
-              A local-first command surface for reconstructing decisions, finding contradictions, watching assumptions decay, and making the next move feel earned.
-            </p>
-          </div>
-          <div className="brand-proof-strip" aria-label="Izge reasoning modes">
-            <span>Lineage</span>
-            <span>Contradiction</span>
-            <span>Drift</span>
-            <span>Evidence</span>
-          </div>
-          <div className="hero-session panel-subtle">
-            <p className="section-label">Current workspace</p>
-            <dl className="meta-list compact-meta-list">
-              <div>
-                <dt>User</dt>
-                <dd>{session?.user.display_name ?? 'Unknown'}</dd>
-              </div>
-              <div>
-                <dt>Workspace</dt>
-                <dd>{session?.user.workspace_id ?? 'Unavailable'}</dd>
-              </div>
-            </dl>
-          </div>
-        </section>
-
         <section className="workspace-content">
           <Outlet />
         </section>

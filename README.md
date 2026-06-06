@@ -30,7 +30,7 @@ For the MVP, local-first means **organization-controlled storage and inference**
 
 Deployment stance:
 - **Local development:** your laptop runs the frontend/backend and a local Ollama/Qwen model.
-- **Jury demo:** `app.izge.dev` runs on Izge-controlled EC2 with an EC2-local/private LLM gateway.
+- **Managed trial:** `app.izge.dev` can run on Izge-controlled EC2 with an EC2-local/private LLM gateway.
 - **Customer target:** self-hosted or customer-controlled deployment at an internal/customer URL, with customer-controlled storage and local/private inference.
 - **Commercial bridge:** Izge-managed single-tenant deployment may be used for pilots, but generic multi-tenant SaaS is not the core product identity.
 - **Future only:** employee-local/edge models may participate later, but they are not required for MVP correctness.
@@ -54,11 +54,16 @@ Deployment stance:
 ├── backend/    # FastAPI + SQLite backend
 ├── frontend/   # React + TypeScript + Vite web app
 ├── website/    # Static marketing site (izge.dev)
-├── deploy/     # EC2 deploy script, Nginx & systemd configs
-└── docs/       # Product specs, architecture & implementation docs
+├── deploy/     # Deploy script, Nginx & systemd configs
+├── scripts/    # Operator scripts for DB, worker, Docker, LLM, backup and smoke gates
+└── docs/       # Product specs, architecture, operations & implementation docs
 ```
 
 ---
+
+## Operations control map
+
+Use `docs/OPERATIONS.md` as the single operator index for runtime topology, service control, database/storage locations, backup/restore, smoke gates, and deployment improvement rules.
 
 ## Quickstart
 
@@ -73,12 +78,23 @@ Deployment stance:
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -e .
+.venv/bin/python -m app.migration_tools upgrade
 .venv/bin/uvicorn app.main:app --reload
 ```
 
 The backend starts at `http://127.0.0.1:8000`. A default admin account is bootstrapped on first run — credentials are written to `backend/data/bootstrap_admin_credentials.json`.
 
 Override defaults with `IZGE_DEFAULT_ADMIN_EMAIL` and `IZGE_DEFAULT_ADMIN_PASSWORD`.
+
+### Worker daemon
+
+Run this in a second terminal when you want queued orchestration jobs to progress continuously:
+
+```bash
+scripts/orchestration-worker.sh --worker-id local-worker --poll-interval-seconds 2 --lease-seconds 120
+```
+
+The worker consumes `orchestration_jobs` from the same SQLite database, validates bounded payloads, records structured results, and rejects any job that asks for trusted writes outside the job result.
 
 ### Frontend
 
@@ -89,6 +105,82 @@ npm run dev
 ```
 
 The Vite dev server starts at `http://localhost:5173`.
+
+
+### Docker Compose
+
+For a portable, company-controlled runtime with persisted SQLite and artifact storage:
+
+```bash
+docker compose up --build
+```
+
+Then open `http://localhost:8080`. The backend remains available at `http://localhost:8000`. The local Compose profile starts three services: `backend`, `worker`, and `frontend`.
+
+Default workspace identities:
+
+- Admin: `admin@example.com` / `change-me-admin`
+- Employee 1: `employee1@example.com` / `change-me-employee1`
+- Employee 2: `employee2@example.com` / `change-me-employee2`
+- Employee 3: `employee3@example.com` / `change-me-employee3`
+
+Change `IZGE_DEFAULT_ADMIN_PASSWORD` and the seeded employee credentials before any shared or production deployment.
+
+Docker Compose attempts the local/private LLM path by default for extraction, query routing, answer synthesis, and signal explanation. To see live model-backed behavior from Docker, run an Ollama-compatible gateway on the host and make sure the configured model exists before starting Compose:
+
+```bash
+ollama pull qwen3.5:4b
+ollama serve
+docker compose up --build
+```
+
+Override the model or disable LLM features with environment variables when needed:
+
+```bash
+IZGE_LOCAL_LLM_MODEL=llama3.2:3b docker compose up --build
+IZGE_LOCAL_LLM_ENABLED=false docker compose up --build
+```
+
+Run the migration/version checks and smoke evaluations before handing the system to a new company:
+
+```bash
+# Create/upgrade or verify the configured SQLite database schema.
+scripts/db-migrate.sh
+scripts/db-check.sh
+
+# Docker-contained seed/evidence/orchestration smoke evaluation.
+scripts/docker-smoke-eval.sh
+
+# One-company synthetic workflow evaluation with realistic artifacts, permissions,
+# scenario replay, rejection, and DB-backed orchestration job checks.
+scripts/synthetic-company-smoke-eval.sh
+
+# DB-backed worker daemon smoke evaluation.
+scripts/worker-smoke-eval.sh
+```
+
+Back up and restore the persisted company memory volume with:
+
+```bash
+scripts/docker-backup.sh
+docker compose down
+scripts/docker-restore.sh backups/<backup-file>.tar.gz --force
+```
+
+The backup contains SQLite, uploaded artifact storage, pasted-text storage, and bootstrap credentials. Restore is intentionally explicit and refuses to run while Compose services are active unless `IZGE_RESTORE_ALLOW_RUNNING=1` is set.
+
+### Database and artifact storage management
+
+The application database is SQLite:
+
+- Local dev default: `backend/data/izge.db`
+- Docker Compose volume path: `/data/izge.db` inside the `izge_data` volume
+
+Uploaded files are stored under `IZGE_STORAGE_ROOT/<artifact_id>/source.<ext>`; pasted text is stored under `IZGE_PASTED_TEXT_ROOT/<artifact_id>/pasted.txt`. In local dev those roots default to `backend/data/storage` and `backend/data/pasted`; in Docker they map to `/data/storage` and `/data/pasted` inside the persisted volume.
+
+Admins can inspect this through the product UI at `/admin/data` (`Data` in the nav). That page shows table row counts, Alembic revision, artifact logical locators, physical storage paths, storage existence/size, checksums, ingestion/review state, and supported metadata edits.
+
+Supported edits should go through UI/API: artifact title, review status/notes, visibility scope, and permitted users. Raw source content is intentionally immutable for auditability; upload/paste a replacement artifact and reject or restrict the old one if document contents change. For local diagnostics only, you can inspect `backend/data/izge.db` with `sqlite3` or DB Browser for SQLite; production/shared deployments should use authenticated UI/API surfaces rather than raw SQL edits.
 
 ### Marketing website
 
@@ -140,16 +232,30 @@ Add `--run-eval` to run the isolated seed evaluation after deploy.
 
 ---
 
-## Demo readiness evaluation
+## Product readiness evaluation
 
-Run the isolated seed evaluation before a live MVP demo:
+Run the isolated seed evaluation before relying on a live managed trial or release candidate:
 
 ```bash
 cd backend
 .venv/bin/python -m manual_eval.run_isolated_seed_eval
 ```
 
-This launches a temporary backend, ingests the seed corpus, runs locked query classes, checks contradiction/drift provenance, verifies permission-limited evidence redaction, and shuts down. Nonzero exit means the demo confidence lane failed.
+Run the full one-company workflow scenario when checking real-world readiness:
+
+```bash
+cd backend
+.venv/bin/python -m manual_eval.run_isolated_synthetic_company_workflow
+```
+
+These launch temporary backends, ingest controlled corpora, run locked query classes, check contradiction/drift provenance, verify permission-limited evidence redaction, exercise bounded scenario replay, and shut down. Nonzero exit means the product confidence lane failed.
+
+Run the worker queue smoke when validating asynchronous orchestration:
+
+```bash
+cd backend
+.venv/bin/python -m manual_eval.run_worker_queue_smoke
+```
 
 ---
 
@@ -158,7 +264,7 @@ This launches a temporary backend, ingests the seed corpus, runs locked query cl
 Full specifications live in `docs/`. Start with `docs/README.md` for a guided index, or jump directly to:
 
 - **Product & scope** — `VISION_AND_POSITIONING.md`, `PRD.md`, `MVP_SCOPE.md`, `MVP_IMPLEMENTATION_CONTRACT.md`
-- **Architecture** — `SYSTEM_ARCHITECTURE.md`, `DOMAIN_MODEL.md`, `DECISION_GRAPH_SPEC.md`, `API_SPEC.md`
+- **Architecture** — `SYSTEM_ARCHITECTURE.md`, `DOMAIN_MODEL.md`, `DECISION_GRAPH_SPEC.md`, `API_SPEC.md`, `COMPANY_PORTABLE_MEMORY_SYSTEM.md`
 - **Deployment & security** — `DEPLOYMENT_MVP.md`, `SECURITY_GOVERNANCE.md`
 - **UX & evaluation** — `UI_UX_SPEC.md`, `TEST_PLAN.md`, `DEMO_SCRIPT.md`
 - **Demo data** — `demo/README.md`, `demo/DATA_SPEC.md`, `demo/SCENARIO_WIRING.md`

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import hashlib
 import re
+from time import perf_counter
 from typing import Any
 
 from sqlalchemy import delete, func, select, text
@@ -19,6 +20,7 @@ from app.models import (
     Decision,
     GraphEdge,
     GraphNode,
+    OrchestrationStageRun,
     Outcome,
     QueryRun,
     QueryTraceStep,
@@ -45,6 +47,13 @@ from app.services.llm_reasoning import (
     synthesize_query_answer_with_local_llm,
 )
 from app.services.permissions import artifact_is_visible_to_user
+from app.services.orchestration_runtime import run_bounded_parallel_stage_packets
+from app.services.query_context import (
+    build_bounded_orchestration_payload,
+    build_context_packet,
+    build_provenance_verifier_result,
+    stable_payload_size_bytes,
+)
 
 STOPWORDS = {
     "a",
@@ -2312,17 +2321,67 @@ def _persist_query_trace_steps(
     permissions_limited: bool,
     hidden_artifact_count: int,
     rejected_artifact_count: int,
+    context_assembly_ms: int,
 ) -> None:
     supporting_nodes = result_data.get("supporting_nodes", [])
     supporting_evidence = result_data.get("supporting_evidence", [])
     contradictions = result_data.get("contradictions", [])
     stale_assumptions = result_data.get("stale_assumptions", [])
+    recommended_next_actions = result_data.get("recommended_next_actions", [])
     uncertainty_notes = result_data.get("uncertainty_notes", [])
 
+    graph_evidence_count = sum(1 for item in supporting_evidence if item.evidence_kind == "graph")
+    search_fallback_count = sum(1 for item in supporting_evidence if item.evidence_kind != "graph")
+    context_packet = build_context_packet(
+        packet_id=f"{query_run.query_run_id}:context",
+        query_class=query_run.query_class,
+        supporting_nodes=supporting_nodes,
+        supporting_evidence=supporting_evidence,
+        permissions_limited=permissions_limited,
+        hidden_artifact_count=hidden_artifact_count,
+        rejected_artifact_count=rejected_artifact_count,
+        context_assembly_ms=context_assembly_ms,
+    )
+    verifier_result = build_provenance_verifier_result(
+        context_packet=context_packet,
+        uncertainty_notes=uncertainty_notes,
+    )
+
+    bounded_orchestration_payload = build_bounded_orchestration_payload(
+        query_class=query_run.query_class,
+        context_packet=context_packet,
+        verifier_result=verifier_result,
+        contradiction_count=len(contradictions),
+        drift_count=len(stale_assumptions),
+        guidance_count=len(recommended_next_actions),
+    )
+    stage_packet_execution_payload = run_bounded_parallel_stage_packets(
+        query_class=query_run.query_class,
+        context_packet=context_packet,
+        verifier_result=verifier_result,
+        contradiction_count=len(contradictions),
+        drift_count=len(stale_assumptions),
+        guidance_count=len(recommended_next_actions),
+    )
+    context_packet_payload = context_packet.to_payload()
+    verifier_payload = verifier_result.to_payload()
+    stage_packets_by_key = {
+        str(packet.get("stage_key")): packet
+        for packet in stage_packet_execution_payload.get("packets", [])
+        if isinstance(packet, dict)
+    }
     trace_payloads: list[tuple[str, dict[str, Any]]] = [
         (
             "route_decision",
             _route_decision_trace_payload(route_decision),
+        ),
+        (
+            "bounded_orchestration",
+            bounded_orchestration_payload,
+        ),
+        (
+            "stage_packet_execution",
+            stage_packet_execution_payload,
         ),
         (
             "seed_selection",
@@ -2333,12 +2392,20 @@ def _persist_query_trace_steps(
             },
         ),
         (
+            "context_assembly",
+            context_packet_payload,
+        ),
+        (
+            "provenance_verification",
+            verifier_payload,
+        ),
+        (
             "evidence_selection",
             {
                 "supporting_evidence": _evidence_trace_payload_items(supporting_evidence),
                 "selected_evidence_count": len(supporting_evidence),
-                "graph_evidence_count": sum(1 for item in supporting_evidence if item.evidence_kind == "graph"),
-                "search_fallback_count": sum(1 for item in supporting_evidence if item.evidence_kind != "graph"),
+                "graph_evidence_count": graph_evidence_count,
+                "search_fallback_count": search_fallback_count,
             },
         ),
         (
@@ -2374,6 +2441,41 @@ def _persist_query_trace_steps(
                 workspace_id=query_run.workspace_id,
                 step_kind=step_kind,
                 payload_json=payload,
+            )
+        )
+
+    for stage in bounded_orchestration_payload.get("stages", []):
+        if not isinstance(stage, dict):
+            continue
+        stage_key = str(stage.get("stage_key") or "unknown_stage")
+        stage_packet = stage_packets_by_key.get(stage_key)
+        stage_packet_id = str(stage_packet.get("stage_packet_id")) if stage_packet else None
+        db.add(
+            OrchestrationStageRun(
+                query_run_id=query_run.query_run_id,
+                workspace_id=query_run.workspace_id,
+                stage_key=stage_key,
+                status=str(stage.get("status") or "unknown"),
+                authority_level=str(stage.get("authority_level") or "unspecified"),
+                verifier_status=verifier_result.status,
+                input_refs={
+                    "context_packet_id": context_packet.packet_id,
+                    "query_class": query_run.query_class,
+                    "schema_version": "orchestration_stage_run_input.v1",
+                    "stage_packet_id": stage_packet_id,
+                    "stage_packet_schema_version": stage_packet.get("schema_version") if stage_packet else None,
+                    "execution_wave": stage_packet.get("execution_wave") if stage_packet else None,
+                },
+                output_summary={
+                    "schema_version": "orchestration_stage_run_output.v1",
+                    "output_count": int(stage.get("output_count") or 0),
+                    "reason": str(stage.get("reason") or ""),
+                    "verifier_status": verifier_result.status,
+                    "verifier_checks": verifier_payload.get("checks", {}),
+                    "trusted_write_allowed": False,
+                    "execution_model": stage_packet.get("execution_model") if stage_packet else "deterministic_stage",
+                    "stage_packet": stage_packet,
+                },
             )
         )
 
@@ -2414,8 +2516,50 @@ def _filter_trace_payload(payload: dict[str, Any], visible_artifact_ids: set[str
         omitted_count += len(original) - len(kept)
         filtered["supporting_evidence"] = kept
 
+    if isinstance(filtered.get("selected_memory"), list):
+        original = [item for item in filtered["selected_memory"] if isinstance(item, dict)]
+        kept = [item for item in original if item.get("source_artifact_id") in visible_artifact_ids]
+        omitted_count += len(original) - len(kept)
+        filtered["selected_memory"] = kept
+        if isinstance(filtered.get("evidence_budget"), dict):
+            filtered["evidence_budget"] = {
+                **filtered["evidence_budget"],
+                "selected_memory_count": len(kept),
+                "packet_memory_count": len(kept),
+            }
+        if isinstance(filtered.get("metrics"), dict):
+            filtered["metrics"] = {
+                **filtered["metrics"],
+                "selected_memory_count": len(kept),
+                "packet_memory_count": len(kept),
+            }
+
+    if isinstance(filtered.get("selected_evidence"), list):
+        original = [item for item in filtered["selected_evidence"] if isinstance(item, dict)]
+        kept = [item for item in original if item.get("artifact_id") in visible_artifact_ids]
+        omitted_count += len(original) - len(kept)
+        filtered["selected_evidence"] = kept
+        filtered["selected_evidence_ids"] = [item.get("chunk_id") or item.get("artifact_id") for item in kept]
+        if isinstance(filtered.get("evidence_budget"), dict):
+            filtered["evidence_budget"] = {
+                **filtered["evidence_budget"],
+                "selected_evidence_count": len(kept),
+                "packet_evidence_count": len(kept),
+                "within_budget": len(kept) <= int(filtered["evidence_budget"].get("max_selected_evidence", 12)),
+            }
+        if isinstance(filtered.get("metrics"), dict):
+            filtered["metrics"] = {
+                **filtered["metrics"],
+                "selected_evidence_count": len(kept),
+                "packet_evidence_count": len(kept),
+            }
+
     if omitted_count:
         filtered["omitted_items"] = omitted_count
+    metrics = filtered.get("metrics")
+    if isinstance(metrics, dict) and "trace_payload_bytes" in metrics:
+        filtered["metrics"] = {**metrics, "trace_payload_bytes": 0}
+        filtered["metrics"]["trace_payload_bytes"] = stable_payload_size_bytes(filtered)
     return filtered
 
 
@@ -2484,6 +2628,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
     hidden_artifact_count = max(len(all_workspace_artifacts) - len(visible_artifacts), 0)
     rejected_artifact_count = max(len(visible_artifacts) - len(trusted_visible_artifacts), 0)
 
+    context_assembly_started_at = perf_counter()
     if query_class == "Contradiction analysis":
         result_data = _contradiction_result(db, actor, query_text)
     elif query_class == "Assumption drift":
@@ -2494,6 +2639,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         result_data = _lineage_result(db, actor, query_text)
     if rejected_artifact_count and "Some visible evidence was excluded because an admin marked its source artifact rejected." not in result_data["uncertainty_notes"]:
         result_data["uncertainty_notes"].append("Some visible evidence was excluded because an admin marked its source artifact rejected.")
+    context_assembly_ms = max(0, round((perf_counter() - context_assembly_started_at) * 1000))
     result_data = _apply_optional_llm_answer_synthesis(query_text=query_text, query_class=query_class, result_data=result_data)
 
     query_run = QueryRun(
@@ -2536,6 +2682,7 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
         permissions_limited=permissions_limited,
         hidden_artifact_count=hidden_artifact_count,
         rejected_artifact_count=rejected_artifact_count,
+        context_assembly_ms=context_assembly_ms,
     )
     db.commit()
     log_event(

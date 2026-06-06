@@ -88,9 +88,12 @@ export function AuditPage() {
                       <p className="table-primary">{event.target_type}</p>
                       <p className="table-secondary">{event.target_id}</p>
                     </td>
-                    <td>{event.actor_user_id ?? 'System'}</td>
+                    <td className="break-anywhere">{event.actor_user_id ?? 'System'}</td>
                     <td>
-                      <code className="metadata-code">{JSON.stringify(event.event_metadata)}</code>
+                      <details className="metadata-details">
+                        <summary>View metadata</summary>
+                        <pre className="metadata-code audit-metadata">{JSON.stringify(event.event_metadata, null, 2)}</pre>
+                      </details>
                     </td>
                   </tr>
                 ))}

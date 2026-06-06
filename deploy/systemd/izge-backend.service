@@ -12,7 +12,7 @@ ExecStart=/srv/izge/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=3
 
-# Demo-safe hardening. Keep write access available through /srv/izge/data.
+# Runtime hardening. Keep write access available through /srv/izge/data.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

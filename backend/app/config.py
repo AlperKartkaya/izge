@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     workspace_description: str = "Single-workspace institutional memory environment"
     default_admin_email: str = "admin@example.com"
     default_admin_password: str | None = "change-me-admin"
-    default_admin_display_name: str = "Local Admin"
+    default_admin_display_name: str = "Workspace Admin"
     sync_default_admin_password: bool = False
     sqlite_path: str = "./data/izge.db"
     storage_root: str = "./data/storage"

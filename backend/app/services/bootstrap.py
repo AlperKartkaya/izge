@@ -2,15 +2,276 @@ from __future__ import annotations
 
 import json
 import secrets
+import textwrap
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db import Base, engine
-from app.models import User, Workspace
+from app.db import engine
+from app.models import Artifact, CompanyChatMessage, User, Workspace
+from app.schema import assert_required_schema_ready
 from app.services.audit import log_event
 from app.services.security import hash_password
+
+
+DEFAULT_EMPLOYEE_1_PASSWORD = "change-me-employee1"
+DEFAULT_EMPLOYEE_2_PASSWORD = "change-me-employee2"
+DEFAULT_EMPLOYEE_3_PASSWORD = "change-me-employee3"
+
+DEFAULT_EMPLOYEE_USERS = [
+    {
+        "display_name": "Employee 1",
+        "email": "employee1@example.com",
+        "password": DEFAULT_EMPLOYEE_1_PASSWORD,
+        "role": "Member",
+    },
+    {
+        "display_name": "Employee 2",
+        "email": "employee2@example.com",
+        "password": DEFAULT_EMPLOYEE_2_PASSWORD,
+        "role": "Member",
+    },
+    {
+        "display_name": "Employee 3",
+        "email": "employee3@example.com",
+        "password": DEFAULT_EMPLOYEE_3_PASSWORD,
+        "role": "Member",
+    },
+]
+
+DEFAULT_ARTIFACT_SPECS = [
+    {
+        "title": "Northstar Payroll Q2 Product Strategy Report",
+        "filename": "northstar-q2-product-strategy-report.pdf",
+        "mime_type": "application/pdf",
+        "format": "pdf",
+        "lines": [
+            "Northstar Payroll Q2 Product Strategy Report",
+            "Date: 2026-04-08",
+            "Decision: we decided to keep self-serve onboarding behind a controlled beta until activation instrumentation and security review pass.",
+            "Assumption: we assumed manual onboarding could support enterprise expansion demand until 2026-06-30.",
+            "Constraint: security review must approve data-retention controls before broad launch.",
+            "Outcome: the April launch checkpoint showed manual onboarding reached 68 accounts but implementation quality risk increased.",
+            "Commitment: Product operations will publish a launch readiness memo by 2026-04-12.",
+        ],
+    },
+    {
+        "title": "Northstar Payroll Internal Roadmap Presentation",
+        "filename": "northstar-roadmap-presentation.pdf",
+        "mime_type": "application/pdf",
+        "format": "pdf",
+        "lines": [
+            "Northstar Payroll Internal Roadmap Presentation",
+            "Date: 2026-03-26",
+            "Slide 1 Decision: leadership chose to reintroduce a late Q2 self-serve onboarding launch to support the enterprise expansion pipeline.",
+            "Slide 2 Assumption: growth expected that automated onboarding would reduce solution-engineering load by 30 percent.",
+            "Slide 3 Constraint: onboarding analytics and release-control work must be complete before go-live.",
+            "Slide 4 Commitment: Engineering will prepare the release-control checklist by 2026-04-10.",
+            "Slide 5 Outcome: the plan reopened tension with the January Q3 baseline decision.",
+        ],
+    },
+    {
+        "title": "Engineering Launch Meeting Notes 2026-04-08",
+        "filename": "engineering-launch-meeting-notes-2026-04-08.md",
+        "mime_type": "text/markdown",
+        "format": "markdown",
+        "text": """# Engineering Launch Meeting Notes\nDate: 2026-04-08\n\n## Decisions\n- Decision: we decided to keep the self-serve launch decision gate open until security and activation instrumentation evidence can be compared.\n- Decision: release-control checks will block launch if rollback ownership is unclear.\n\n## Assumptions\n- Assumption: the late-Q2 launch could still work if activation events reach 95 percent coverage by 2026-04-12.\n\n## Constraints\n- Constraint: security review must approve data-retention controls before launch.\n- Constraint: support staffing cannot absorb more than 25 beta escalations per week.\n\n## Commitments\n- Engineering lead will publish the rollback-owner matrix by 2026-04-11.\n- Product operations will prepare the final readiness memo by 2026-04-12.\n""",
+    },
+    {
+        "title": "Customer Success Rollout Meeting Notes",
+        "filename": "customer-success-rollout-meeting-notes.md",
+        "mime_type": "text/markdown",
+        "format": "markdown",
+        "text": """# Customer Success Rollout Meeting Notes\nDate: 2026-04-09\n\n## Decisions\n- Decision: customer success chose to keep enterprise onboarding white-glove for accounts above 500 employees until the self-serve launch is reviewed.\n\n## Assumptions\n- Assumption: support can handle a controlled beta if weekly escalations stay below 25.\n\n## Outcomes\n- Outcome: customer success reported that manual onboarding reached 68 accounts and reduced launch pressure for the smallest customers.\n\n## Commitments\n- Customer success lead will update beta account segmentation by 2026-04-13.\n""",
+    },
+    {
+        "title": "Internal Chat Export - Self Serve Launch",
+        "filename": "internal-chat-export-self-serve-launch.md",
+        "mime_type": "text/markdown",
+        "format": "markdown",
+        "text": """# Internal Chat Export - Self Serve Launch\nDate: 2026-04-10\n\n[09:12] Maya (Product): Decision: we should treat the launch as controlled beta until security signs off.\n[09:15] Deniz (Engineering): Constraint: release controls must include named rollback owner and dashboard coverage before launch.\n[09:21] Leyla (Customer Success): Assumption: if beta escalations exceed 25 per week, we should pause new accounts.\n[09:30] Omar (Operations): Commitment: operations will compile the go/no-go packet by 2026-04-12.\n[09:35] Maya (Product): Outcome: this chat confirms the late-Q2 plan depends on readiness evidence, not just sales pressure.\n""",
+    },
+]
+
+
+def _pdf_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _minimal_pdf_bytes(title: str, lines: list[str]) -> bytes:
+    wrapped_lines: list[str] = []
+    for line in lines:
+        wrapped_lines.extend(textwrap.wrap(line, width=92) or [""])
+    commands = ["BT", "/F1 10 Tf", "13 TL", "72 760 Td"]
+    for index, line in enumerate(wrapped_lines[:50]):
+        if index:
+            commands.append("T*")
+        commands.append(f"({_pdf_escape(line)}) Tj")
+    commands.append("ET")
+    stream = "\n".join(commands).encode("utf-8")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream",
+    ]
+    pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets: list[int] = [0]
+    for object_number, payload in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{object_number} 0 obj\n".encode("ascii"))
+        pdf.extend(payload)
+        pdf.extend(b"\nendobj\n")
+    xref_offset = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    pdf.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    pdf.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R /Info << /Title ({_pdf_escape(title)}) >> >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("utf-8")
+    )
+    return bytes(pdf)
+
+
+def _seed_default_users(db: Session, workspace: Workspace) -> dict[str, User]:
+    users_by_email: dict[str, User] = {}
+    for spec in DEFAULT_EMPLOYEE_USERS:
+        user = db.scalar(select(User).where(User.email == spec["email"]))
+        if user is None:
+            user = User(
+                workspace_id=workspace.workspace_id,
+                role=spec["role"],
+                display_name=spec["display_name"],
+                email=spec["email"],
+                password_hash=hash_password(spec["password"]),
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            log_event(
+                db,
+                workspace_id=workspace.workspace_id,
+                actor_user_id=user.user_id,
+                event_type="USER_SEEDED",
+                target_type="user",
+                target_id=user.user_id,
+                event_metadata={"role": user.role, "email": user.email, "seeded_employee": True},
+            )
+        else:
+            user.role = spec["role"]
+            user.display_name = spec["display_name"]
+            user.is_active = True
+            user.password_hash = hash_password(spec["password"])
+            db.commit()
+        users_by_email[user.email] = user
+    return users_by_email
+
+
+def _seed_default_artifacts(db: Session, *, workspace: Workspace, admin: User) -> None:
+    from app.services.ingestion import run_ingestion
+    from app.services.storage import persist_upload_bytes
+
+    for spec in DEFAULT_ARTIFACT_SPECS:
+        existing = db.scalar(select(Artifact).where(Artifact.workspace_id == workspace.workspace_id, Artifact.title == spec["title"]))
+        if existing is not None:
+            continue
+        artifact = Artifact(
+            workspace_id=workspace.workspace_id,
+            title=spec["title"],
+            source_type="file_upload",
+            source_path="pending",
+            mime_type=spec["mime_type"],
+            uploaded_by=admin.user_id,
+            visibility_scope="workspace",
+            original_filename=spec["filename"],
+            ingestion_status="pending",
+            review_status="submitted",
+        )
+        db.add(artifact)
+        db.commit()
+        db.refresh(artifact)
+        content = _minimal_pdf_bytes(spec["title"], spec["lines"]) if spec["format"] == "pdf" else spec["text"].encode("utf-8")
+        source_path, checksum = persist_upload_bytes(content, artifact_id=artifact.artifact_id, filename=spec["filename"])
+        artifact.source_path = source_path
+        artifact.checksum_sha256 = checksum
+        db.commit()
+        try:
+            run_ingestion(db, artifact=artifact, actor=admin)
+            artifact.review_status = "reviewed"
+            artifact.reviewed_by = admin.user_id
+            artifact.reviewed_at = datetime.utcnow()
+            artifact.review_notes = "Seeded company artifact reviewed during bootstrap."
+            db.commit()
+        except Exception as exc:
+            artifact.review_status = "needs_review"
+            artifact.review_notes = f"Seeded artifact needs manual review because ingestion failed: {exc}"
+            db.commit()
+
+
+def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email: dict[str, User], admin: User) -> None:
+    existing = db.scalar(select(CompanyChatMessage).where(CompanyChatMessage.workspace_id == workspace.workspace_id))
+    if existing is not None:
+        return
+
+    def thread_metadata(thread_id: str, thread_title: str, thread_kind: str = "channel") -> dict[str, object]:
+        return {
+            "channel": thread_id,
+            "thread_id": thread_id,
+            "thread_title": thread_title,
+            "thread_kind": thread_kind,
+            "seeded": True,
+        }
+
+    seeded_turns = [
+        (
+            users_by_email.get("employee1@example.com") or admin,
+            "The customer success rollout notes are uploaded. Can someone confirm whether the beta escalation threshold is still 25 per week?",
+            thread_metadata("company-general", "Company General"),
+        ),
+        (
+            users_by_email.get("employee2@example.com") or admin,
+            "Confirmed. The go/no-go packet still uses 25 beta escalations per week as the pause threshold.",
+            thread_metadata("company-general", "Company General"),
+        ),
+        (
+            admin,
+            "I reviewed the strategy report, roadmap deck, meeting notes, and internal chat export. Keep artifact-specific answers in the assistant and coordination here.",
+            thread_metadata("company-general", "Company General"),
+        ),
+        (
+            users_by_email.get("employee2@example.com") or admin,
+            "The roadmap deck still targets late Q2, but the April notes keep security and activation instrumentation as the actual gate.",
+            thread_metadata("product-rollout", "Product Rollout"),
+        ),
+        (
+            users_by_email.get("employee3@example.com") or admin,
+            "I will attach the rollback-owner matrix once engineering signs off.",
+            thread_metadata("product-rollout", "Product Rollout"),
+        ),
+        (
+            users_by_email.get("employee1@example.com") or admin,
+            "Can you review the beta segmentation update before I send it to customer success?",
+            thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
+        ),
+        (
+            users_by_email.get("employee2@example.com") or admin,
+            "Yes. Send it here after the last artifact review finishes.",
+            thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
+        ),
+    ]
+    for author, body, metadata in seeded_turns:
+        db.add(
+            CompanyChatMessage(
+                workspace_id=workspace.workspace_id,
+                author_user_id=author.user_id,
+                body=body,
+                message_metadata=metadata,
+            )
+        )
+    db.commit()
 
 
 def initialize_database() -> None:
@@ -18,31 +279,12 @@ def initialize_database() -> None:
     settings.storage_path.mkdir(parents=True, exist_ok=True)
     settings.pasted_storage_path.mkdir(parents=True, exist_ok=True)
     settings.storage_path.parent.mkdir(parents=True, exist_ok=True)
-    Base.metadata.create_all(bind=engine)
+
+    from app.migration_tools import upgrade_database
+
+    upgrade_database()
     with engine.begin() as connection:
-        for table_name in ("decisions", "assumptions", "constraints", "outcomes", "commitments"):
-            columns = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()}
-            if "topic_key" not in columns:
-                connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN topic_key VARCHAR(255) NOT NULL DEFAULT 'general'")
-            if "extraction_method" not in columns:
-                connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN extraction_method VARCHAR(64) NOT NULL DEFAULT 'heuristic'")
-            if table_name == "commitments" and "owner_label" not in columns:
-                connection.exec_driver_sql("ALTER TABLE commitments ADD COLUMN owner_label VARCHAR(255)")
-        query_run_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(query_runs)").fetchall()}
-        if "route_confidence" not in query_run_columns:
-            connection.exec_driver_sql("ALTER TABLE query_runs ADD COLUMN route_confidence FLOAT NOT NULL DEFAULT 0.0")
-        artifact_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(artifacts)").fetchall()}
-        if "review_status" not in artifact_columns:
-            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN review_status VARCHAR(32) NOT NULL DEFAULT 'submitted'")
-        if "reviewed_by" not in artifact_columns:
-            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN reviewed_by VARCHAR(64)")
-        if "reviewed_at" not in artifact_columns:
-            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN reviewed_at DATETIME")
-        if "review_notes" not in artifact_columns:
-            connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN review_notes TEXT")
-        connection.exec_driver_sql(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS artifact_chunks_fts USING fts5(chunk_id UNINDEXED, artifact_id UNINDEXED, workspace_id UNINDEXED, text)"
-        )
+        assert_required_schema_ready(connection)
 
 
 def _bootstrap_admin_password() -> str:
@@ -107,5 +349,10 @@ def seed_defaults(db: Session) -> None:
             event_type="USER_SEEDED_PASSWORD_SYNCED",
             target_type="user",
             target_id=admin.user_id,
-            event_metadata={"role": admin.role, "email": admin.email, "demo_sync": True},
+            event_metadata={"role": admin.role, "email": admin.email, "bootstrap_sync": True},
         )
+
+
+    default_users = _seed_default_users(db, workspace)
+    _seed_default_artifacts(db, workspace=workspace, admin=admin)
+    _seed_default_team_chat(db, workspace=workspace, users_by_email=default_users, admin=admin)

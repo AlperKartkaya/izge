@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import User
-from app.schemas.api import GraphNeighborhood, GraphSummary, GraphTimeline
+from app.schemas.api import GraphNeighborhood, GraphSummary, GraphTimeline, TemporalGraphRead
 from app.services.querying import graph_neighborhood, graph_summary, graph_timeline
+from app.services.temporal_graph import build_temporal_graph
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 
@@ -41,3 +42,13 @@ def get_graph_neighborhood(
     if neighborhood is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Graph neighborhood not found")
     return neighborhood
+
+
+@router.get("/temporal", response_model=TemporalGraphRead)
+def get_temporal_graph(
+    limit: int = 80,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TemporalGraphRead:
+    bounded_limit = max(1, min(limit, 200))
+    return TemporalGraphRead(**build_temporal_graph(db, current_user, limit=bounded_limit))
