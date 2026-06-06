@@ -15,7 +15,7 @@ router = APIRouter(prefix="/query", tags=["query"])
 
 @router.post("", response_model=QueryResult, status_code=status.HTTP_201_CREATED)
 def submit_query(payload: QueryCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> QueryResult:
-    query_run = execute_query(db, query_text=payload.query_text, actor=current_user)
+    query_run = execute_query(db, query_text=payload.query_text, conversation_context=payload.conversation_context, actor=current_user)
     return build_query_result_for_reader(db, query_run, current_user)
 
 

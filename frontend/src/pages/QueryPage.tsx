@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type FormEventHandler,
+  type ReactNode,
 } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
@@ -37,6 +38,8 @@ interface ChatMessage {
   supportingEvidence?: EvidenceReference[]
   supportingNodes?: MemoryReference[]
   relatedSignals?: SignalRead[]
+  contradictionCount?: number
+  staleAssumptionCount?: number
 }
 
 interface ChatThread {
@@ -174,31 +177,27 @@ function persistStoredThreads(storageKey: string, threads: ChatThread[]) {
   window.localStorage.setItem(storageKey, JSON.stringify(compactThreads))
 }
 
-function buildSessionAwareQuery(
+function buildConversationContext(
   previousMessages: ChatMessage[],
-  currentQuestion: string,
-): string {
+): string | undefined {
   const recentTurns = previousMessages
-    .slice(-8)
+    .slice(-6)
     .map(
       (message) =>
-        `${message.role === 'user' ? 'Employee' : 'Assistant'}: ${message.content.replace(/\s+/g, ' ').trim()}`,
+        `${message.role === 'user' ? 'Employee' : 'Izge'}: ${message.content.replace(/\s+/g, ' ').trim()}`,
     )
     .join('\n')
-    .slice(-3600)
+    .slice(-2800)
 
-  if (!recentTurns) {
-    return currentQuestion
+  return recentTurns || undefined
+}
+
+function trimSentence(value: string, maxLength = 220): string {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) {
+    return normalized
   }
-
-  return [
-    'Use the following same-session chat context only for conversational continuity.',
-    'Keep the answer grounded in Izge artifacts and memory records visible to the signed-in employee. Do not use artifacts outside their permissions.',
-    '',
-    recentTurns,
-    '',
-    `Current employee question: ${currentQuestion}`,
-  ].join('\n')
+  return `${normalized.slice(0, maxLength - 1).trim()}…`
 }
 
 function answerFromResult(result: QueryResult): string {
@@ -209,11 +208,65 @@ function answerFromResult(result: QueryResult): string {
   )
 }
 
+function hasMarkdownSection(markdown: string, label: string): boolean {
+  return new RegExp(`(^|\\n)#{1,4}\\s+${label}`, 'i').test(markdown)
+}
+
+function buildEmployeeMarkdownAnswer(result: QueryResult): string {
+  const answer = answerFromResult(result).trim()
+  const sections = [answer]
+
+  if (
+    result.recommended_next_actions.length > 0 &&
+    !hasMarkdownSection(answer, 'next')
+  ) {
+    sections.push(
+      [
+        '### Suggested next steps',
+        ...result.recommended_next_actions
+          .slice(0, 3)
+          .map((action) => `- ${trimSentence(action, 260)}`),
+      ].join('\n'),
+    )
+  }
+
+  if (
+    result.uncertainty_notes.length > 0 &&
+    !hasMarkdownSection(answer, 'note')
+  ) {
+    sections.push(
+      [
+        '### Notes',
+        ...result.uncertainty_notes
+          .slice(0, 2)
+          .map((note) => `- ${trimSentence(note, 220)}`),
+      ].join('\n'),
+    )
+  }
+
+  if (
+    result.supporting_evidence.length > 0 &&
+    !hasMarkdownSection(answer, 'source')
+  ) {
+    sections.push(
+      [
+        '### Sources used',
+        ...result.supporting_evidence.slice(0, 3).map((evidence) => {
+          const excerpt = trimSentence(evidence.excerpt, 180)
+          return `- **${evidence.artifact_title}** — ${excerpt}`
+        }),
+      ].join('\n'),
+    )
+  }
+
+  return sections.join('\n\n')
+}
+
 function resultToAssistantMessage(result: QueryResult): ChatMessage {
   return {
     id: createMessageId(),
     role: 'assistant',
-    content: answerFromResult(result),
+    content: buildEmployeeMarkdownAnswer(result),
     createdAt: result.created_at,
     queryRunId: result.query_run_id,
     queryClass: result.query_class,
@@ -224,40 +277,39 @@ function resultToAssistantMessage(result: QueryResult): ChatMessage {
     supportingEvidence: result.supporting_evidence,
     supportingNodes: result.supporting_nodes,
     relatedSignals: result.related_signals,
+    contradictionCount: result.contradictions.length,
+    staleAssumptionCount: result.stale_assumptions.length,
   }
 }
 
 function traceStepTitle(stepKind: string): string {
   const titles: Record<string, string> = {
-    route_classification: 'Main oracle classified the question',
-    retrieval_recipe: 'Retrieval recipe prepared',
-    memory_selection: 'Permitted memory objects selected',
-    evidence_selection: 'Evidence snippets attached',
-    contradiction_check: 'Contradiction subagent checked conflicts',
-    drift_check: 'Assumption-drift subagent checked freshness',
-    answer_synthesis: 'Answer synthesis boundary recorded',
-    permissions_filter: 'Permission filter enforced',
+    route_decision: 'Understood the question',
+    bounded_orchestration: 'Planned the work',
+    stage_packet_execution: 'Ran focused subagent checks',
+    seed_selection: 'Selected relevant memory',
+    context_assembly: 'Gathered accessible context',
+    provenance_verification: 'Verified source boundaries',
+    evidence_selection: 'Attached source excerpts',
+    answer_composition: 'Wrote the answer',
+    uncertainty_note: 'Checked limitations',
   }
   return titles[stepKind] ?? formatLabel(stepKind)
 }
 
-function summarizeValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return 'None'
+function traceStepSummary(stepKind: string): string {
+  const summaries: Record<string, string> = {
+    route_decision: 'Matched the question to the right reasoning path.',
+    bounded_orchestration: 'Split the work into small bounded checks.',
+    stage_packet_execution: 'Collected concise outputs from worker stages.',
+    seed_selection: 'Picked the most relevant accessible records.',
+    context_assembly: 'Built the permitted context packet.',
+    provenance_verification: 'Confirmed the answer stays inside visible evidence.',
+    evidence_selection: 'Prepared source excerpts for review.',
+    answer_composition: 'Turned the evidence into a workplace answer.',
+    uncertainty_note: 'Recorded what may still be missing.',
   }
-  if (typeof value === 'string') {
-    return value
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value)
-  }
-  if (Array.isArray(value)) {
-    return `${value.length} item${value.length === 1 ? '' : 's'}`
-  }
-  if (typeof value === 'object') {
-    return Object.keys(value).slice(0, 4).join(', ') || 'Object'
-  }
-  return String(value)
+  return summaries[stepKind] ?? 'Completed a support step for the answer.'
 }
 
 function stageTitle(stageKey: string): string {
@@ -267,6 +319,196 @@ function stageTitle(stageKey: string): string {
     guidance_planner: 'Guidance planner subagent',
   }
   return titles[stageKey] ?? formatLabel(stageKey)
+}
+
+function stageIcon(stageKey: string): string {
+  if (stageKey.includes('contradiction')) {
+    return '⚖️'
+  }
+  if (stageKey.includes('drift')) {
+    return '🕒'
+  }
+  if (stageKey.includes('guidance')) {
+    return '🧭'
+  }
+  return '🤖'
+}
+
+function stageDescription(stageKey: string): string {
+  const descriptions: Record<string, string> = {
+    contradiction_interrogator: 'Checked whether selected records conflict.',
+    assumption_drift_interrogator: 'Checked whether assumptions changed.',
+    guidance_planner: 'Turned evidence into next steps.',
+  }
+  return descriptions[stageKey] ?? 'Completed a focused support check.'
+}
+
+interface AssistantWorkflowItem {
+  icon: string
+  title: string
+  detail: string
+}
+
+function workflowItemsForMessage(
+  message: ChatMessage,
+  stageRuns: OrchestrationStageRunRead[],
+): AssistantWorkflowItem[] {
+  if (stageRuns.length > 0) {
+    return stageRuns.slice(0, 4).map((run) => ({
+      icon: stageIcon(run.stage_key),
+      title: stageTitle(run.stage_key),
+      detail: `${stageDescription(run.stage_key)} ${formatLabel(run.status)}.`,
+    }))
+  }
+
+  const memoryCount = message.supportingNodes?.length ?? 0
+  const evidenceCount = message.supportingEvidence?.length ?? 0
+  const contradictionCount = message.contradictionCount ?? 0
+  const driftCount = message.staleAssumptionCount ?? 0
+  const actionCount = message.recommendedNextActions?.length ?? 0
+
+  return [
+    {
+      icon: '🧭',
+      title: 'Understood',
+      detail: message.queryClass
+        ? `${formatLabel(message.queryClass)}.`
+        : 'Read the employee question.',
+    },
+    {
+      icon: '🔎',
+      title: 'Gathered context',
+      detail: `${memoryCount} memory item${memoryCount === 1 ? '' : 's'}, ${evidenceCount} source${evidenceCount === 1 ? '' : 's'}.`,
+    },
+    {
+      icon: '🧪',
+      title: 'Checked signals',
+      detail: `${contradictionCount} conflict${contradictionCount === 1 ? '' : 's'}, ${driftCount} drift item${driftCount === 1 ? '' : 's'}.`,
+    },
+    {
+      icon: '✍️',
+      title: 'Answered',
+      detail: `${actionCount} suggested next step${actionCount === 1 ? '' : 's'}.`,
+    },
+  ]
+}
+
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const nodes: ReactNode[] = []
+  const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\((https?:\/\/[^)\s]+)\))/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index))
+    }
+    const token = match[0]
+    if (token.startsWith('**')) {
+      nodes.push(<strong key={`${token}-${match.index}`}>{token.slice(2, -2)}</strong>)
+    } else if (token.startsWith('`')) {
+      nodes.push(<code key={`${token}-${match.index}`}>{token.slice(1, -1)}</code>)
+    } else {
+      const linkMatch = token.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/)
+      if (linkMatch) {
+        nodes.push(
+          <a key={`${token}-${match.index}`} href={linkMatch[2]} target="_blank" rel="noreferrer">
+            {linkMatch[1]}
+          </a>,
+        )
+      } else {
+        nodes.push(token)
+      }
+    }
+    lastIndex = match.index + token.length
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex))
+  }
+  return nodes
+}
+
+function MarkdownContent({ markdown }: { markdown: string }) {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n')
+  const blocks: ReactNode[] = []
+  let index = 0
+
+  while (index < lines.length) {
+    const line = lines[index]
+    if (!line.trim()) {
+      index += 1
+      continue
+    }
+
+    const heading = line.match(/^(#{1,4})\s+(.+)$/)
+    if (heading) {
+      const level = Math.min(heading[1].length, 4)
+      const content = renderInlineMarkdown(heading[2])
+      const key = `heading-${index}`
+      blocks.push(
+        level <= 2 ? (
+          <h3 key={key}>{content}</h3>
+        ) : (
+          <h4 key={key}>{content}</h4>
+        ),
+      )
+      index += 1
+      continue
+    }
+
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items: string[] = []
+      while (index < lines.length && /^\s*[-*]\s+/.test(lines[index])) {
+        items.push(lines[index].replace(/^\s*[-*]\s+/, ''))
+        index += 1
+      }
+      blocks.push(
+        <ul key={`ul-${index}`}>
+          {items.map((item, itemIndex) => (
+            <li key={`${item}-${itemIndex}`}>{renderInlineMarkdown(item)}</li>
+          ))}
+        </ul>,
+      )
+      continue
+    }
+
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items: string[] = []
+      while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index])) {
+        items.push(lines[index].replace(/^\s*\d+\.\s+/, ''))
+        index += 1
+      }
+      blocks.push(
+        <ol key={`ol-${index}`}>
+          {items.map((item, itemIndex) => (
+            <li key={`${item}-${itemIndex}`}>{renderInlineMarkdown(item)}</li>
+          ))}
+        </ol>,
+      )
+      continue
+    }
+
+    const paragraphLines = [line.trim()]
+    index += 1
+    while (
+      index < lines.length &&
+      lines[index].trim() &&
+      !/^(#{1,4})\s+/.test(lines[index]) &&
+      !/^\s*[-*]\s+/.test(lines[index]) &&
+      !/^\s*\d+\.\s+/.test(lines[index])
+    ) {
+      paragraphLines.push(lines[index].trim())
+      index += 1
+    }
+    blocks.push(
+      <p key={`p-${index}`}>
+        {renderInlineMarkdown(paragraphLines.join(' '))}
+      </p>,
+    )
+  }
+
+  return <div className="markdown-answer">{blocks}</div>
 }
 
 function llmStatusCopy(
@@ -542,7 +784,7 @@ export function QueryPage() {
       createdAt: new Date().toISOString(),
     }
     const previousMessages = messages
-    const queryText = buildSessionAwareQuery(previousMessages, trimmedQuestion)
+    const conversationContext = buildConversationContext(previousMessages)
 
     updateActiveThreadMessages((current) => [...current, userMessage])
     setQueryDraftState({ sourcePrompt: promptFromUrl, text: '' })
@@ -550,7 +792,11 @@ export function QueryPage() {
     setError(null)
 
     try {
-      const result = await api.submitQuery(session.token, queryText)
+      const result = await api.submitQuery(
+        session.token,
+        trimmedQuestion,
+        conversationContext,
+      )
       const assistantMessage = resultToAssistantMessage(result)
       updateActiveThreadMessages((current) => [...current, assistantMessage])
       setActiveAssistantId(assistantMessage.id)
@@ -687,6 +933,13 @@ export function QueryPage() {
                 const inspectorOpen =
                   message.role === 'assistant' &&
                   activeAssistantId === message.id
+                const workflowItems =
+                  message.role === 'assistant'
+                    ? workflowItemsForMessage(
+                        message,
+                        inspectorOpen ? activeStageRuns : [],
+                      )
+                    : []
                 return (
                   <article
                     key={message.id}
@@ -704,10 +957,27 @@ export function QueryPage() {
                         {formatDateTime(message.createdAt)}
                       </span>
                     </div>
-                    <p className="chat-message-copy">{message.content}</p>
+                    {message.role === 'assistant' ? (
+                      <MarkdownContent markdown={message.content} />
+                    ) : (
+                      <p className="chat-message-copy">{message.content}</p>
+                    )}
 
                     {message.role === 'assistant' ? (
                       <div className="chat-answer-meta">
+                        <div className="assistant-workflow-strip" aria-label="How Izge handled this question">
+                          {workflowItems.map((item) => (
+                            <span
+                              key={`${message.id}-${item.title}`}
+                              className="assistant-workflow-chip"
+                              title={item.detail}
+                            >
+                              <span aria-hidden="true">{item.icon}</span>
+                              <strong>{item.title}</strong>
+                              <small>{item.detail}</small>
+                            </span>
+                          ))}
+                        </div>
                         <div className="inline-actions">
                           {message.queryClass ? (
                             <StatusBadge
@@ -728,8 +998,8 @@ export function QueryPage() {
                               }
                             >
                               {inspectorOpen
-                                ? 'Hide sources'
-                                : 'Sources and trace'}
+                                ? 'Hide work'
+                                : 'How Izge worked'}
                             </button>
                           ) : null}
                           {message.queryRunId ? (
@@ -852,7 +1122,7 @@ export function QueryPage() {
                                           />
                                         ) : null}
                                         <p className="muted-copy">
-                                          {summarizeValue(run.output_summary)}
+                                          {stageDescription(run.stage_key)}
                                         </p>
                                       </article>
                                     ))
@@ -871,7 +1141,7 @@ export function QueryPage() {
                                       </p>
                                     </div>
                                     <p className="muted-copy">
-                                      {summarizeValue(step.payload)}
+                                      {traceStepSummary(step.step_kind)}
                                     </p>
                                   </article>
                                 ))}
@@ -900,9 +1170,23 @@ export function QueryPage() {
                   <span className="table-secondary">Working…</span>
                 </div>
                 <p className="chat-message-copy">
-                  Routing the question, retrieving permitted artifacts, and
-                  checking the graph before answering.
+                  I’m reading your question, gathering permitted context, checking
+                  the relevant signals, and writing a clear answer.
                 </p>
+                <div className="assistant-workflow-strip assistant-workflow-strip-pending" aria-label="Current assistant work">
+                  {[
+                    ['🧭', 'Understand', 'Reading the request.'],
+                    ['🔎', 'Gather', 'Finding allowed context.'],
+                    ['🧪', 'Check', 'Reviewing signals.'],
+                    ['✍️', 'Answer', 'Preparing Markdown.'],
+                  ].map(([icon, title, detail]) => (
+                    <span key={title} className="assistant-workflow-chip">
+                      <span aria-hidden="true">{icon}</span>
+                      <strong>{title}</strong>
+                      <small>{detail}</small>
+                    </span>
+                  ))}
+                </div>
               </article>
             ) : null}
             <div ref={threadEndRef} />

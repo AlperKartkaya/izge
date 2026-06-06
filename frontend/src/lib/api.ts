@@ -224,11 +224,11 @@ export const api = {
     return request<IngestionJobRead>(`/ingestion/jobs/${jobId}`, { token })
   },
 
-  submitQuery(token: string, queryText: string) {
+  submitQuery(token: string, queryText: string, conversationContext?: string) {
     return request<QueryResult>('/query', {
       method: 'POST',
       token,
-      body: JSON.stringify({ query_text: queryText }),
+      body: JSON.stringify({ query_text: queryText, conversation_context: conversationContext || null }),
     })
   },
 

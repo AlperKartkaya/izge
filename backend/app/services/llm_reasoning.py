@@ -64,7 +64,7 @@ class LLMQueryIntent(BaseModel):
 class LLMQueryAnswerSynthesis(BaseModel):
     """LLM-authored final wording for a deterministic query result packet."""
 
-    answer_text: str = Field(min_length=1, max_length=1600)
+    answer_text: str = Field(min_length=1, max_length=2200)
     why_this_answer: str = Field(min_length=1, max_length=900)
     recommended_next_actions: list[str] = Field(default_factory=list, max_length=4)
     cited_evidence_ids: list[str] = Field(default_factory=list, max_length=8)
@@ -340,11 +340,14 @@ def classify_query_intent_with_local_llm(*, query_text: str, deterministic_route
 
 def _query_answer_system_prompt() -> str:
     return (
-        "You are Izge's local, company-controlled answer synthesis helper. Rewrite a final answer only from the "
-        "deterministic evidence packet. Do not retrieve, infer hidden facts, invent citations, or alter the selected "
-        "query class. If evidence is thin, say so. Return strict JSON matching the schema. Use these exact top-level "
-        "keys: answer_text, why_this_answer, recommended_next_actions, cited_evidence_ids, cited_memory_ids, "
-        "confidence_rationale."
+        "You are Izge's local, company-controlled answer synthesis helper for real company employees. Rewrite a final "
+        "answer only from the deterministic evidence packet and optional conversation context. The employee is a human, "
+        "not a database operator: answer in plain workplace language, concise Markdown, and with a useful conclusion "
+        "first. Do not expose internal mechanics such as deterministic routes, graph engines, packet IDs, or memory-object "
+        "implementation details unless the employee explicitly asks about them. Do not retrieve, infer hidden facts, "
+        "invent citations, or alter the selected query class. If evidence is thin, say so plainly. Return strict JSON "
+        "matching the schema. Use these exact top-level keys: answer_text, why_this_answer, recommended_next_actions, "
+        "cited_evidence_ids, cited_memory_ids, confidence_rationale."
     )
 
 
@@ -353,6 +356,7 @@ def synthesize_query_answer_with_local_llm(
     query_text: str,
     query_class: str,
     deterministic_result: dict[str, Any],
+    conversation_context: str | None = None,
 ) -> LLMQueryAnswerSynthesis:
     """Use the local LLM to improve answer wording from deterministic query evidence.
 
@@ -368,13 +372,16 @@ def synthesize_query_answer_with_local_llm(
             "must_not_introduce_new_facts": True,
         },
         "query_text": query_text,
+        "conversation_context": conversation_context,
         "query_class": query_class,
         "deterministic_result": _compact_for_prompt(deterministic_result),
     }
     user_prompt = (
-        "Rewrite this Izge query result into a sharper, evidence-first answer. Preserve the conclusion if the "
-        "deterministic result is already specific. Use cited_evidence_ids and cited_memory_ids only from the provided "
-        "packet. Keep recommendations concrete but do not add actions unsupported by the packet.\n\n"
+        "Rewrite this Izge query result for an employee who wants to finish a work task. Use Markdown in answer_text. "
+        "Recommended shape: a short direct answer first, then bullets only if they help. Preserve the deterministic "
+        "conclusion if it is already specific. Use cited_evidence_ids and cited_memory_ids only from the provided packet. "
+        "Keep recommendations concrete but do not add actions unsupported by the packet. Use conversation_context only "
+        "to resolve pronouns or follow-up intent; do not treat it as evidence.\n\n"
         f"Context JSON:\n{json.dumps(context, sort_keys=True, default=str)}"
     )
     try:

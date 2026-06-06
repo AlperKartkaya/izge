@@ -296,7 +296,13 @@ def _answer_synthesis_context(result_data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _apply_optional_llm_answer_synthesis(*, query_text: str, query_class: str, result_data: dict[str, Any]) -> dict[str, Any]:
+def _apply_optional_llm_answer_synthesis(
+    *,
+    query_text: str,
+    query_class: str,
+    result_data: dict[str, Any],
+    conversation_context: str | None = None,
+) -> dict[str, Any]:
     settings = get_settings()
     synthesis_boundary = {
         "status": "disabled",
@@ -317,6 +323,7 @@ def _apply_optional_llm_answer_synthesis(*, query_text: str, query_class: str, r
             query_text=query_text,
             query_class=query_class,
             deterministic_result=context,
+            conversation_context=conversation_context,
         )
     except Exception as exc:
         result_data["answer_synthesis"] = {
@@ -2618,8 +2625,10 @@ def list_ranked_next_actions(db: Session, user: User, limit: int = 12) -> list[d
     return deduped[:limit]
 
 
-def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
-    route_decision = classify_query_with_trace(query_text)
+def execute_query(db: Session, *, query_text: str, actor: User, conversation_context: str | None = None) -> QueryRun:
+    employee_question = " ".join(query_text.strip().split())
+    chat_context = " ".join(conversation_context.strip().split()) if conversation_context else None
+    route_decision = classify_query_with_trace(employee_question)
     query_class = route_decision.query_class
     all_workspace_artifacts = db.scalars(select(Artifact).where(Artifact.workspace_id == actor.workspace_id)).all()
     visible_artifacts = _visible_artifacts(db, actor)
@@ -2630,22 +2639,27 @@ def execute_query(db: Session, *, query_text: str, actor: User) -> QueryRun:
 
     context_assembly_started_at = perf_counter()
     if query_class == "Contradiction analysis":
-        result_data = _contradiction_result(db, actor, query_text)
+        result_data = _contradiction_result(db, actor, employee_question)
     elif query_class == "Assumption drift":
-        result_data = _assumption_drift_result(db, actor, query_text)
+        result_data = _assumption_drift_result(db, actor, employee_question)
     elif query_class == "Next-action guidance":
-        result_data = _next_action_result(db, actor, query_text)
+        result_data = _next_action_result(db, actor, employee_question)
     else:
-        result_data = _lineage_result(db, actor, query_text)
+        result_data = _lineage_result(db, actor, employee_question)
     if rejected_artifact_count and "Some visible evidence was excluded because an admin marked its source artifact rejected." not in result_data["uncertainty_notes"]:
         result_data["uncertainty_notes"].append("Some visible evidence was excluded because an admin marked its source artifact rejected.")
     context_assembly_ms = max(0, round((perf_counter() - context_assembly_started_at) * 1000))
-    result_data = _apply_optional_llm_answer_synthesis(query_text=query_text, query_class=query_class, result_data=result_data)
+    result_data = _apply_optional_llm_answer_synthesis(
+        query_text=employee_question,
+        query_class=query_class,
+        result_data=result_data,
+        conversation_context=chat_context,
+    )
 
     query_run = QueryRun(
         workspace_id=actor.workspace_id,
         created_by=actor.user_id,
-        query_text=query_text,
+        query_text=employee_question,
         query_class=query_class,
         route_confidence=route_decision.route_confidence,
         status="completed",

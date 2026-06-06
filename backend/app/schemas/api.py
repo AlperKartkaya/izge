@@ -169,6 +169,7 @@ class MemoryReference(BaseModel):
 
 class QueryCreate(BaseModel):
     query_text: str = Field(min_length=3)
+    conversation_context: str | None = Field(default=None, max_length=4000)
 
 
 class QueryResult(BaseModel):
