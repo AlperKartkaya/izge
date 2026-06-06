@@ -109,13 +109,21 @@ The Vite dev server starts at `http://localhost:5173`.
 
 ### Docker Compose
 
-For a portable, company-controlled runtime with persisted SQLite and artifact storage:
+For the local development runtime with visible persisted SQLite and artifact storage:
 
 ```bash
 docker compose up --build
 ```
 
 Then open `http://localhost:8080`. The backend remains available at `http://localhost:8000`. The local Compose profile starts three services: `backend`, `worker`, and `frontend`.
+
+Docker Compose bind-mounts `backend/data` into the containers as `/data`, so the Docker app and the normal local backend share the same development database and artifact folders:
+
+- SQLite database: `backend/data/izge.db`
+- Uploaded files: `backend/data/storage/<artifact_id>/source.<ext>`
+- Pasted text: `backend/data/pasted/<artifact_id>/pasted.txt`
+
+That means adding an artifact through the Docker UI should update `backend/data/izge.db` and create/update files under `backend/data/storage` or `backend/data/pasted`. This is the expected development workflow. Use DB Browser for SQLite or `sqlite3 backend/data/izge.db` for read-only diagnostics, then refresh/reopen the DB Browser view after UI writes because SQLite may use WAL files (`izge.db-wal`, `izge.db-shm`) while the app is running.
 
 Default workspace identities:
 
@@ -159,7 +167,7 @@ scripts/synthetic-company-smoke-eval.sh
 scripts/worker-smoke-eval.sh
 ```
 
-Back up and restore the persisted company memory volume with:
+Back up and restore the persisted company memory data with:
 
 ```bash
 scripts/docker-backup.sh
@@ -174,13 +182,13 @@ The backup contains SQLite, uploaded artifact storage, pasted-text storage, and 
 The application database is SQLite:
 
 - Local dev default: `backend/data/izge.db`
-- Docker Compose volume path: `/data/izge.db` inside the `izge_data` volume
+- Docker Compose dev path: `backend/data/izge.db`, mounted inside containers as `/data/izge.db`
 
-Uploaded files are stored under `IZGE_STORAGE_ROOT/<artifact_id>/source.<ext>`; pasted text is stored under `IZGE_PASTED_TEXT_ROOT/<artifact_id>/pasted.txt`. In local dev those roots default to `backend/data/storage` and `backend/data/pasted`; in Docker they map to `/data/storage` and `/data/pasted` inside the persisted volume.
+Uploaded files are stored under `IZGE_STORAGE_ROOT/<artifact_id>/source.<ext>`; pasted text is stored under `IZGE_PASTED_TEXT_ROOT/<artifact_id>/pasted.txt`. In local dev and Docker Compose dev those roots are visible on the host at `backend/data/storage` and `backend/data/pasted`; inside Docker they map to `/data/storage` and `/data/pasted`.
 
 Admins can inspect this through the product UI at `/admin/data` (`Data` in the nav). That page shows table row counts, Alembic revision, artifact logical locators, physical storage paths, storage existence/size, checksums, ingestion/review state, and supported metadata edits.
 
-Supported edits should go through UI/API: artifact title, review status/notes, visibility scope, and permitted users. Raw source content is intentionally immutable for auditability; upload/paste a replacement artifact and reject or restrict the old one if document contents change. For local diagnostics only, you can inspect `backend/data/izge.db` with `sqlite3` or DB Browser for SQLite; production/shared deployments should use authenticated UI/API surfaces rather than raw SQL edits.
+Supported edits should go through UI/API: artifact title, review status/notes, visibility scope, and permitted users. Raw source content is intentionally immutable for auditability; upload/paste a replacement artifact and reject or restrict the old one if document contents change. For local diagnostics only, you can inspect `backend/data/izge.db` with `sqlite3` or DB Browser for SQLite; do not raw-edit rows while the app is running because that bypasses audit, ingestion, permissions, and artifact-storage consistency.
 
 ### Marketing website
 

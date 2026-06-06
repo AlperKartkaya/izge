@@ -5,7 +5,7 @@ usage() {
   cat >&2 <<'USAGE'
 Usage: scripts/docker-restore.sh <backup.tar.gz> --force
 
-Restores the Izge Docker /data volume from a backup created by scripts/docker-backup.sh.
+Restores the Izge Docker /data directory from a backup created by scripts/docker-backup.sh.
 This overwrites /data/izge.db, /data/storage, /data/pasted, and bootstrap credentials.
 Stop running services first: docker compose down
 USAGE
@@ -88,4 +88,4 @@ if [ -f "$TMP_DIR/bootstrap_admin_credentials.json" ]; then
 fi
 CONTAINER_SCRIPT
 
-printf 'Restored Izge Docker volume from: %s\n' "$ARCHIVE" >&2
+printf 'Restored Izge Docker data from: %s\n' "$ARCHIVE" >&2

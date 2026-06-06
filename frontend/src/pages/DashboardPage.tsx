@@ -270,10 +270,248 @@ export function DashboardPage() {
     return rows.slice(0, 8)
   }, [assumptionDrift, contradictions, nextActions, persistedSignals])
 
+  const accessibleArtifacts = useMemo(
+    () => artifacts.filter((artifact) => artifact.review_status !== 'rejected'),
+    [artifacts],
+  )
+  const employeeEvidenceRows = useMemo(() => accessibleArtifacts.slice(0, 5), [accessibleArtifacts])
+  const employeeReadiness = useMemo(() => {
+    if (!latestCompletedArtifact) {
+      return {
+        status: 'Needs evidence',
+        title: 'Add the first useful source',
+        detail: 'Upload or paste the company material you need Izge to reason over, then ask your question from the assistant.',
+        to: '/artifacts',
+        actionLabel: 'Add evidence',
+      }
+    }
+    if (!totalMemoryObjects) {
+      return {
+        status: 'Preparing memory',
+        title: 'Evidence is present',
+        detail: 'Sources exist in this workspace. An admin may need to finish processing before every answer has full memory context.',
+        to: '/artifacts',
+        actionLabel: 'Open evidence',
+      }
+    }
+    if (signalRows.length > 0) {
+      return {
+        status: 'Action available',
+        title: signalRows[0].title,
+        detail: signalRows[0].summary,
+        to: signalRows[0].to ?? '/graph',
+        actionLabel: 'Open focus item',
+      }
+    }
+    return {
+      status: 'Ready',
+      title: 'Ready for a grounded question',
+      detail: 'Ask Izge about decisions, assumptions, next actions, or evidence you are allowed to access.',
+      to: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
+      actionLabel: 'Ask Izge',
+    }
+  }, [latestCompletedArtifact, signalRows, totalMemoryObjects])
+  const employeeActions = useMemo(
+    () => [
+      {
+        title: 'Ask Izge',
+        detail: 'Get a grounded answer from company memory and the artifacts you can access.',
+        meta: totalMemoryObjects > 0 ? `${totalMemoryObjects} memory object${totalMemoryObjects === 1 ? '' : 's'} available` : 'Works best after evidence is processed',
+        to: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
+        cta: 'Ask now',
+        icon: '✦',
+        primary: true,
+      },
+      {
+        title: 'Continue team chat',
+        detail: 'Coordinate with coworkers without leaving the workspace where evidence lives.',
+        meta: 'Company conversations stay in context',
+        to: '/team-chat',
+        cta: 'Open chat',
+        icon: '◌',
+        primary: false,
+      },
+      {
+        title: 'Open evidence',
+        detail: 'Preview source material, check status, and add useful company context.',
+        meta: `${accessibleArtifacts.length} accessible source${accessibleArtifacts.length === 1 ? '' : 's'}`,
+        to: '/artifacts',
+        cta: 'View evidence',
+        icon: '□',
+        primary: false,
+      },
+      {
+        title: 'Inspect graph',
+        detail: signalRows[0]?.title ?? 'Explore how decisions, assumptions, commitments, and evidence connect.',
+        meta: signalRows.length > 0 ? `${signalRows.length} focus item${signalRows.length === 1 ? '' : 's'}` : 'No urgent signals yet',
+        to: signalRows[0]?.to ?? '/graph',
+        cta: signalRows.length > 0 ? 'Review signal' : 'Open graph',
+        icon: '◇',
+        primary: false,
+      },
+    ],
+    [accessibleArtifacts.length, signalRows, totalMemoryObjects],
+  )
+
   const memoryComposition = useMemo(
     () => Object.entries(summary?.memory_counts ?? {}).sort(([, firstCount], [, secondCount]) => secondCount - firstCount),
     [summary],
   )
+
+  if (!isAdmin) {
+    return (
+      <div className="stack-xl employee-home-page">
+        <section className="employee-hero" aria-labelledby="employee-home-title">
+          <div className="employee-hero-copy">
+            <p className="eyebrow">Employee workspace</p>
+            <h1 id="employee-home-title" className="brand-title">
+              Finish work with company memory.
+            </h1>
+            <p className="page-description">
+              Ask Izge, open evidence, and coordinate with your team using only the company artifacts you are allowed to access.
+            </p>
+            <div className="employee-hero-actions">
+              <Link className="primary-button" to={`/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`}>
+                Ask Izge
+              </Link>
+              <Link className="secondary-button" to="/team-chat">
+                Team chat
+              </Link>
+            </div>
+          </div>
+
+          <aside className="employee-focus-panel" aria-label="Current focus">
+            <div className="employee-focus-header">
+              <div>
+                <p className="section-label">Current focus</p>
+                <p className="table-primary">{employeeReadiness.title}</p>
+              </div>
+              <StatusBadge value={employeeReadiness.status} />
+            </div>
+            <p className="muted-copy">{employeeReadiness.detail}</p>
+            <Link className="secondary-button" to={employeeReadiness.to}>
+              {employeeReadiness.actionLabel}
+            </Link>
+            <dl className="employee-context-list">
+              <div>
+                <dt>Signed in as</dt>
+                <dd>{session?.user.display_name ?? 'Employee'}</dd>
+              </div>
+              <div>
+                <dt>Access rule</dt>
+                <dd>Your answers use only permitted company memory.</dd>
+              </div>
+            </dl>
+          </aside>
+        </section>
+
+        {error ? <Callout tone="warning">{error}</Callout> : null}
+
+        <section className="employee-action-grid" aria-label="Primary employee actions">
+          {employeeActions.map((action) => (
+            <Link key={action.title} className={action.primary ? 'employee-action-card employee-action-card-primary' : 'employee-action-card'} to={action.to}>
+              <span className="employee-action-icon" aria-hidden="true">
+                {action.icon}
+              </span>
+              <span className="employee-action-copy">
+                <span className="table-primary">{action.title}</span>
+                <span className="muted-copy">{action.detail}</span>
+                <span className="table-secondary">{action.meta}</span>
+              </span>
+              <span className="employee-action-cta">{action.cta}</span>
+            </Link>
+          ))}
+        </section>
+
+        <div className="employee-content-grid">
+          <Panel
+            title="Work queue"
+            description="Signals and next actions that can change what the team should do next."
+            aside={
+              <Link className="secondary-button" to="/graph">
+                Open graph
+              </Link>
+            }
+          >
+            {isLoading ? <p className="muted-copy">Loading your workspace…</p> : null}
+            {!isLoading && signalRows.length === 0 ? (
+              <EmptyState
+                title="No active focus items"
+                description="When Izge finds contradictions, drift, or next actions in accessible evidence, they will appear here."
+              />
+            ) : null}
+            {signalRows.length > 0 ? (
+              <div className="employee-work-list">
+                {signalRows.slice(0, 5).map((row) => (
+                  <Link key={row.id} className={`employee-work-item employee-work-item-${row.tone}`} to={row.to ?? '/graph'}>
+                    <span className="employee-work-kind">{row.type}</span>
+                    <span className="employee-work-copy">
+                      <span className="table-primary">{row.title}</span>
+                      <span className="muted-copy">{row.summary}</span>
+                      <span className="table-secondary">{row.detail}</span>
+                    </span>
+                    <span className="employee-work-arrow" aria-hidden="true">
+                      ↗
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </Panel>
+
+          <Panel
+            title="Recent evidence"
+            description="Accessible company sources you can open before asking or answering."
+            aside={
+              <Link className="secondary-button" to="/artifacts">
+                View all
+              </Link>
+            }
+          >
+            {isLoading ? <p className="muted-copy">Loading evidence…</p> : null}
+            {!isLoading && employeeEvidenceRows.length === 0 ? (
+              <EmptyState title="No accessible evidence yet" description="Add source material or ask an admin to grant access to relevant company artifacts." />
+            ) : null}
+            {employeeEvidenceRows.length > 0 ? (
+              <div className="table-wrap employee-evidence-table-wrap">
+                <table className="data-table employee-evidence-table">
+                  <thead>
+                    <tr>
+                      <th>Source</th>
+                      <th>Status</th>
+                      <th>Updated</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employeeEvidenceRows.map((artifact) => (
+                      <tr key={artifact.artifact_id}>
+                        <td>
+                          <div>
+                            <p className="table-primary">{artifact.title}</p>
+                            <p className="table-secondary">{artifact.original_filename ?? formatLabel(artifact.source_type)}</p>
+                          </div>
+                        </td>
+                        <td>
+                          <StatusBadge value={formatLabel(artifact.ingestion_status)} />
+                        </td>
+                        <td>{formatDateTime(artifact.updated_at)}</td>
+                        <td>
+                          <Link className="text-button" to="/artifacts">
+                            Open
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </Panel>
+        </div>
+      </div>
+    )
+  }
 
   const reasoningModes = [
     ['Decision lineage', 'Understand why a decision exists', 'Timeline, owner, evidence, and related commitments'],

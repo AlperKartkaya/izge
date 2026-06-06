@@ -82,4 +82,4 @@ CONTAINER_SCRIPT
 
 mv "$TMP_OUT" "$OUT_PATH"
 trap - EXIT
-printf 'Created Izge Docker volume backup: %s\n' "$OUT_PATH" >&2
+printf 'Created Izge Docker data backup: %s\n' "$OUT_PATH" >&2

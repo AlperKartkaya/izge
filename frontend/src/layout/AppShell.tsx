@@ -4,7 +4,15 @@ import { useAuth } from '../auth/AuthContext'
 import { formatDateTime } from '../lib/format'
 import { applyThemePreference, nextThemePreference, readInitialThemePreference, type ThemePreference } from '../lib/theme'
 
-const primaryNavigation = [
+const employeeNavigation = [
+  { to: '/', label: 'Home', end: true },
+  { to: '/query', label: 'Assistant' },
+  { to: '/team-chat', label: 'Team chat' },
+  { to: '/artifacts', label: 'Evidence' },
+  { to: '/graph', label: 'Graph' },
+]
+
+const adminNavigation = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/artifacts', label: 'Artifacts' },
   { to: '/ingestion', label: 'Ingestion' },
@@ -20,9 +28,10 @@ export function AppShell() {
   const [theme, setTheme] = useState<ThemePreference>(() => readInitialThemePreference())
   const isAdmin = session?.user.role === 'Admin'
   const navigationItems = isAdmin
-    ? [...primaryNavigation, { to: '/admin/data', label: 'Data' }, { to: '/audit', label: 'Audit' }, { to: '/admin/users', label: 'Users' }]
-    : primaryNavigation
+    ? [...adminNavigation, { to: '/admin/data', label: 'Data' }, { to: '/audit', label: 'Audit' }, { to: '/admin/users', label: 'Users' }]
+    : employeeNavigation
   const nextTheme = nextThemePreference(theme)
+  const roleLabel = isAdmin ? 'Admin' : 'Employee'
 
   useEffect(() => {
     applyThemePreference(theme)
@@ -40,7 +49,7 @@ export function AppShell() {
         <NavLink to="/" end className="brand-mark" aria-label="Izge home">
           <span className="brand-sigil">IZ</span>
           <span>
-            <span className="brand-kicker">Memory operations</span>
+            <span className="brand-kicker">{isAdmin ? 'Memory operations' : 'Company memory'}</span>
             <span className="brand-name">Izge</span>
           </span>
         </NavLink>
@@ -51,9 +60,11 @@ export function AppShell() {
               {item.label}
             </NavLink>
           ))}
-          <a className="nav-link" href="/docs/IZGE_OFFICIAL_DOCUMENTATION.html">
-            Docs
-          </a>
+          {isAdmin ? (
+            <a className="nav-link" href="/docs/IZGE_OFFICIAL_DOCUMENTATION.html">
+              Docs
+            </a>
+          ) : null}
         </nav>
 
         <div className="session-cluster">
@@ -71,7 +82,7 @@ export function AppShell() {
           </button>
           <div className="identity-block">
             <p className="identity-name">{session?.user.display_name}</p>
-            <p className="identity-meta">{session?.user.role} / {session?.expiresAt ? formatDateTime(session.expiresAt) : 'Active session'}</p>
+            <p className="identity-meta">{roleLabel} / {session?.expiresAt ? formatDateTime(session.expiresAt) : 'Active session'}</p>
           </div>
           <button type="button" className="text-button" onClick={signOut}>
             Sign out

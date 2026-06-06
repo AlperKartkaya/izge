@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.dependencies import get_current_user
 from app.models import User, Workspace
 from app.schemas.api import SignInRequest, TokenResponse, UserRead
 from app.services.audit import log_event
@@ -12,6 +11,7 @@ from app.services.security import (
     authenticate_user,
     create_session,
     enforce_sign_in_rate_limit,
+    get_user_by_token,
     record_sign_in_failure,
     record_sign_in_success,
     revoke_session_token,
@@ -108,20 +108,26 @@ def sign_out(
     request: Request,
     response: Response,
     authorization: str | None = Header(default=None),
-    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     token = _extract_token(authorization, request)
+    current_user: User | None = None
+
     if token:
+        try:
+            current_user = get_user_by_token(db, token)
+        except HTTPException:
+            current_user = None
         revoke_session_token(db, token)
     _clear_session_cookie(response, request)
-    log_event(
-        db,
-        workspace_id=current_user.workspace_id,
-        actor_user_id=current_user.user_id,
-        event_type="USER_SIGN_OUT",
-        target_type="user",
-        target_id=current_user.user_id,
-        event_metadata={},
-    )
+    if current_user is not None:
+        log_event(
+            db,
+            workspace_id=current_user.workspace_id,
+            actor_user_id=current_user.user_id,
+            event_type="USER_SIGN_OUT",
+            target_type="user",
+            target_id=current_user.user_id,
+            event_metadata={},
+        )
     return {"status": "signed_out"}
