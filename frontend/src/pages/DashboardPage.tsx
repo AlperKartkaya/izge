@@ -122,10 +122,10 @@ export function DashboardPage() {
     if (!latestCompletedArtifact) {
       return {
         status: 'Needs source',
-        title: 'Load evidence first',
+        title: 'Load memory sources first',
         detail: 'Operational use starts only after real company artifacts exist in this workspace.',
-        actionLabel: 'Load evidence',
-        actionTo: '/artifacts',
+        actionLabel: 'Open memory',
+        actionTo: '/memory',
       }
     }
     if (!totalMemoryObjects) {
@@ -140,7 +140,7 @@ export function DashboardPage() {
     if (isAdmin && reviewQueue.length > 0) {
       return {
         status: 'Needs review',
-        title: 'Govern evidence before relying on answers',
+        title: 'Review source trust before relying on answers',
         detail: `${reviewQueue.length} artifact(s) are waiting for an admin trust decision.`,
         actionLabel: 'Open review queue',
         actionTo: '/admin',
@@ -195,12 +195,12 @@ export function DashboardPage() {
       {
         step: '01',
         label: 'Capture',
-        title: latestCompletedArtifact?.title ?? 'Load company evidence',
+        title: latestCompletedArtifact?.title ?? 'Load company memory',
         detail: latestCompletedArtifact
           ? `${latestCompletedArtifact.artifact_id} is ${formatLabel(latestCompletedArtifact.ingestion_status)} and ${formatLabel(latestCompletedArtifact.review_status)}.`
           : 'Upload files or paste source text before relying on company memory.',
         status: latestCompletedArtifact ? formatLabel(latestCompletedArtifact.review_status) : 'Start here',
-        to: '/artifacts',
+        to: '/memory',
       },
       {
         step: '02',
@@ -213,7 +213,7 @@ export function DashboardPage() {
       {
         step: '03',
         label: 'Govern',
-        title: isAdmin ? `${reviewQueue.length} evidence item(s) need review` : 'Evidence trust state is visible',
+        title: isAdmin ? `${reviewQueue.length} source item(s) need review` : 'Source trust state is visible',
         detail: 'Review status is part of the reasoning record so unsupported or rejected material stays traceable.',
         status: reviewQueue.length > 0 ? 'Needs review' : 'Clear',
         to: isAdmin ? '/admin' : '/audit',
@@ -278,20 +278,20 @@ export function DashboardPage() {
   const employeeReadiness = useMemo(() => {
     if (!latestCompletedArtifact) {
       return {
-        status: 'Needs evidence',
+        status: 'Needs source',
         title: 'Add the first useful source',
         detail: 'Upload or paste the company material you need Izge to reason over, then ask your question from the assistant.',
-        to: '/artifacts',
-        actionLabel: 'Add evidence',
+        to: '/memory',
+        actionLabel: 'Add source',
       }
     }
     if (!totalMemoryObjects) {
       return {
         status: 'Preparing memory',
-        title: 'Evidence is present',
+        title: 'Memory sources are present',
         detail: 'Sources exist in this workspace. An admin may need to finish processing before every answer has full memory context.',
-        to: '/artifacts',
-        actionLabel: 'Open evidence',
+        to: '/memory',
+        actionLabel: 'Open memory',
       }
     }
     if (signalRows.length > 0) {
@@ -306,7 +306,7 @@ export function DashboardPage() {
     return {
       status: 'Ready',
       title: 'Ready for a grounded question',
-      detail: 'Ask Izge about decisions, assumptions, next actions, or evidence you are allowed to access.',
+      detail: 'Ask Izge about decisions, assumptions, next actions, or sources you are allowed to access.',
       to: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
       actionLabel: 'Ask Izge',
     }
@@ -332,11 +332,11 @@ export function DashboardPage() {
         primary: false,
       },
       {
-        title: 'Open evidence',
+        title: 'Open memory',
         detail: 'Preview accessible sources and check their status.',
         meta: `${accessibleArtifacts.length} accessible source${accessibleArtifacts.length === 1 ? '' : 's'}`,
-        to: '/artifacts',
-        cta: 'View evidence',
+        to: '/memory',
+        cta: 'View memory',
         icon: '□',
         primary: false,
       },
@@ -468,17 +468,17 @@ export function DashboardPage() {
           </Panel>
 
           <Panel
-            title="Recent evidence"
+            title="Recent memory sources"
             description="Accessible company sources."
             aside={
-              <Link className="secondary-button" to="/artifacts">
+              <Link className="secondary-button" to="/memory">
                 View all
               </Link>
             }
           >
-            {isLoading ? <p className="muted-copy">Loading evidence…</p> : null}
+            {isLoading ? <p className="muted-copy">Loading memory…</p> : null}
             {!isLoading && employeeEvidenceRows.length === 0 ? (
-              <EmptyState title="No accessible evidence yet" description="Add source material or ask an admin to grant access to relevant company artifacts." />
+              <EmptyState title="No accessible sources yet" description="Add source material or ask an admin to grant access." />
             ) : null}
             {employeeEvidenceRows.length > 0 ? (
               <div className="table-wrap employee-evidence-table-wrap">
@@ -505,7 +505,7 @@ export function DashboardPage() {
                         </td>
                         <td>{formatDateTime(artifact.updated_at)}</td>
                         <td>
-                          <Link className="text-button" to="/artifacts">
+                          <Link className="text-button" to="/memory">
                             Open
                           </Link>
                         </td>
@@ -762,10 +762,10 @@ export function DashboardPage() {
       </Panel>
 
       <Panel
-        title="Recent evidence entering memory"
+        title="Recent memory sources entering memory"
         description="Sources are inspectable provenance, not background files."
         aside={
-          <Link className="secondary-button" to="/artifacts">
+          <Link className="secondary-button" to="/memory">
             View all
           </Link>
         }

@@ -109,6 +109,17 @@ function directThreadId(leftHandle: string, rightHandle: string): string {
   return `direct:${[leftHandle, rightHandle].sort().join('-')}`
 }
 
+function directThreadIncludesUser(
+  threadId: string,
+  currentUser: UserRead | undefined,
+) {
+  const currentHandle = employeeHandleForUser(currentUser)
+  if (!currentHandle || !threadId.startsWith('direct:')) {
+    return false
+  }
+  return threadId.replace(/^direct:/, '').split('-').includes(currentHandle)
+}
+
 function directConversationTitle(
   threadId: string,
   currentUser: UserRead | undefined,
@@ -213,6 +224,13 @@ function buildConversations(
     const threadId = threadIdForMessage(message)
     const threadKind = threadKindForMessage(message)
     if (currentUser?.role !== 'Admin' && threadKind !== 'direct') {
+      return
+    }
+    if (
+      currentUser?.role !== 'Admin' &&
+      threadKind === 'direct' &&
+      !directThreadIncludesUser(threadId, currentUser)
+    ) {
       return
     }
     const existing = conversations.get(threadId)

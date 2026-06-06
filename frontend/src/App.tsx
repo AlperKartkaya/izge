@@ -55,6 +55,7 @@ function App() {
           }
         >
           <Route index element={<DashboardPage />} />
+          <Route path="memory" element={<ArtifactsPage />} />
           <Route path="artifacts" element={<ArtifactsPage />} />
           <Route
             path="ingestion"

@@ -470,7 +470,7 @@ def _next_actions(sections: dict[str, dict[str, Any]]) -> list[dict[str, str]]:
                 "severity": "warning",
                 "title": "Review pending artifacts",
                 "description": "Submitted or needs-review artifacts can be visible, but they are not fully trusted. Review or reject them so institutional memory freshness is explicit.",
-                "route": "/artifacts",
+                "route": "/memory",
             }
         )
     if int(artifacts["metrics"].get("completed_without_chunks") or 0) > 0 or int(artifacts["metrics"].get("completed_without_memory") or 0) > 0:
@@ -550,7 +550,7 @@ def build_operations_overview(db: Session, user: User) -> dict[str, Any]:
         "next_actions": _next_actions(sections),
         "links": [
             {"label": "Data and storage", "route": "/admin/data", "description": "Inspect table rows, raw admin-only paths, artifact storage, and safe metadata edits."},
-            {"label": "Artifacts", "route": "/artifacts", "description": "Upload evidence, update review state, and manage visibility."},
+            {"label": "Memory", "route": "/memory", "description": "Feed memory, inspect sources, update review state, and manage visibility."},
             {"label": "Ingestion", "route": "/ingestion", "description": "Run extraction against artifacts with missing chunks or memory."},
             {"label": "Memory filesystem", "route": "/memory-filesystem", "description": "Inspect logical artifact locators, trust boundaries, and coverage notes."},
             {"label": "Jobs", "route": "/orchestration", "description": "Inspect stage catalog, worker queue jobs, and scenario replay."},

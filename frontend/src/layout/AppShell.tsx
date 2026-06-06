@@ -8,14 +8,14 @@ const employeeNavigation = [
   { to: '/', label: 'Home', end: true },
   { to: '/query', label: 'Assistant' },
   { to: '/team-chat', label: 'Team chat' },
-  { to: '/artifacts', label: 'Evidence' },
+  { to: '/memory', label: 'Memory' },
   { to: '/graph', label: 'Graph' },
 ]
 
 const adminNavigation = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/operations', label: 'Operations' },
-  { to: '/artifacts', label: 'Artifacts' },
+  { to: '/memory', label: 'Memory' },
   { to: '/ingestion', label: 'Ingestion' },
   { to: '/team-chat', label: 'Team chat' },
   { to: '/graph', label: 'Graph' },

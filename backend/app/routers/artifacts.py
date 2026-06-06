@@ -29,6 +29,28 @@ from app.services.storage import ensure_supported_upload, persist_pasted_text, p
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 
 
+def _feed_memory_inline(db: Session, artifact: Artifact, actor: User) -> None:
+    """Index newly added source material now with deterministic extraction so intake stays responsive."""
+    from app.config import get_settings
+    from app.services.ingestion import run_ingestion
+
+    settings = get_settings()
+    previous_local_llm_enabled = settings.local_llm_enabled
+    previous_signal_explanation_enabled = settings.llm_signal_explanation_enabled
+    settings.local_llm_enabled = False
+    settings.llm_signal_explanation_enabled = False
+    try:
+        run_ingestion(db, artifact=artifact, actor=actor)
+    except Exception as exc:
+        artifact.ingestion_status = "failed"
+        artifact.review_status = "needs_review"
+        artifact.review_notes = f"Memory ingestion failed after intake: {exc}"
+        db.commit()
+    finally:
+        settings.local_llm_enabled = previous_local_llm_enabled
+        settings.llm_signal_explanation_enabled = previous_signal_explanation_enabled
+
+
 @router.post("/upload", response_model=ArtifactRead, status_code=status.HTTP_201_CREATED)
 async def upload_artifact(
     file: UploadFile = File(...),
@@ -83,6 +105,8 @@ async def upload_artifact(
         target_id=artifact.artifact_id,
         event_metadata={"title": artifact.title, "mime_type": artifact.mime_type},
     )
+    _feed_memory_inline(db, artifact, current_user)
+    db.refresh(artifact)
     return ArtifactRead.model_validate(artifact)
 
 
@@ -121,6 +145,8 @@ def create_pasted_text_artifact(payload: PastedTextCreate, current_user: User = 
         target_id=artifact.artifact_id,
         event_metadata={"title": artifact.title},
     )
+    _feed_memory_inline(db, artifact, current_user)
+    db.refresh(artifact)
     return ArtifactRead.model_validate(artifact)
 
 

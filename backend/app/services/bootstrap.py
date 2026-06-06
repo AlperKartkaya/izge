@@ -93,6 +93,57 @@ DEFAULT_ARTIFACT_SPECS = [
         "format": "markdown",
         "text": """# Internal Chat Export - Self Serve Launch\nDate: 2026-04-10\n\n[09:12] Maya (Product): Decision: we should treat the launch as controlled beta until security signs off.\n[09:15] Deniz (Engineering): Constraint: release controls must include named rollback owner and dashboard coverage before launch.\n[09:21] Leyla (Customer Success): Assumption: if beta escalations exceed 25 per week, we should pause new accounts.\n[09:30] Omar (Operations): Commitment: operations will compile the go/no-go packet by 2026-04-12.\n[09:35] Maya (Product): Outcome: this chat confirms the late-Q2 plan depends on readiness evidence, not just sales pressure.\n""",
     },
+    {
+        "title": "April Finance and Hiring Budget Memo",
+        "filename": "april-finance-hiring-budget-memo.pdf",
+        "mime_type": "application/pdf",
+        "format": "pdf",
+        "lines": [
+            "April Finance and Hiring Budget Memo",
+            "Date: 2026-04-03",
+            "Decision: finance approved two customer-success backfill hires and paused one growth-marketing contractor until May.",
+            "Assumption: support volume will stay below 210 tickets per week if beta onboarding remains controlled.",
+            "Constraint: the Q2 hiring budget cannot exceed 118000 USD without CFO approval.",
+            "Commitment: People Operations will post the customer-success roles by 2026-04-15.",
+            "Outcome: engineering hiring is unchanged, but the support coverage plan must be reviewed weekly.",
+        ],
+    },
+    {
+        "title": "Security Access Review - April 2026",
+        "filename": "security-access-review-april-2026.md",
+        "mime_type": "text/markdown",
+        "format": "markdown",
+        "text": """# Security Access Review - April 2026\nDate: 2026-04-05\n\n## Decisions\n- Decision: contractors keep read-only analytics access; payroll export access is limited to finance admins.\n- Decision: dormant sandbox tokens older than 30 days will be revoked each Friday.\n\n## Constraints\n- Constraint: payroll exports cannot be attached to team chat or shared channels.\n- Constraint: customer PII review must happen before any broad self-serve beta expansion.\n\n## Commitments\n- Security will publish the token revocation report by 2026-04-12.\n- Finance will confirm the payroll-export admin list by 2026-04-09.\n""",
+    },
+    {
+        "title": "Customer Support Escalation Digest - Week 15",
+        "filename": "customer-support-escalation-digest-week-15.md",
+        "mime_type": "text/markdown",
+        "format": "markdown",
+        "text": """# Customer Support Escalation Digest - Week 15\nDate: 2026-04-11\n\n## Outcomes\n- Outcome: 17 beta onboarding escalations were logged this week; 4 were payroll import issues.\n- Outcome: two enterprise customers asked for clearer admin permission copy during setup.\n\n## Assumptions\n- Assumption: weekly beta escalations below 25 remain manageable with the current support rota.\n\n## Commitments\n- Support will send the payroll import FAQ to product by 2026-04-14.\n- Employee 2 will check whether the permission-copy request overlaps with the security access review.\n""",
+    },
+    {
+        "title": "Engineering Incident Retrospective - Analytics Delay",
+        "filename": "engineering-incident-retrospective-analytics-delay.pdf",
+        "mime_type": "application/pdf",
+        "format": "pdf",
+        "lines": [
+            "Engineering Incident Retrospective - Analytics Delay",
+            "Date: 2026-04-06",
+            "Outcome: activation analytics lagged by 42 minutes after the event-index rebuild.",
+            "Decision: analytics backfill jobs will run with a release flag and named rollback owner.",
+            "Assumption: a 15 minute analytics delay is acceptable for internal monitoring but not for launch readiness scoring.",
+            "Constraint: release-control checks must include dashboard freshness and rollback ownership before beta expansion.",
+            "Commitment: Engineering will add freshness alerts to the launch dashboard by 2026-04-10.",
+        ],
+    },
+    {
+        "title": "Office Ops PTO and Coverage Note",
+        "filename": "office-ops-pto-coverage-note.md",
+        "mime_type": "text/markdown",
+        "format": "markdown",
+        "text": """# Office Ops PTO and Coverage Note\nDate: 2026-04-07\n\n## Decisions\n- Decision: employee PTO coverage will be tracked in the shared operations calendar only, not in ad-hoc chat threads.\n\n## Constraints\n- Constraint: finance approval is required before temporary weekend support coverage is booked.\n\n## Commitments\n- Operations will update the shared coverage calendar every Monday morning.\n- Employee 3 will remind the team to keep urgent customer handoffs inside Team Chat direct conversations.\n""",
+    },
 ]
 
 
@@ -174,9 +225,16 @@ def _seed_default_artifacts(db: Session, *, workspace: Workspace, admin: User) -
     from app.services.ingestion import run_ingestion
     from app.services.storage import persist_upload_bytes
 
+    settings = get_settings()
     for spec in DEFAULT_ARTIFACT_SPECS:
         existing = db.scalar(select(Artifact).where(Artifact.workspace_id == workspace.workspace_id, Artifact.title == spec["title"]))
         if existing is not None:
+            if existing.ingestion_status == "completed" and existing.review_status in {"submitted", "needs_review"}:
+                existing.review_status = "reviewed"
+                existing.reviewed_by = admin.user_id
+                existing.reviewed_at = datetime.utcnow()
+                existing.review_notes = "Seeded company artifact reviewed during bootstrap."
+                db.commit()
             continue
         artifact = Artifact(
             workspace_id=workspace.workspace_id,
@@ -198,6 +256,10 @@ def _seed_default_artifacts(db: Session, *, workspace: Workspace, admin: User) -
         artifact.source_path = source_path
         artifact.checksum_sha256 = checksum
         db.commit()
+        previous_local_llm_enabled = settings.local_llm_enabled
+        previous_signal_explanation_enabled = settings.llm_signal_explanation_enabled
+        settings.local_llm_enabled = False
+        settings.llm_signal_explanation_enabled = False
         try:
             run_ingestion(db, artifact=artifact, actor=admin)
             artifact.review_status = "reviewed"
@@ -209,13 +271,12 @@ def _seed_default_artifacts(db: Session, *, workspace: Workspace, admin: User) -
             artifact.review_status = "needs_review"
             artifact.review_notes = f"Seeded artifact needs manual review because ingestion failed: {exc}"
             db.commit()
+        finally:
+            settings.local_llm_enabled = previous_local_llm_enabled
+            settings.llm_signal_explanation_enabled = previous_signal_explanation_enabled
 
 
 def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email: dict[str, User], admin: User) -> None:
-    existing = db.scalar(select(CompanyChatMessage).where(CompanyChatMessage.workspace_id == workspace.workspace_id))
-    if existing is not None:
-        return
-
     def thread_metadata(thread_id: str, thread_title: str, thread_kind: str = "channel") -> dict[str, object]:
         return {
             "channel": thread_id,
@@ -223,52 +284,118 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             "thread_title": thread_title,
             "thread_kind": thread_kind,
             "seeded": True,
+            "seed_batch": "northstar-workspace-v2",
         }
 
     seeded_turns = [
         (
+            datetime(2026, 4, 8, 9, 5),
             users_by_email.get("employee1@example.com") or admin,
-            "The customer success rollout notes are uploaded. Can someone confirm whether the beta escalation threshold is still 25 per week?",
+            "Morning — I uploaded the customer-success notes. Can someone confirm whether the beta escalation threshold is still 25 per week?",
             thread_metadata("company-general", "Company General"),
         ),
         (
+            datetime(2026, 4, 8, 9, 8),
             users_by_email.get("employee2@example.com") or admin,
             "Confirmed. The go/no-go packet still uses 25 beta escalations per week as the pause threshold.",
             thread_metadata("company-general", "Company General"),
         ),
         (
+            datetime(2026, 4, 8, 9, 16),
             admin,
-            "I reviewed the strategy report, roadmap deck, meeting notes, and internal chat export. Keep artifact-specific answers in the assistant and coordination here.",
+            "I reviewed the strategy report, roadmap deck, meeting notes, and internal chat export. Keep source-specific questions in the assistant and coordination here.",
             thread_metadata("company-general", "Company General"),
         ),
         (
+            datetime(2026, 4, 8, 10, 20),
             users_by_email.get("employee2@example.com") or admin,
             "The roadmap deck still targets late Q2, but the April notes keep security and activation instrumentation as the actual gate.",
             thread_metadata("product-rollout", "Product Rollout"),
         ),
         (
+            datetime(2026, 4, 8, 10, 28),
             users_by_email.get("employee3@example.com") or admin,
-            "I will attach the rollback-owner matrix once engineering signs off.",
+            "I will attach the rollback-owner matrix once engineering signs off. For now the launch dashboard freshness alert is the risky part.",
             thread_metadata("product-rollout", "Product Rollout"),
         ),
         (
+            datetime(2026, 4, 9, 13, 2),
             users_by_email.get("employee1@example.com") or admin,
             "Can you review the beta segmentation update before I send it to customer success?",
             thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
         ),
         (
+            datetime(2026, 4, 9, 13, 7),
             users_by_email.get("employee2@example.com") or admin,
-            "Yes. Send it here after the last artifact review finishes.",
+            "Yes. Send it here after the last artifact review finishes. Also add the two permission-copy requests from support.",
             thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
         ),
+        (
+            datetime(2026, 4, 9, 16, 42),
+            users_by_email.get("employee1@example.com") or admin,
+            "Quick check: are you still covering payroll-import tickets tomorrow morning?",
+            thread_metadata("direct:employee1-employee3", "Employee 1 / Employee 3", "direct"),
+        ),
+        (
+            datetime(2026, 4, 9, 16, 44),
+            users_by_email.get("employee3@example.com") or admin,
+            "Yes. I blocked 09:00-11:00. If anything is PII-sensitive, I will move it to the security review thread instead of attaching it here.",
+            thread_metadata("direct:employee1-employee3", "Employee 1 / Employee 3", "direct"),
+        ),
+        (
+            datetime(2026, 4, 9, 16, 49),
+            users_by_email.get("employee1@example.com") or admin,
+            "Perfect, thanks. Lunch after the payroll queue clears?",
+            thread_metadata("direct:employee1-employee3", "Employee 1 / Employee 3", "direct"),
+        ),
+        (
+            datetime(2026, 4, 10, 8, 57),
+            users_by_email.get("employee2@example.com") or admin,
+            "I saw the finance memo. Are the two customer-success backfill roles already approved or just proposed?",
+            thread_metadata("direct:employee2-employee3", "Employee 2 / Employee 3", "direct"),
+        ),
+        (
+            datetime(2026, 4, 10, 9, 1),
+            users_by_email.get("employee3@example.com") or admin,
+            "Approved. The paused item is the growth-marketing contractor. I will update the coverage note so the assistant stops treating weekend coverage as already booked.",
+            thread_metadata("direct:employee2-employee3", "Employee 2 / Employee 3", "direct"),
+        ),
+        (
+            datetime(2026, 4, 10, 9, 4),
+            users_by_email.get("employee2@example.com") or admin,
+            "Great. I will ask Izge to compare the finance memo with the support digest before I write the onboarding FAQ.",
+            thread_metadata("direct:employee2-employee3", "Employee 2 / Employee 3", "direct"),
+        ),
+        (
+            datetime(2026, 4, 10, 15, 22),
+            users_by_email.get("employee1@example.com") or admin,
+            "The payroll import FAQ draft is in Memory now. Please skim the customer-facing wording before Monday.",
+            thread_metadata("customer-success", "Customer Success"),
+        ),
+        (
+            datetime(2026, 4, 10, 15, 31),
+            users_by_email.get("employee3@example.com") or admin,
+            "Skimmed it. The steps are fine, but we should not mention payroll export admins outside the security access review.",
+            thread_metadata("customer-success", "Customer Success"),
+        ),
     ]
-    for author, body, metadata in seeded_turns:
+    for created_at, author, body, metadata in seeded_turns:
+        existing = db.scalar(
+            select(CompanyChatMessage).where(
+                CompanyChatMessage.workspace_id == workspace.workspace_id,
+                CompanyChatMessage.author_user_id == author.user_id,
+                CompanyChatMessage.body == body,
+            )
+        )
+        if existing is not None:
+            continue
         db.add(
             CompanyChatMessage(
                 workspace_id=workspace.workspace_id,
                 author_user_id=author.user_id,
                 body=body,
                 message_metadata=metadata,
+                created_at=created_at,
             )
         )
     db.commit()

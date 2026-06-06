@@ -33,6 +33,29 @@ def _clean_thread_title(value: str | None, thread_id: str) -> str:
     return title or "Company General"
 
 
+def _employee_handle_for_user(user: User) -> str | None:
+    email_local_part = user.email.split("@", 1)[0].lower()
+    if email_local_part.startswith("employee"):
+        return email_local_part
+    normalized_name = user.display_name.lower().replace(" ", "")
+    return normalized_name if normalized_name.startswith("employee") else None
+
+
+def _message_is_visible_to_user(message: CompanyChatMessage, current_user: User) -> bool:
+    if current_user.role == "Admin":
+        return True
+    metadata = message.message_metadata or {}
+    thread_id = str(metadata.get("thread_id") or metadata.get("channel") or "company-general")
+    thread_kind = str(metadata.get("thread_kind") or ("direct" if thread_id.startswith("direct:") else "channel"))
+    if thread_kind != "direct":
+        return True
+    current_handle = _employee_handle_for_user(current_user)
+    if not current_handle:
+        return False
+    participants = thread_id.replace("direct:", "", 1).split("-")
+    return current_handle in participants
+
+
 def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, User]) -> TeamChatMessageRead:
     author = author_by_id.get(message.author_user_id)
     author_role: Literal["Admin", "Member"] = "Member"
@@ -57,7 +80,7 @@ def list_team_chat_messages(
     db: Session = Depends(get_db),
 ) -> TeamChatThreadRead:
     bounded_limit = max(1, min(limit, 200))
-    messages = list(
+    fetched_messages = list(
         reversed(
             db.scalars(
                 select(CompanyChatMessage)
@@ -67,6 +90,7 @@ def list_team_chat_messages(
             ).all()
         )
     )
+    messages = [message for message in fetched_messages if _message_is_visible_to_user(message, current_user)]
     author_ids = {message.author_user_id for message in messages}
     authors = db.scalars(select(User).where(User.workspace_id == current_user.workspace_id, User.user_id.in_(author_ids))).all() if author_ids else []
     author_by_id = {author.user_id: author for author in authors}
