@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,10 +10,12 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import CompanyChatMessage, User
-from app.schemas.api import TeamChatMessageCreate, TeamChatMessageRead, TeamChatThreadRead
+from app.schemas.api import TeamChatMessageCreate, TeamChatMessageRead, TeamChatThreadRead, TeamChatTypingCreate, TeamChatTypingRead, TeamChatTypingUserRead
 from app.services.audit import log_event
 
 router = APIRouter(prefix="/team-chat", tags=["team-chat"])
+_TYPING_TTL_SECONDS = 5
+_typing_state: dict[tuple[str, str, str], datetime] = {}
 
 
 def _clean_thread_id(value: str | None) -> str:
@@ -56,6 +58,17 @@ def _message_is_visible_to_user(message: CompanyChatMessage, current_user: User)
     return current_handle in participants
 
 
+def _thread_is_visible_to_user(thread_id: str, thread_kind: str, current_user: User) -> bool:
+    if current_user.role == "Admin" or thread_kind != "direct":
+        return True
+    if thread_id.startswith("assistant-cowork:"):
+        return True
+    current_handle = _employee_handle_for_user(current_user)
+    if not current_handle:
+        return False
+    return current_handle in thread_id.replace("direct:", "", 1).split("-")
+
+
 def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, User]) -> TeamChatMessageRead:
     author = author_by_id.get(message.author_user_id)
     author_role: Literal["Admin", "Member"] = "Member"
@@ -92,13 +105,76 @@ def list_team_chat_messages(
     )
     messages = [message for message in fetched_messages if _message_is_visible_to_user(message, current_user)]
     author_ids = {message.author_user_id for message in messages}
-    authors = db.scalars(select(User).where(User.workspace_id == current_user.workspace_id, User.user_id.in_(author_ids))).all() if author_ids else []
+    authors = (
+        db.scalars(
+            select(User).where(
+                User.workspace_id == current_user.workspace_id,
+                User.user_id.in_(author_ids),
+            )
+        ).all()
+        if author_ids
+        else []
+    )
     author_by_id = {author.user_id: author for author in authors}
     return TeamChatThreadRead(
         workspace_id=current_user.workspace_id,
         generated_at=datetime.now(UTC),
         messages=[_message_read_model(message, author_by_id) for message in messages],
     )
+
+
+@router.get("/typing", response_model=TeamChatTypingRead)
+def list_typing_users(
+    thread_id: str,
+    thread_kind: Literal["channel", "direct"] = "channel",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TeamChatTypingRead:
+    cleaned_thread_id = _clean_thread_id(thread_id)
+    if not _thread_is_visible_to_user(cleaned_thread_id, thread_kind, current_user):
+        return TeamChatTypingRead(workspace_id=current_user.workspace_id, generated_at=datetime.now(UTC), typing=[])
+
+    now = datetime.now(UTC)
+    expired_keys = [key for key, expires_at in _typing_state.items() if expires_at <= now]
+    for key in expired_keys:
+        _typing_state.pop(key, None)
+
+    active_user_ids = [
+        user_id
+        for (workspace_id, active_thread_id, user_id), expires_at in _typing_state.items()
+        if workspace_id == current_user.workspace_id
+        and active_thread_id == cleaned_thread_id
+        and user_id != current_user.user_id
+        and expires_at > now
+    ]
+    users = db.scalars(select(User).where(User.workspace_id == current_user.workspace_id, User.user_id.in_(active_user_ids))).all() if active_user_ids else []
+    expires_by_user = {(user_id): expires_at for (workspace_id, active_thread_id, user_id), expires_at in _typing_state.items() if workspace_id == current_user.workspace_id and active_thread_id == cleaned_thread_id}
+    return TeamChatTypingRead(
+        workspace_id=current_user.workspace_id,
+        generated_at=now,
+        typing=[
+            TeamChatTypingUserRead(
+                user_id=user.user_id,
+                display_name=user.display_name,
+                thread_id=cleaned_thread_id,
+                expires_at=expires_by_user[user.user_id],
+            )
+            for user in users
+        ],
+    )
+
+
+@router.post("/typing", response_model=TeamChatTypingRead)
+def mark_typing(
+    payload: TeamChatTypingCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TeamChatTypingRead:
+    cleaned_thread_id = _clean_thread_id(payload.thread_id)
+    if not _thread_is_visible_to_user(cleaned_thread_id, payload.thread_kind, current_user):
+        return TeamChatTypingRead(workspace_id=current_user.workspace_id, generated_at=datetime.now(UTC), typing=[])
+    _typing_state[(current_user.workspace_id, cleaned_thread_id, current_user.user_id)] = datetime.now(UTC) + timedelta(seconds=_TYPING_TTL_SECONDS)
+    return list_typing_users(cleaned_thread_id, payload.thread_kind, current_user, db)
 
 
 @router.post("", response_model=TeamChatMessageRead, status_code=status.HTTP_201_CREATED)
@@ -117,6 +193,7 @@ def create_team_chat_message(
         author_user_id=current_user.user_id,
         body=body,
         message_metadata={
+            **payload.message_metadata,
             "channel": thread_id,
             "thread_id": thread_id,
             "thread_title": thread_title,

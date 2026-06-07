@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,6 +15,12 @@ from app.services.security import hash_password
 router = APIRouter(tags=["users"])
 
 
+def _is_numbered_employee_identity(user: User) -> bool:
+    email_handle = user.email.split("@", 1)[0].strip().lower()
+    display_name = user.display_name.strip().lower().replace(" ", "")
+    return bool(re.fullmatch(r"employee\d+", email_handle) or re.fullmatch(r"employee\d+", display_name))
+
+
 @router.get("/users/me", response_model=UserRead)
 def read_current_user(current_user: User = Depends(get_current_user)) -> UserRead:
     return UserRead.model_validate(current_user)
@@ -23,6 +31,21 @@ def list_users(current_user: User = Depends(get_current_user), db: Session = Dep
     require_admin(current_user)
     users = db.scalars(select(User).where(User.workspace_id == current_user.workspace_id).order_by(User.created_at.asc())).all()
     return [UserRead.model_validate(user) for user in users]
+
+
+@router.get("/users/colleagues", response_model=list[UserRead])
+def list_colleagues(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[UserRead]:
+    users = db.scalars(
+        select(User)
+        .where(
+            User.workspace_id == current_user.workspace_id,
+            User.user_id != current_user.user_id,
+            User.role != "Admin",
+            User.is_active.is_(True),
+        )
+        .order_by(User.created_at.asc())
+    ).all()
+    return [UserRead.model_validate(user) for user in users if _is_numbered_employee_identity(user)]
 
 
 @router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)

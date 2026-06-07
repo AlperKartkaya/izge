@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type FormEventHandler } from 'react'
-import { Link } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
-import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
-import { api, ApiError } from '../lib/api'
-import { formatDateTime, formatLabel } from '../lib/format'
+import { useEffect, useMemo, useState, type FormEventHandler } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
+import { Callout, EmptyState, Panel, StatusBadge } from "../components/ui";
+import { api, ApiError } from "../lib/api";
+import { formatDateTime, formatLabel } from "../lib/format";
 import type {
   ArtifactDetail,
   ArtifactProactiveSignals,
@@ -13,224 +13,319 @@ import type {
   MemoryFilesystemRead,
   OrchestrationJobRead,
   UserRead,
-} from '../lib/types'
+} from "../lib/types";
 
-type VisibilityScope = 'workspace' | 'restricted'
-type ReviewStatus = 'submitted' | 'needs_review' | 'reviewed' | 'rejected'
+type VisibilityScope = "workspace" | "restricted";
+type ReviewStatus = "submitted" | "needs_review" | "reviewed" | "rejected";
 
 const defaultUploadState = {
-  title: '',
-  visibility_scope: 'workspace' as VisibilityScope,
+  title: "",
+  visibility_scope: "workspace" as VisibilityScope,
   permitted_user_ids: [] as string[],
-}
+};
 
 const defaultPasteState = {
-  title: '',
-  text: '',
-  visibility_scope: 'workspace' as VisibilityScope,
+  title: "",
+  text: "",
+  visibility_scope: "workspace" as VisibilityScope,
   permitted_user_ids: [] as string[],
-}
+};
 
 const defaultReviewState = {
-  review_status: 'submitted' as ReviewStatus,
-  review_notes: '',
-}
+  review_status: "submitted" as ReviewStatus,
+  review_notes: "",
+};
 
 const oracleLoopSteps = [
-  { icon: '◉', title: 'Observe', detail: 'new source enters' },
-  { icon: '⌁', title: 'Organize', detail: 'chunks + typed memory' },
-  { icon: '✦', title: 'Delegate', detail: 'bounded subagent packet' },
-  { icon: '!', title: 'Notify', detail: 'drift, conflict, next owner' },
-]
+  { icon: "◉", title: "Feed", detail: "source" },
+  { icon: "⌁", title: "Shape", detail: "memory" },
+  { icon: "✦", title: "Send", detail: "subagent" },
+  { icon: "!", title: "Ping", detail: "owner" },
+];
 
 function sumMemoryCounts(artifact: MemoryFilesystemArtifact) {
-  return Object.values(artifact.memory_counts).reduce((total, value) => total + value, 0)
+  return Object.values(artifact.memory_counts).reduce(
+    (total, value) => total + value,
+    0,
+  );
 }
 
 function purposeForArtifact(artifact: MemoryFilesystemArtifact) {
-  if (artifact.ingestion_status === 'pending') {
-    return 'waiting for extraction'
+  if (artifact.ingestion_status === "pending") {
+    return "waiting for extraction";
   }
-  if (artifact.ingestion_status === 'processing') {
-    return 'extracting chunks'
+  if (artifact.ingestion_status === "processing") {
+    return "extracting chunks";
   }
-  if (artifact.ingestion_status === 'failed') {
-    return 'needs repair'
+  if (artifact.ingestion_status === "failed") {
+    return "needs repair";
   }
   if (artifact.signal_count > 0) {
-    return 'checking drift + notifying owners'
+    return "checking drift + notifying owners";
   }
-  if (artifact.review_status === 'submitted' || artifact.review_status === 'needs_review') {
-    return 'trust review'
+  if (
+    artifact.review_status === "submitted" ||
+    artifact.review_status === "needs_review"
+  ) {
+    return "trust review";
   }
-  return 'retrieval-ready'
+  return "retrieval-ready";
 }
 
 function workTone(artifact: MemoryFilesystemArtifact) {
-  if (artifact.ingestion_status === 'failed') {
-    return 'critical'
+  if (artifact.ingestion_status === "failed") {
+    return "critical";
   }
   if (artifact.signal_count > 0) {
-    return 'active'
+    return "active";
   }
-  if (artifact.ingestion_status === 'pending' || artifact.review_status === 'needs_review' || artifact.review_status === 'submitted') {
-    return 'waiting'
+  if (
+    artifact.ingestion_status === "pending" ||
+    artifact.review_status === "needs_review" ||
+    artifact.review_status === "submitted"
+  ) {
+    return "waiting";
   }
-  return 'calm'
+  return "calm";
 }
 
 function signalCount(signals: ArtifactProactiveSignals | null, key: string) {
-  return signals?.signal_counts[key] ?? 0
+  return signals?.signal_counts[key] ?? 0;
+}
+
+function ownersForArtifact(title: string) {
+  const normalizedTitle = title.toLowerCase();
+  if (
+    normalizedTitle.includes("security") ||
+    normalizedTitle.includes("payroll")
+  ) {
+    return ["Employee 2", "Employee 3"];
+  }
+  if (
+    normalizedTitle.includes("support") ||
+    normalizedTitle.includes("customer")
+  ) {
+    return ["Employee 1", "Employee 2"];
+  }
+  if (
+    normalizedTitle.includes("finance") ||
+    normalizedTitle.includes("coverage") ||
+    normalizedTitle.includes("pto")
+  ) {
+    return ["Employee 3", "Admin"];
+  }
+  if (
+    normalizedTitle.includes("engineering") ||
+    normalizedTitle.includes("analytics")
+  ) {
+    return ["Employee 1", "Employee 3"];
+  }
+  return ["Employee 1", "Employee 2"];
 }
 
 export function ArtifactsPage() {
-  const { session } = useAuth()
-  const [artifacts, setArtifacts] = useState<ArtifactRead[]>([])
-  const [users, setUsers] = useState<UserRead[]>([])
-  const [memoryFilesystem, setMemoryFilesystem] = useState<MemoryFilesystemRead | null>(null)
-  const [orchestrationJobs, setOrchestrationJobs] = useState<OrchestrationJobRead[]>([])
-  const [lastIngestionJob, setLastIngestionJob] = useState<IngestionJobRead | null>(null)
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string>('')
-  const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail | null>(null)
-  const [selectedArtifactSignals, setSelectedArtifactSignals] = useState<ArtifactProactiveSignals | null>(null)
-  const [uploadState, setUploadState] = useState(defaultUploadState)
-  const [pasteState, setPasteState] = useState(defaultPasteState)
-  const [reviewState, setReviewState] = useState(defaultReviewState)
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
-  const [isBusy, setIsBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const { session } = useAuth();
+  const [artifacts, setArtifacts] = useState<ArtifactRead[]>([]);
+  const [users, setUsers] = useState<UserRead[]>([]);
+  const [memoryFilesystem, setMemoryFilesystem] =
+    useState<MemoryFilesystemRead | null>(null);
+  const [orchestrationJobs, setOrchestrationJobs] = useState<
+    OrchestrationJobRead[]
+  >([]);
+  const [lastIngestionJob, setLastIngestionJob] =
+    useState<IngestionJobRead | null>(null);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string>("");
+  const [selectedArtifact, setSelectedArtifact] =
+    useState<ArtifactDetail | null>(null);
+  const [selectedArtifactSignals, setSelectedArtifactSignals] =
+    useState<ArtifactProactiveSignals | null>(null);
+  const [uploadState, setUploadState] = useState(defaultUploadState);
+  const [pasteState, setPasteState] = useState(defaultPasteState);
+  const [reviewState, setReviewState] = useState(defaultReviewState);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  const isAdmin = session?.user.role === 'Admin'
+  const isAdmin = session?.user.role === "Admin";
 
   async function loadMemorySurface(preferredArtifactId?: string) {
     if (!session?.token) {
-      return
+      return;
     }
 
     const [artifactList, filesystem, jobList] = await Promise.all([
       api.listArtifacts(session.token),
       api.getMemoryFilesystem(session.token),
       api.listOrchestrationJobs(session.token, 8).catch(() => null),
-    ])
-    setArtifacts(artifactList)
-    setMemoryFilesystem(filesystem)
-    setOrchestrationJobs(jobList?.jobs ?? [])
+    ]);
+    setArtifacts(artifactList);
+    setMemoryFilesystem(filesystem);
+    setOrchestrationJobs(jobList?.jobs ?? []);
 
-    const candidateId = preferredArtifactId || selectedArtifactId
-    const nextSelected = artifactList.some((artifact) => artifact.artifact_id === candidateId)
+    const candidateId = preferredArtifactId || selectedArtifactId;
+    const nextSelected = artifactList.some(
+      (artifact) => artifact.artifact_id === candidateId,
+    )
       ? candidateId
-      : artifactList[0]?.artifact_id || ''
-    setSelectedArtifactId(nextSelected)
+      : artifactList[0]?.artifact_id || "";
+    setSelectedArtifactId(nextSelected);
 
     if (nextSelected) {
       const [detail, signals] = await Promise.all([
         api.getArtifact(session.token, nextSelected),
         api.getArtifactSignals(session.token, nextSelected),
-      ])
-      setSelectedArtifact(detail)
+      ]);
+      setSelectedArtifact(detail);
       setReviewState({
         review_status: detail.review_status as ReviewStatus,
-        review_notes: detail.review_notes ?? '',
-      })
-      setSelectedArtifactSignals(signals)
+        review_notes: detail.review_notes ?? "",
+      });
+      setSelectedArtifactSignals(signals);
     } else {
-      setSelectedArtifact(null)
-      setReviewState(defaultReviewState)
-      setSelectedArtifactSignals(null)
+      setSelectedArtifact(null);
+      setReviewState(defaultReviewState);
+      setSelectedArtifactSignals(null);
     }
   }
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
 
     async function load() {
       if (!session?.token) {
-        return
+        return;
       }
 
-      setError(null)
+      setError(null);
 
       try {
-        await loadMemorySurface()
+        await loadMemorySurface();
         if (isAdmin) {
-          const userList = await api.listUsers(session.token)
+          const userList = await api.listUsers(session.token);
           if (!cancelled) {
-            setUsers(userList)
+            setUsers(userList);
           }
         }
       } catch (caughtError) {
         if (!cancelled) {
-          setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load memory.')
+          setError(
+            caughtError instanceof ApiError
+              ? caughtError.message
+              : "Unable to load memory.",
+          );
         }
       }
     }
 
-    void load()
+    void load();
 
     return () => {
-      cancelled = true
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, session?.token])
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, session?.token]);
 
-  const selectableUsers = useMemo(() => users.filter((user) => user.is_active), [users])
-  const selectedChunkProvenance = selectedArtifact?.chunk_provenance ?? []
-  const selectedPermittedUserIds = selectedArtifact?.permitted_user_ids ?? []
+  const selectableUsers = useMemo(
+    () => users.filter((user) => user.is_active),
+    [users],
+  );
+  const selectedChunkProvenance = selectedArtifact?.chunk_provenance ?? [];
+  const selectedPermittedUserIds = selectedArtifact?.permitted_user_ids ?? [];
   const selectedFilesystemArtifact = useMemo(
-    () => memoryFilesystem?.artifacts.find((artifact) => artifact.artifact_id === selectedArtifactId) ?? null,
+    () =>
+      memoryFilesystem?.artifacts.find(
+        (artifact) => artifact.artifact_id === selectedArtifactId,
+      ) ?? null,
     [memoryFilesystem?.artifacts, selectedArtifactId],
-  )
+  );
 
   const memoryStats = useMemo(() => {
-    const filesystemArtifacts = memoryFilesystem?.artifacts ?? []
-    const sourceCount = filesystemArtifacts.length || artifacts.length
-    const chunkCount = filesystemArtifacts.reduce((total, artifact) => total + artifact.chunk_count, 0)
-    const memoryObjectCount = filesystemArtifacts.reduce((total, artifact) => total + sumMemoryCounts(artifact), 0)
-    const signalTotal = filesystemArtifacts.reduce((total, artifact) => total + artifact.signal_count, 0)
-    const needsReview = artifacts.filter((artifact) => artifact.review_status === 'submitted' || artifact.review_status === 'needs_review').length
-    return { sourceCount, chunkCount, memoryObjectCount, signalTotal, needsReview }
-  }, [artifacts, memoryFilesystem?.artifacts])
+    const filesystemArtifacts = memoryFilesystem?.artifacts ?? [];
+    const sourceCount = filesystemArtifacts.length || artifacts.length;
+    const chunkCount = filesystemArtifacts.reduce(
+      (total, artifact) => total + artifact.chunk_count,
+      0,
+    );
+    const memoryObjectCount = filesystemArtifacts.reduce(
+      (total, artifact) => total + sumMemoryCounts(artifact),
+      0,
+    );
+    const signalTotal = filesystemArtifacts.reduce(
+      (total, artifact) => total + artifact.signal_count,
+      0,
+    );
+    const needsReview = artifacts.filter(
+      (artifact) =>
+        artifact.review_status === "submitted" ||
+        artifact.review_status === "needs_review",
+    ).length;
+    return {
+      sourceCount,
+      chunkCount,
+      memoryObjectCount,
+      signalTotal,
+      needsReview,
+    };
+  }, [artifacts, memoryFilesystem?.artifacts]);
 
   const liveWorkItems = useMemo(() => {
-    const filesystemArtifacts = memoryFilesystem?.artifacts ?? []
+    const filesystemArtifacts = memoryFilesystem?.artifacts ?? [];
     return [...filesystemArtifacts]
       .sort((left, right) => {
-        const leftPriority = left.signal_count * 4 + (left.review_status === 'needs_review' ? 3 : 0) + (left.ingestion_status === 'pending' ? 2 : 0)
-        const rightPriority = right.signal_count * 4 + (right.review_status === 'needs_review' ? 3 : 0) + (right.ingestion_status === 'pending' ? 2 : 0)
+        const leftPriority =
+          left.signal_count * 4 +
+          (left.review_status === "needs_review" ? 3 : 0) +
+          (left.ingestion_status === "pending" ? 2 : 0);
+        const rightPriority =
+          right.signal_count * 4 +
+          (right.review_status === "needs_review" ? 3 : 0) +
+          (right.ingestion_status === "pending" ? 2 : 0);
         if (leftPriority !== rightPriority) {
-          return rightPriority - leftPriority
+          return rightPriority - leftPriority;
         }
-        return Date.parse(right.updated_at) - Date.parse(left.updated_at)
+        return Date.parse(right.updated_at) - Date.parse(left.updated_at);
       })
-      .slice(0, 6)
-  }, [memoryFilesystem?.artifacts])
+      .slice(0, 6);
+  }, [memoryFilesystem?.artifacts]);
 
   const importantItems = useMemo(() => {
-    const items: Array<{ label: string; title: string; detail: string; to?: string }> = []
+    const items: Array<{
+      label: string;
+      title: string;
+      detail: string;
+      to?: string;
+    }> = [];
 
-    selectedArtifactSignals?.introduced_contradictions.slice(0, 1).forEach((item) => {
-      items.push({
-        label: 'Contradiction',
-        title: `${item.from_title} ↔ ${item.to_title}`,
-        detail: item.topic_key,
-      })
-    })
-    selectedArtifactSignals?.revealed_assumption_drift.slice(0, 1).forEach((item) => {
-      items.push({
-        label: 'Drift',
-        title: item.title_or_label,
-        detail: item.validity_notes || item.evidence_provenance || item.topic_key,
-      })
-    })
-    selectedArtifactSignals?.recommended_next_actions.slice(0, 1).forEach((item) => {
-      items.push({
-        label: 'Next action',
-        title: item.title,
-        detail: item.recommended_action ?? item.summary,
-        to: `/signals/${item.signal_id}`,
-      })
-    })
+    selectedArtifactSignals?.introduced_contradictions
+      .slice(0, 1)
+      .forEach((item) => {
+        items.push({
+          label: "Contradiction",
+          title: `${item.from_title} ↔ ${item.to_title}`,
+          detail: item.topic_key,
+        });
+      });
+    selectedArtifactSignals?.revealed_assumption_drift
+      .slice(0, 1)
+      .forEach((item) => {
+        items.push({
+          label: "Drift",
+          title: item.title_or_label,
+          detail:
+            item.validity_notes || item.evidence_provenance || item.topic_key,
+        });
+      });
+    selectedArtifactSignals?.recommended_next_actions
+      .slice(0, 1)
+      .forEach((item) => {
+        items.push({
+          label: "Next action",
+          title: item.title,
+          detail: item.recommended_action ?? item.summary,
+          to: `/signals/${item.signal_id}`,
+        });
+      });
 
     if (items.length < 3) {
       liveWorkItems.slice(0, 3 - items.length).forEach((artifact) => {
@@ -238,128 +333,181 @@ export function ArtifactsPage() {
           label: purposeForArtifact(artifact),
           title: artifact.title,
           detail: artifact.coverage_notes[0] ?? artifact.retrieval_state,
-        })
-      })
+        });
+      });
     }
 
-    return items.slice(0, 3)
-  }, [liveWorkItems, selectedArtifactSignals])
+    return items.slice(0, 3);
+  }, [liveWorkItems, selectedArtifactSignals]);
 
-  function toggleUserSelection(userId: string, state: string[], setter: (next: string[]) => void) {
-    setter(state.includes(userId) ? state.filter((value) => value !== userId) : [...state, userId])
+  const memoryVitals = useMemo(
+    () => [
+      { label: "sources", value: memoryStats.sourceCount },
+      { label: "objects", value: memoryStats.memoryObjectCount },
+      { label: "signals", value: memoryStats.signalTotal },
+      { label: "review", value: memoryStats.needsReview },
+    ],
+    [memoryStats],
+  );
+
+  const liveNotifications = useMemo(
+    () =>
+      liveWorkItems.slice(0, 4).map((artifact) => ({
+        artifact,
+        owners: ownersForArtifact(artifact.title),
+        purpose: purposeForArtifact(artifact),
+      })),
+    [liveWorkItems],
+  );
+
+  function toggleUserSelection(
+    userId: string,
+    state: string[],
+    setter: (next: string[]) => void,
+  ) {
+    setter(
+      state.includes(userId)
+        ? state.filter((value) => value !== userId)
+        : [...state, userId],
+    );
   }
 
   const handleUpload: FormEventHandler<HTMLFormElement> = async (event) => {
-    event.preventDefault()
+    event.preventDefault();
     if (!session?.token || !uploadFile) {
-      setError('Choose a supported file before feeding memory.')
-      return
+      setError("Choose a supported file before feeding memory.");
+      return;
     }
 
-    setIsBusy(true)
-    setError(null)
-    setSuccess(null)
+    setIsBusy(true);
+    setError(null);
+    setSuccess(null);
 
     try {
       const artifact = await api.uploadArtifact(session.token, {
         file: uploadFile,
         ...uploadState,
-      })
-      setUploadState(defaultUploadState)
-      setUploadFile(null)
-      await loadMemorySurface(artifact.artifact_id)
-      setSuccess('File added. Memory indexing started and the source is ready for preview/download.')
+      });
+      setUploadState(defaultUploadState);
+      setUploadFile(null);
+      await loadMemorySurface(artifact.artifact_id);
+      setSuccess(
+        "File added. Memory indexing started and the source is ready for preview/download.",
+      );
     } catch (caughtError) {
-      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to upload source file.')
+      setError(
+        caughtError instanceof ApiError
+          ? caughtError.message
+          : "Unable to upload source file.",
+      );
     } finally {
-      setIsBusy(false)
+      setIsBusy(false);
     }
-  }
+  };
 
   const handlePastedText: FormEventHandler<HTMLFormElement> = async (event) => {
-    event.preventDefault()
+    event.preventDefault();
     if (!session?.token) {
-      return
+      return;
     }
 
-    setIsBusy(true)
-    setError(null)
-    setSuccess(null)
+    setIsBusy(true);
+    setError(null);
+    setSuccess(null);
 
     try {
-      const artifact = await api.createPastedText(session.token, pasteState)
-      setPasteState(defaultPasteState)
-      await loadMemorySurface(artifact.artifact_id)
-      setSuccess('Text note added. Memory indexing started.')
+      const artifact = await api.createPastedText(session.token, pasteState);
+      setPasteState(defaultPasteState);
+      await loadMemorySurface(artifact.artifact_id);
+      setSuccess("Text note added. Memory indexing started.");
     } catch (caughtError) {
-      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to submit text note.')
+      setError(
+        caughtError instanceof ApiError
+          ? caughtError.message
+          : "Unable to submit text note.",
+      );
     } finally {
-      setIsBusy(false)
+      setIsBusy(false);
     }
-  }
+  };
 
   async function handleArtifactSelection(artifactId: string) {
     if (!session?.token) {
-      return
+      return;
     }
 
-    setSelectedArtifactId(artifactId)
+    setSelectedArtifactId(artifactId);
     try {
       const [detail, signals] = await Promise.all([
         api.getArtifact(session.token, artifactId),
         api.getArtifactSignals(session.token, artifactId),
-      ])
-      setSelectedArtifact(detail)
+      ]);
+      setSelectedArtifact(detail);
       setReviewState({
         review_status: detail.review_status as ReviewStatus,
-        review_notes: detail.review_notes ?? '',
-      })
-      setSelectedArtifactSignals(signals)
+        review_notes: detail.review_notes ?? "",
+      });
+      setSelectedArtifactSignals(signals);
     } catch (caughtError) {
-      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load source detail.')
+      setError(
+        caughtError instanceof ApiError
+          ? caughtError.message
+          : "Unable to load source detail.",
+      );
     }
   }
 
   async function handleRunIngestion() {
     if (!session?.token || !selectedArtifact) {
-      return
+      return;
     }
 
-    setIsBusy(true)
-    setError(null)
-    setSuccess(null)
+    setIsBusy(true);
+    setError(null);
+    setSuccess(null);
 
     try {
-      const job = await api.runIngestion(session.token, selectedArtifact.artifact_id)
-      setLastIngestionJob(job)
-      await loadMemorySurface(selectedArtifact.artifact_id)
-      setSuccess('Memory processing completed for the selected source.')
+      const job = await api.runIngestion(
+        session.token,
+        selectedArtifact.artifact_id,
+      );
+      setLastIngestionJob(job);
+      await loadMemorySurface(selectedArtifact.artifact_id);
+      setSuccess("Memory processing completed for the selected source.");
     } catch (caughtError) {
-      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to process source memory.')
+      setError(
+        caughtError instanceof ApiError
+          ? caughtError.message
+          : "Unable to process source memory.",
+      );
     } finally {
-      setIsBusy(false)
+      setIsBusy(false);
     }
   }
 
   async function handleReviewUpdate() {
     if (!session?.token || !selectedArtifact) {
-      return
+      return;
     }
 
-    setIsBusy(true)
-    setError(null)
-    setSuccess(null)
+    setIsBusy(true);
+    setError(null);
+    setSuccess(null);
 
     try {
-      const detail = await api.updateArtifactReview(session.token, selectedArtifact.artifact_id, {
-        review_status: reviewState.review_status,
-        review_notes: reviewState.review_notes.trim() || null,
-      })
-      setSelectedArtifact(detail)
+      const detail = await api.updateArtifactReview(
+        session.token,
+        selectedArtifact.artifact_id,
+        {
+          review_status: reviewState.review_status,
+          review_notes: reviewState.review_notes.trim() || null,
+        },
+      );
+      setSelectedArtifact(detail);
       setReviewState({
         review_status: detail.review_status as ReviewStatus,
-        review_notes: detail.review_notes ?? '',
-      })
+        review_notes: detail.review_notes ?? "",
+      });
       setArtifacts((current) =>
         current.map((artifact) =>
           artifact.artifact_id === detail.artifact_id
@@ -374,150 +522,228 @@ export function ArtifactsPage() {
               }
             : artifact,
         ),
-      )
-      await loadMemorySurface(detail.artifact_id)
-      setSuccess('Trust state updated.')
+      );
+      await loadMemorySurface(detail.artifact_id);
+      setSuccess("Trust state updated.");
     } catch (caughtError) {
-      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to update trust state.')
+      setError(
+        caughtError instanceof ApiError
+          ? caughtError.message
+          : "Unable to update trust state.",
+      );
     } finally {
-      setIsBusy(false)
+      setIsBusy(false);
     }
   }
 
   return (
     <div className="stack-xl memory-page">
-      <PageIntro
-        eyebrow="Memory"
-        title="Feed company memory"
-        description="Add source files, keep permissions attached, and watch Izge organize, retrieve, check drift, and route next work."
-        actions={
-          <div className="memory-mini-pulse" aria-label="Memory status">
-            <span>{memoryStats.sourceCount} sources</span>
-            <span>{memoryStats.memoryObjectCount} memory objects</span>
+      <section className="memory-live-hero" aria-label="Living company memory">
+        <div className="memory-heart-card">
+          <div className="memory-heart-orb" aria-hidden="true">
+            <span />
+            <span />
+            <span />
           </div>
-        }
-      />
+          <div className="memory-heart-copy">
+            <p className="eyebrow">Memory</p>
+            <h2>Living workspace memory</h2>
+            <p>
+              Feed it. It sorts, checks, delegates, and pings the right people.
+            </p>
+          </div>
+        </div>
+
+        <div className="memory-vitals-grid" aria-label="Memory vitals">
+          {memoryVitals.map((vital) => (
+            <article key={vital.label} className="memory-vital-card">
+              <span>{vital.label}</span>
+              <strong>{vital.value}</strong>
+            </article>
+          ))}
+        </div>
+      </section>
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {success ? <Callout>{success}</Callout> : null}
 
-      <div className="memory-command-grid">
-        <Panel title="Pulse" description="A compact view of the usable memory surface.">
-          <div className="memory-pulse-grid">
-            <article className="memory-pulse-card">
-              <span>Sources</span>
-              <strong>{memoryStats.sourceCount}</strong>
+      <section className="memory-flow-board" aria-label="Oracle memory loop">
+        <div className="memory-loop-rail">
+          {oracleLoopSteps.map((step) => (
+            <article key={step.title} className="memory-loop-node">
+              <span aria-hidden="true">{step.icon}</span>
+              <strong>{step.title}</strong>
+              <small>{step.detail}</small>
             </article>
-            <article className="memory-pulse-card">
-              <span>Chunks</span>
-              <strong>{memoryStats.chunkCount}</strong>
-            </article>
-            <article className="memory-pulse-card">
-              <span>Signals</span>
-              <strong>{memoryStats.signalTotal}</strong>
-            </article>
-            <article className="memory-pulse-card">
-              <span>Review</span>
-              <strong>{memoryStats.needsReview}</strong>
-            </article>
-          </div>
-        </Panel>
+          ))}
+        </div>
 
-        <Panel title="Oracle loop" description="One file becomes bounded work, not loose text.">
-          <div className="memory-loop">
-            {oracleLoopSteps.map((step) => (
-              <article key={step.title} className="memory-loop-step">
-                <span aria-hidden="true">{step.icon}</span>
-                <strong>{step.title}</strong>
-                <small>{step.detail}</small>
-              </article>
-            ))}
+        <div className="memory-live-stream panel-subtle">
+          <div className="memory-strip-head">
+            <span className="memory-live-dot" aria-hidden="true" />
+            <strong>Working now</strong>
           </div>
-        </Panel>
-      </div>
-
-      <div className="memory-command-grid wide-right-column">
-        <Panel title="Memory is working" description="Live source-level work: indexing, retrieval readiness, drift checks, and owner notifications.">
           {liveWorkItems.length === 0 ? (
-            <EmptyState title="No sources yet" description="Upload a file or paste a note to start memory work." />
+            <EmptyState
+              title="Waiting for source"
+              description="Drop a file or note below."
+            />
           ) : (
-            <div className="memory-work-list">
+            <div className="memory-stream-list">
               {liveWorkItems.map((artifact) => (
                 <button
                   type="button"
                   key={artifact.artifact_id}
-                  className={artifact.artifact_id === selectedArtifactId ? 'memory-work-item memory-work-item-active' : 'memory-work-item'}
-                  onClick={() => void handleArtifactSelection(artifact.artifact_id)}
+                  className={
+                    artifact.artifact_id === selectedArtifactId
+                      ? "memory-stream-item memory-stream-item-active"
+                      : "memory-stream-item"
+                  }
+                  onClick={() =>
+                    void handleArtifactSelection(artifact.artifact_id)
+                  }
                 >
-                  <span className={`memory-work-dot memory-work-dot-${workTone(artifact)}`} aria-hidden="true" />
-                  <span>
+                  <span
+                    className={`memory-work-dot memory-work-dot-${workTone(artifact)}`}
+                    aria-hidden="true"
+                  />
+                  <span className="memory-stream-copy">
                     <strong>{artifact.title}</strong>
-                    <small>{purposeForArtifact(artifact)} · {artifact.organization_path.slice(1, 4).join(' / ')}</small>
+                    <small>
+                      {purposeForArtifact(artifact)} · {artifact.chunk_count}{" "}
+                      chunks · {sumMemoryCounts(artifact)} objects
+                    </small>
                   </span>
-                  <StatusBadge value={formatLabel(artifact.ingestion_status)} />
+                  <span className="memory-stream-path">
+                    {artifact.organization_path.slice(1, 3).join(" / ")}
+                  </span>
                 </button>
               ))}
             </div>
           )}
-        </Panel>
+        </div>
 
-        <Panel title="Important now" description="Top current memory signals from the selected source and latest indexed files.">
+        <div className="memory-alert-stack panel-subtle">
+          <div className="memory-strip-head">
+            <strong>Important</strong>
+            <span>{importantItems.length}</span>
+          </div>
           {importantItems.length === 0 ? (
-            <EmptyState title="Nothing urgent" description="Memory will surface conflicts, drift, and next actions after sources are indexed." />
+            <p className="muted-copy">No active drift or conflict.</p>
           ) : (
-            <div className="memory-important-list">
-              {importantItems.map((item) => {
-                const content = (
-                  <>
-                    <span>{item.label}</span>
-                    <strong>{item.title}</strong>
-                    <small>{item.detail}</small>
-                  </>
-                )
-                return item.to ? (
-                  <Link key={`${item.label}-${item.title}`} className="memory-important-card" to={item.to}>
-                    {content}
-                  </Link>
-                ) : (
-                  <article key={`${item.label}-${item.title}`} className="memory-important-card">
-                    {content}
-                  </article>
-                )
-              })}
-            </div>
+            importantItems.map((item) => {
+              const content = (
+                <>
+                  <span>{item.label}</span>
+                  <strong>{item.title}</strong>
+                  <small>{item.detail}</small>
+                </>
+              );
+              return item.to ? (
+                <Link
+                  key={`${item.label}-${item.title}`}
+                  className="memory-alert-card"
+                  to={item.to}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <article
+                  key={`${item.label}-${item.title}`}
+                  className="memory-alert-card"
+                >
+                  {content}
+                </article>
+              );
+            })
           )}
-        </Panel>
-      </div>
+        </div>
 
-      <div className="two-column-layout memory-feed-grid">
-        <Panel title="Upload file" description="PDF, Markdown, or text. Memory indexes it immediately after storage.">
-          <form className="form-grid" onSubmit={handleUpload}>
-            <label className="field">
+        <div className="memory-notify-stack panel-subtle">
+          <div className="memory-strip-head">
+            <strong>Notify</strong>
+            <span>owners</span>
+          </div>
+          {liveNotifications.length === 0 ? (
+            <p className="muted-copy">No owners waiting.</p>
+          ) : (
+            liveNotifications.map((item) => (
+              <button
+                type="button"
+                key={`notify-${item.artifact.artifact_id}`}
+                className="memory-notify-card"
+                onClick={() =>
+                  void handleArtifactSelection(item.artifact.artifact_id)
+                }
+              >
+                <span>{item.owners.join(" + ")}</span>
+                <strong>{item.purpose}</strong>
+                <small>{item.artifact.title}</small>
+              </button>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="memory-feed-station panel" aria-label="Feed memory">
+        <div className="memory-feed-head">
+          <div>
+            <p className="eyebrow">Feed</p>
+            <h3>Artifacts in, memory out</h3>
+          </div>
+          <span>{isBusy ? "processing" : "ready"}</span>
+        </div>
+
+        <div className="memory-feed-cards">
+          <form className="memory-feed-card" onSubmit={handleUpload}>
+            <div className="memory-feed-card-head">
+              <span aria-hidden="true">⇧</span>
+              <strong>File</strong>
+              <small>PDF · MD · TXT</small>
+            </div>
+            <label className="field memory-quiet-field">
               <span className="field-label">Title</span>
               <input
                 value={uploadState.title}
-                onChange={(event) => setUploadState((current) => ({ ...current, title: event.target.value }))}
+                onChange={(event) =>
+                  setUploadState((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+                placeholder="e.g. April coverage note"
                 required
               />
             </label>
-            <label className="field field-block">
-              <span className="field-label">File</span>
-              <span className={uploadFile ? 'file-drop-zone file-drop-zone-active' : 'file-drop-zone'}>
-                <span className="file-upload-icon" aria-hidden="true">⇧</span>
+            <label className="field field-block memory-quiet-field">
+              <span
+                className={
+                  uploadFile
+                    ? "file-drop-zone file-drop-zone-active memory-drop-zone"
+                    : "file-drop-zone memory-drop-zone"
+                }
+              >
+                <span className="file-upload-icon" aria-hidden="true">
+                  +
+                </span>
                 <span className="file-drop-copy">
-                  <strong>{uploadFile ? uploadFile.name : 'Choose a source file'}</strong>
-                  <span>{uploadFile ? 'Ready to feed memory.' : 'Click here. PDF, Markdown, or plain text.'}</span>
+                  <strong>
+                    {uploadFile ? uploadFile.name : "Choose file"}
+                  </strong>
+                  <span>{uploadFile ? "Ready." : "Drag or click."}</span>
                 </span>
                 <input
                   className="file-input"
                   type="file"
                   accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf"
-                  onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                  onChange={(event) =>
+                    setUploadFile(event.target.files?.[0] ?? null)
+                  }
                   required
                 />
               </span>
             </label>
-            <label className="field">
+            <label className="field memory-quiet-field">
               <span className="field-label">Visibility</span>
               <select
                 value={uploadState.visibility_scope}
@@ -525,7 +751,10 @@ export function ArtifactsPage() {
                   setUploadState((current) => ({
                     ...current,
                     visibility_scope: event.target.value as VisibilityScope,
-                    permitted_user_ids: event.target.value === 'workspace' ? [] : current.permitted_user_ids,
+                    permitted_user_ids:
+                      event.target.value === "workspace"
+                        ? []
+                        : current.permitted_user_ids,
                   }))
                 }
               >
@@ -533,17 +762,26 @@ export function ArtifactsPage() {
                 <option value="restricted">Restricted</option>
               </select>
             </label>
-            {uploadState.visibility_scope === 'restricted' && selectableUsers.length > 0 ? (
-              <fieldset className="choice-grid">
-                <legend className="field-label">Permitted users</legend>
+            {uploadState.visibility_scope === "restricted" &&
+            selectableUsers.length > 0 ? (
+              <fieldset className="choice-grid memory-people-grid">
+                <legend className="field-label">People</legend>
                 {selectableUsers.map((user) => (
                   <label key={user.user_id} className="checkbox-row">
                     <input
                       type="checkbox"
-                      checked={uploadState.permitted_user_ids.includes(user.user_id)}
+                      checked={uploadState.permitted_user_ids.includes(
+                        user.user_id,
+                      )}
                       onChange={() =>
-                        toggleUserSelection(user.user_id, uploadState.permitted_user_ids, (next) =>
-                          setUploadState((current) => ({ ...current, permitted_user_ids: next })),
+                        toggleUserSelection(
+                          user.user_id,
+                          uploadState.permitted_user_ids,
+                          (next) =>
+                            setUploadState((current) => ({
+                              ...current,
+                              permitted_user_ids: next,
+                            })),
                         )
                       }
                     />
@@ -553,31 +791,49 @@ export function ArtifactsPage() {
               </fieldset>
             ) : null}
             <button type="submit" className="primary-button" disabled={isBusy}>
-              {isBusy ? 'Feeding…' : 'Feed memory'}
+              {isBusy ? "Feeding…" : "Feed file"}
             </button>
           </form>
-        </Panel>
 
-        <Panel title="Paste note" description="For meeting notes, copied decisions, or quick handoff text.">
-          <form className="form-grid" onSubmit={handlePastedText}>
-            <label className="field">
+          <form
+            className="memory-feed-card memory-feed-card-note"
+            onSubmit={handlePastedText}
+          >
+            <div className="memory-feed-card-head">
+              <span aria-hidden="true">✎</span>
+              <strong>Note</strong>
+              <small>meeting · handoff · decision</small>
+            </div>
+            <label className="field memory-quiet-field">
               <span className="field-label">Title</span>
               <input
                 value={pasteState.title}
-                onChange={(event) => setPasteState((current) => ({ ...current, title: event.target.value }))}
+                onChange={(event) =>
+                  setPasteState((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+                placeholder="e.g. Customer call summary"
                 required
               />
             </label>
-            <label className="field field-block">
+            <label className="field field-block memory-quiet-field">
               <span className="field-label">Text</span>
               <textarea
                 value={pasteState.text}
-                onChange={(event) => setPasteState((current) => ({ ...current, text: event.target.value }))}
-                rows={8}
+                onChange={(event) =>
+                  setPasteState((current) => ({
+                    ...current,
+                    text: event.target.value,
+                  }))
+                }
+                rows={6}
+                placeholder="Paste the useful part. Izge will keep provenance and permissions attached."
                 required
               />
             </label>
-            <label className="field">
+            <label className="field memory-quiet-field">
               <span className="field-label">Visibility</span>
               <select
                 value={pasteState.visibility_scope}
@@ -585,7 +841,10 @@ export function ArtifactsPage() {
                   setPasteState((current) => ({
                     ...current,
                     visibility_scope: event.target.value as VisibilityScope,
-                    permitted_user_ids: event.target.value === 'workspace' ? [] : current.permitted_user_ids,
+                    permitted_user_ids:
+                      event.target.value === "workspace"
+                        ? []
+                        : current.permitted_user_ids,
                   }))
                 }
               >
@@ -593,17 +852,26 @@ export function ArtifactsPage() {
                 <option value="restricted">Restricted</option>
               </select>
             </label>
-            {pasteState.visibility_scope === 'restricted' && selectableUsers.length > 0 ? (
-              <fieldset className="choice-grid">
-                <legend className="field-label">Permitted users</legend>
+            {pasteState.visibility_scope === "restricted" &&
+            selectableUsers.length > 0 ? (
+              <fieldset className="choice-grid memory-people-grid">
+                <legend className="field-label">People</legend>
                 {selectableUsers.map((user) => (
                   <label key={user.user_id} className="checkbox-row">
                     <input
                       type="checkbox"
-                      checked={pasteState.permitted_user_ids.includes(user.user_id)}
+                      checked={pasteState.permitted_user_ids.includes(
+                        user.user_id,
+                      )}
                       onChange={() =>
-                        toggleUserSelection(user.user_id, pasteState.permitted_user_ids, (next) =>
-                          setPasteState((current) => ({ ...current, permitted_user_ids: next })),
+                        toggleUserSelection(
+                          user.user_id,
+                          pasteState.permitted_user_ids,
+                          (next) =>
+                            setPasteState((current) => ({
+                              ...current,
+                              permitted_user_ids: next,
+                            })),
                         )
                       }
                     />
@@ -613,16 +881,22 @@ export function ArtifactsPage() {
               </fieldset>
             ) : null}
             <button type="submit" className="primary-button" disabled={isBusy}>
-              {isBusy ? 'Feeding…' : 'Feed note'}
+              {isBusy ? "Feeding…" : "Feed note"}
             </button>
           </form>
-        </Panel>
-      </div>
+        </div>
+      </section>
 
       <div className="two-column-layout wide-right-column memory-source-grid">
-        <Panel title="Sources" description="Every accessible file or note, with preview and download.">
+        <Panel
+          title="Sources"
+          description="Every accessible file or note, with preview and download."
+        >
           {artifacts.length === 0 ? (
-            <EmptyState title="No sources available" description="Feed memory with a file or note." />
+            <EmptyState
+              title="No sources available"
+              description="Feed memory with a file or note."
+            />
           ) : (
             <div className="table-wrap memory-table-wrap">
               <table className="data-table memory-source-table">
@@ -639,28 +913,58 @@ export function ArtifactsPage() {
                   {artifacts.map((artifact) => (
                     <tr
                       key={artifact.artifact_id}
-                      className={artifact.artifact_id === selectedArtifactId ? 'row-selected' : undefined}
-                      onClick={() => void handleArtifactSelection(artifact.artifact_id)}
+                      className={
+                        artifact.artifact_id === selectedArtifactId
+                          ? "row-selected"
+                          : undefined
+                      }
+                      onClick={() =>
+                        void handleArtifactSelection(artifact.artifact_id)
+                      }
                     >
                       <td>
-                        <button type="button" className="row-title-button" onClick={() => void handleArtifactSelection(artifact.artifact_id)}>
+                        <button
+                          type="button"
+                          className="row-title-button"
+                          onClick={() =>
+                            void handleArtifactSelection(artifact.artifact_id)
+                          }
+                        >
                           {artifact.title}
                         </button>
-                        <p className="table-secondary">{formatLabel(artifact.source_type)} · {artifact.original_filename ?? 'Pasted text'}</p>
+                        <p className="table-secondary">
+                          {formatLabel(artifact.source_type)} ·{" "}
+                          {artifact.original_filename ?? "Pasted text"}
+                        </p>
                       </td>
                       <td>
-                        <StatusBadge value={formatLabel(artifact.ingestion_status)} />
+                        <StatusBadge
+                          value={formatLabel(artifact.ingestion_status)}
+                        />
                       </td>
                       <td>
-                        <StatusBadge value={formatLabel(artifact.review_status)} />
+                        <StatusBadge
+                          value={formatLabel(artifact.review_status)}
+                        />
                       </td>
                       <td>{formatDateTime(artifact.updated_at)}</td>
                       <td>
-                        <div className="table-action-group" onClick={(event) => event.stopPropagation()}>
-                          <a className="table-action-link" href={api.artifactPreviewUrl(artifact.artifact_id)} target="_blank" rel="noreferrer">
+                        <div
+                          className="table-action-group"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <a
+                            className="table-action-link"
+                            href={api.artifactPreviewUrl(artifact.artifact_id)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
                             Preview
                           </a>
-                          <a className="table-action-link" href={api.artifactDownloadUrl(artifact.artifact_id)}>
+                          <a
+                            className="table-action-link"
+                            href={api.artifactDownloadUrl(artifact.artifact_id)}
+                          >
                             Download
                           </a>
                         </div>
@@ -678,26 +982,47 @@ export function ArtifactsPage() {
           description="Storage, trust, extraction, and memory signals."
           aside={
             selectedArtifact && isAdmin ? (
-              <button type="button" className="secondary-button" onClick={() => void handleRunIngestion()} disabled={isBusy}>
-                {isBusy ? 'Processing…' : 'Process now'}
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void handleRunIngestion()}
+                disabled={isBusy}
+              >
+                {isBusy ? "Processing…" : "Process now"}
               </button>
             ) : null
           }
         >
           {!selectedArtifact ? (
-            <EmptyState title="Select a source" description="Choose a file or note to inspect." />
+            <EmptyState
+              title="Select a source"
+              description="Choose a file or note to inspect."
+            />
           ) : (
             <div className="stack-lg">
               <div className="memory-selected-head">
                 <div>
-                  <p className="section-label">{selectedFilesystemArtifact?.retrieval_state ?? 'Source record'}</p>
-                  <h3 className="memory-selected-title">{selectedArtifact.title}</h3>
+                  <p className="section-label">
+                    {selectedFilesystemArtifact?.retrieval_state ??
+                      "Source record"}
+                  </p>
+                  <h3 className="memory-selected-title">
+                    {selectedArtifact.title}
+                  </h3>
                 </div>
                 <div className="artifact-action-strip">
-                  <a className="secondary-button" href={api.artifactPreviewUrl(selectedArtifact.artifact_id)} target="_blank" rel="noreferrer">
+                  <a
+                    className="secondary-button"
+                    href={api.artifactPreviewUrl(selectedArtifact.artifact_id)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     Preview
                   </a>
-                  <a className="secondary-button" href={api.artifactDownloadUrl(selectedArtifact.artifact_id)}>
+                  <a
+                    className="secondary-button"
+                    href={api.artifactDownloadUrl(selectedArtifact.artifact_id)}
+                  >
                     Download
                   </a>
                 </div>
@@ -714,7 +1039,11 @@ export function ArtifactsPage() {
                 </div>
                 <div>
                   <dt>Memory objects</dt>
-                  <dd>{selectedFilesystemArtifact ? sumMemoryCounts(selectedFilesystemArtifact) : 0}</dd>
+                  <dd>
+                    {selectedFilesystemArtifact
+                      ? sumMemoryCounts(selectedFilesystemArtifact)
+                      : 0}
+                  </dd>
                 </div>
                 <div>
                   <dt>Signals</dt>
@@ -722,22 +1051,37 @@ export function ArtifactsPage() {
                 </div>
                 <div>
                   <dt>Review</dt>
-                  <dd><StatusBadge value={formatLabel(selectedArtifact.review_status)} /></dd>
+                  <dd>
+                    <StatusBadge
+                      value={formatLabel(selectedArtifact.review_status)}
+                    />
+                  </dd>
                 </div>
                 <div>
                   <dt>Stored as</dt>
-                  <dd>{selectedArtifact.original_filename ?? 'Pasted text'}</dd>
+                  <dd>{selectedArtifact.original_filename ?? "Pasted text"}</dd>
                 </div>
               </dl>
 
               <div className="memory-path-strip">
-                {(selectedFilesystemArtifact?.organization_path ?? ['workspace', 'memory', selectedArtifact.artifact_id]).map((part, index) => (
+                {(
+                  selectedFilesystemArtifact?.organization_path ?? [
+                    "workspace",
+                    "memory",
+                    selectedArtifact.artifact_id,
+                  ]
+                ).map((part, index) => (
                   <span key={`${part}-${index}`}>{part}</span>
                 ))}
               </div>
 
-              {lastIngestionJob?.artifact_id === selectedArtifact.artifact_id ? (
-                <Callout>Last job: {formatLabel(lastIngestionJobStatus(lastIngestionJob))} · {lastIngestionJob.stage}</Callout>
+              {lastIngestionJob?.artifact_id ===
+              selectedArtifact.artifact_id ? (
+                <Callout>
+                  Last job:{" "}
+                  {formatLabel(lastIngestionJobStatus(lastIngestionJob))} ·{" "}
+                  {lastIngestionJob.stage}
+                </Callout>
               ) : null}
 
               <div className="panel-subtle stack-sm">
@@ -765,20 +1109,30 @@ export function ArtifactsPage() {
                       <span className="field-label">Notes</span>
                       <textarea
                         value={reviewState.review_notes}
-                        onChange={(event) => setReviewState((current) => ({ ...current, review_notes: event.target.value }))}
+                        onChange={(event) =>
+                          setReviewState((current) => ({
+                            ...current,
+                            review_notes: event.target.value,
+                          }))
+                        }
                         rows={3}
                         placeholder="Reason for trust, rejection, or review hold."
                       />
                     </label>
-                    <button type="button" className="secondary-button" onClick={() => void handleReviewUpdate()} disabled={isBusy}>
-                      {isBusy ? 'Updating…' : 'Save trust state'}
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => void handleReviewUpdate()}
+                      disabled={isBusy}
+                    >
+                      {isBusy ? "Updating…" : "Save trust state"}
                     </button>
                   </>
                 ) : (
                   <p className="muted-copy">
-                    {selectedArtifact.review_status === 'reviewed'
-                      ? 'Reviewed source. Izge can cite it inside your permissions.'
-                      : 'Visible source. Trust review is still marked in answers.'}
+                    {selectedArtifact.review_status === "reviewed"
+                      ? "Reviewed source. Izge can cite it inside your permissions."
+                      : "Visible source. Trust review is still marked in answers."}
                   </p>
                 )}
               </div>
@@ -786,32 +1140,77 @@ export function ArtifactsPage() {
               <div className="panel-subtle stack-sm">
                 <p className="section-label">Memory signals</p>
                 {!selectedArtifactSignals ? (
-                  <p className="muted-copy">Signal summary is not loaded yet.</p>
+                  <p className="muted-copy">
+                    Signal summary is not loaded yet.
+                  </p>
                 ) : (
                   <>
                     <div className="memory-signal-grid">
-                      <article><span>Contradictions</span><strong>{signalCount(selectedArtifactSignals, 'contradictions')}</strong></article>
-                      <article><span>Drift</span><strong>{signalCount(selectedArtifactSignals, 'assumption_drift')}</strong></article>
-                      <article><span>Superseded</span><strong>{signalCount(selectedArtifactSignals, 'supersessions')}</strong></article>
-                      <article><span>Next</span><strong>{signalCount(selectedArtifactSignals, 'next_actions')}</strong></article>
+                      <article>
+                        <span>Contradictions</span>
+                        <strong>
+                          {signalCount(
+                            selectedArtifactSignals,
+                            "contradictions",
+                          )}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>Drift</span>
+                        <strong>
+                          {signalCount(
+                            selectedArtifactSignals,
+                            "assumption_drift",
+                          )}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>Superseded</span>
+                        <strong>
+                          {signalCount(
+                            selectedArtifactSignals,
+                            "supersessions",
+                          )}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>Next</span>
+                        <strong>
+                          {signalCount(selectedArtifactSignals, "next_actions")}
+                        </strong>
+                      </article>
                     </div>
-                    <p className="muted-copy">{selectedArtifactSignals.summary}</p>
-                    {selectedArtifactSignals.persisted_signals.slice(0, 3).map((signal) => (
-                      <Link key={signal.signal_id} className="record-link panel-subtle" to={`/signals/${signal.signal_id}`}>
-                        <div>
-                          <p className="table-primary">{signal.title}</p>
-                          <p className="table-secondary">{formatLabel(signal.signal_type)} · {signal.related_topic}</p>
-                        </div>
-                        <span className="table-secondary">Open</span>
-                      </Link>
-                    ))}
+                    <p className="muted-copy">
+                      {selectedArtifactSignals.summary}
+                    </p>
+                    {selectedArtifactSignals.persisted_signals
+                      .slice(0, 3)
+                      .map((signal) => (
+                        <Link
+                          key={signal.signal_id}
+                          className="record-link panel-subtle"
+                          to={`/signals/${signal.signal_id}`}
+                        >
+                          <div>
+                            <p className="table-primary">{signal.title}</p>
+                            <p className="table-secondary">
+                              {formatLabel(signal.signal_type)} ·{" "}
+                              {signal.related_topic}
+                            </p>
+                          </div>
+                          <span className="table-secondary">Open</span>
+                        </Link>
+                      ))}
                   </>
                 )}
               </div>
 
               <div className="panel-subtle">
                 <p className="section-label">Preview text</p>
-                <p className="evidence-block">{selectedArtifact.extracted_text_preview || 'No extracted text available yet.'}</p>
+                <p className="evidence-block">
+                  {selectedArtifact.extracted_text_preview ||
+                    "No extracted text available yet."}
+                </p>
               </div>
 
               <div className="panel-subtle stack-sm">
@@ -822,17 +1221,23 @@ export function ArtifactsPage() {
                   selectedChunkProvenance.slice(0, 4).map((chunk) => (
                     <article key={chunk.chunk_id} className="memory-chunk-row">
                       <strong>Chunk {chunk.sequence_number}</strong>
-                      <span>{chunk.extraction_method} · {chunk.extraction_status} · {chunk.extracted_object_count} objects</span>
+                      <span>
+                        {chunk.extraction_method} · {chunk.extraction_status} ·{" "}
+                        {chunk.extracted_object_count} objects
+                      </span>
                       <small>{chunk.chunk_excerpt}</small>
                     </article>
                   ))
                 )}
               </div>
 
-              {selectedArtifact.visibility_scope === 'restricted' ? (
+              {selectedArtifact.visibility_scope === "restricted" ? (
                 <div className="panel-subtle">
                   <p className="section-label">Permitted user IDs</p>
-                  <p className="muted-copy">{selectedPermittedUserIds.join(', ') || 'No explicit users recorded.'}</p>
+                  <p className="muted-copy">
+                    {selectedPermittedUserIds.join(", ") ||
+                      "No explicit users recorded."}
+                  </p>
                 </div>
               ) : null}
             </div>
@@ -841,22 +1246,32 @@ export function ArtifactsPage() {
       </div>
 
       {orchestrationJobs.length > 0 ? (
-        <Panel title="Delegated memory work" description="Queue-backed packets the oracle path created for bounded follow-up.">
+        <Panel
+          title="Delegated memory work"
+          description="Queue-backed packets the oracle path created for bounded follow-up."
+        >
           <div className="memory-job-list">
             {orchestrationJobs.slice(0, 5).map((job) => (
               <article key={job.job_id} className="memory-job-card">
                 <span>{formatLabel(job.status)}</span>
-                <strong>{job.stage_key ? formatLabel(job.stage_key) : formatLabel(job.job_kind)}</strong>
-                <small>{job.error_message || `Priority ${job.priority} · ${formatDateTime(job.updated_at)}`}</small>
+                <strong>
+                  {job.stage_key
+                    ? formatLabel(job.stage_key)
+                    : formatLabel(job.job_kind)}
+                </strong>
+                <small>
+                  {job.error_message ||
+                    `Priority ${job.priority} · ${formatDateTime(job.updated_at)}`}
+                </small>
               </article>
             ))}
           </div>
         </Panel>
       ) : null}
     </div>
-  )
+  );
 }
 
 function lastIngestionJobStatus(job: IngestionJobRead) {
-  return job.status || job.stage
+  return job.status || job.stage;
 }

@@ -277,6 +277,12 @@ def _seed_default_artifacts(db: Session, *, workspace: Workspace, admin: User) -
 
 
 def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email: dict[str, User], admin: User) -> None:
+    junk_bodies = {"message", "mesafe"}
+    for junk_message in db.scalars(select(CompanyChatMessage).where(CompanyChatMessage.workspace_id == workspace.workspace_id)).all():
+        if junk_message.body.strip().lower() in junk_bodies:
+            db.delete(junk_message)
+    db.commit()
+
     def thread_metadata(thread_id: str, thread_title: str, thread_kind: str = "channel") -> dict[str, object]:
         return {
             "channel": thread_id,
@@ -284,7 +290,7 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             "thread_title": thread_title,
             "thread_kind": thread_kind,
             "seeded": True,
-            "seed_batch": "northstar-workspace-v2",
+            "seed_batch": "northstar-workspace-v3",
         }
 
     seeded_turns = [
@@ -303,7 +309,19 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
         (
             datetime(2026, 4, 8, 9, 16),
             admin,
-            "I reviewed the strategy report, roadmap deck, meeting notes, and internal chat export. Keep source-specific questions in the assistant and coordination here.",
+            "I reviewed the strategy report, roadmap deck, meeting notes, and internal chat export. If you need a source-backed answer, ask Izge; if you need a handoff, keep it here.",
+            thread_metadata("company-general", "Company General"),
+        ),
+        (
+            datetime(2026, 4, 8, 9, 38),
+            users_by_email.get("employee3@example.com") or admin,
+            "Small ops note: PTO coverage is now in the shared calendar. Please do not bury coverage changes in random chat threads.",
+            thread_metadata("company-general", "Company General"),
+        ),
+        (
+            datetime(2026, 4, 8, 9, 43),
+            users_by_email.get("employee1@example.com") or admin,
+            "Got it. I will feed the Monday coverage note into Memory so the assistant has the latest owner list.",
             thread_metadata("company-general", "Company General"),
         ),
         (
@@ -319,6 +337,18 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             thread_metadata("product-rollout", "Product Rollout"),
         ),
         (
+            datetime(2026, 4, 8, 10, 36),
+            users_by_email.get("employee1@example.com") or admin,
+            "Izge is flagging the Q2 launch target against the later controlled-beta decision. That is useful — we should mention both in the readiness memo.",
+            thread_metadata("product-rollout", "Product Rollout"),
+        ),
+        (
+            datetime(2026, 4, 8, 10, 41),
+            users_by_email.get("employee2@example.com") or admin,
+            "Agree. I will write it as: launch intent stays open, but go-live waits for security signoff and 95% activation event coverage.",
+            thread_metadata("product-rollout", "Product Rollout"),
+        ),
+        (
             datetime(2026, 4, 9, 13, 2),
             users_by_email.get("employee1@example.com") or admin,
             "Can you review the beta segmentation update before I send it to customer success?",
@@ -328,6 +358,18 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             datetime(2026, 4, 9, 13, 7),
             users_by_email.get("employee2@example.com") or admin,
             "Yes. Send it here after the last artifact review finishes. Also add the two permission-copy requests from support.",
+            thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
+        ),
+        (
+            datetime(2026, 4, 9, 13, 14),
+            users_by_email.get("employee1@example.com") or admin,
+            "Sent. I kept enterprise accounts above 500 employees on white-glove onboarding until the launch review is done.",
+            thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
+        ),
+        (
+            datetime(2026, 4, 9, 13, 19),
+            users_by_email.get("employee2@example.com") or admin,
+            "Looks good. One edit: mention the security access review before the permission-copy paragraph so nobody treats it as marketing copy.",
             thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
         ),
         (
@@ -349,6 +391,12 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             thread_metadata("direct:employee1-employee3", "Employee 1 / Employee 3", "direct"),
         ),
         (
+            datetime(2026, 4, 9, 16, 52),
+            users_by_email.get("employee3@example.com") or admin,
+            "Yes, if the import queue behaves. I owe you soup after last week's incident review.",
+            thread_metadata("direct:employee1-employee3", "Employee 1 / Employee 3", "direct"),
+        ),
+        (
             datetime(2026, 4, 10, 8, 57),
             users_by_email.get("employee2@example.com") or admin,
             "I saw the finance memo. Are the two customer-success backfill roles already approved or just proposed?",
@@ -367,6 +415,12 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             thread_metadata("direct:employee2-employee3", "Employee 2 / Employee 3", "direct"),
         ),
         (
+            datetime(2026, 4, 10, 9, 12),
+            users_by_email.get("employee3@example.com") or admin,
+            "Good call. If it finds a staffing contradiction, tag me before the FAQ goes out.",
+            thread_metadata("direct:employee2-employee3", "Employee 2 / Employee 3", "direct"),
+        ),
+        (
             datetime(2026, 4, 10, 15, 22),
             users_by_email.get("employee1@example.com") or admin,
             "The payroll import FAQ draft is in Memory now. Please skim the customer-facing wording before Monday.",
@@ -376,6 +430,18 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             datetime(2026, 4, 10, 15, 31),
             users_by_email.get("employee3@example.com") or admin,
             "Skimmed it. The steps are fine, but we should not mention payroll export admins outside the security access review.",
+            thread_metadata("customer-success", "Customer Success"),
+        ),
+        (
+            datetime(2026, 4, 10, 15, 37),
+            users_by_email.get("employee2@example.com") or admin,
+            "I added a short line for admins: if import fails twice, open a support ticket instead of retrying with a payroll export attached.",
+            thread_metadata("customer-success", "Customer Success"),
+        ),
+        (
+            datetime(2026, 4, 10, 15, 40),
+            users_by_email.get("employee1@example.com") or admin,
+            "That works. I will ask Izge to check the FAQ against the security review after this.",
             thread_metadata("customer-success", "Customer Success"),
         ),
     ]

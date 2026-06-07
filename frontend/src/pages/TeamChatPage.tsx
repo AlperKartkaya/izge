@@ -5,11 +5,12 @@ import {
   useState,
   type FormEventHandler,
 } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime } from '../lib/format'
-import type { TeamChatMessageRead, UserRead } from '../lib/types'
+import type { TeamChatMessageRead, TeamChatTypingUserRead, UserRead } from '../lib/types'
 
 interface ConversationSummary {
   id: string
@@ -75,6 +76,87 @@ const DEFAULT_CHANNELS: ConversationSummary[] = [
     messages: [],
   },
 ]
+
+const CHAT_HISTORY_SEED_VERSION = 'northstar-employee-assistant-v3'
+
+function assistantThreadsStorageKey(
+  workspaceId: string | undefined,
+  userId: string | undefined,
+) {
+  return `izge-chat-threads:${workspaceId || 'workspace'}:${userId || 'user'}`
+}
+
+function assistantThreadsVersionStorageKey(
+  workspaceId: string | undefined,
+  userId: string | undefined,
+) {
+  return `izge-chat-threads-version:${workspaceId || 'workspace'}:${userId || 'user'}`
+}
+
+function importAssistantThreadForUser(
+  currentUser: UserRead,
+  snapshot: unknown,
+) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return false
+  }
+  const candidate = snapshot as Record<string, unknown>
+  const messages = Array.isArray(candidate.messages) ? candidate.messages : []
+  const importedThread = {
+    ...candidate,
+    id:
+      typeof candidate.id === 'string'
+        ? candidate.id
+        : `shared-${Date.now()}`,
+    title:
+      typeof candidate.title === 'string' && candidate.title.trim()
+        ? candidate.title
+        : 'Shared Izge chat',
+    createdAt:
+      typeof candidate.createdAt === 'string'
+        ? candidate.createdAt
+        : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    messages,
+  }
+  const storageKey = assistantThreadsStorageKey(
+    currentUser.workspace_id,
+    currentUser.user_id,
+  )
+  const versionKey = assistantThreadsVersionStorageKey(
+    currentUser.workspace_id,
+    currentUser.user_id,
+  )
+  let existingThreads: unknown[] = []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
+    existingThreads = Array.isArray(parsed) ? parsed : []
+  } catch {
+    existingThreads = []
+  }
+  const remainingThreads = existingThreads.filter(
+    (thread) =>
+      !thread ||
+      typeof thread !== 'object' ||
+      (thread as Record<string, unknown>).id !== importedThread.id,
+  )
+  window.localStorage.setItem(
+    storageKey,
+    JSON.stringify([importedThread, ...remainingThreads].slice(0, 16)),
+  )
+  window.localStorage.setItem(versionKey, CHAT_HISTORY_SEED_VERSION)
+  return true
+}
+
+function assistantSnapshotTitle(snapshot: unknown) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return 'Shared Izge chat'
+  }
+  const title = (snapshot as Record<string, unknown>).title
+  return typeof title === 'string' && title.trim()
+    ? title
+    : 'Shared Izge chat'
+}
 
 function roleLabel(role: TeamChatMessageRead['author_role']) {
   return role === 'Admin' ? 'Admin' : 'Employee'
@@ -299,13 +381,16 @@ function messageReceiptState(
 
 export function TeamChatPage() {
   const { session } = useAuth()
+  const navigate = useNavigate()
   const threadEndRef = useRef<HTMLDivElement | null>(null)
+  const lastTypingSentAtRef = useRef(0)
   const [messages, setMessages] = useState<TeamChatMessageRead[]>([])
   const [activeConversationId, setActiveConversationId] =
     useState('company-general')
   const [draft, setDraft] = useState('')
   const [conversationSearch, setConversationSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [typingUsers, setTypingUsers] = useState<TeamChatTypingUserRead[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
 
@@ -375,6 +460,89 @@ export function TeamChatPage() {
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ block: 'end' })
   }, [activeConversationId, activeMessages.length, isSending])
+
+  useEffect(() => {
+    if (!session?.token || !activeConversation.id) {
+      queueMicrotask(() => setTypingUsers([]))
+      return
+    }
+
+    let cancelled = false
+    async function loadTyping() {
+      if (!session?.token) {
+        return
+      }
+      try {
+        const payload = await api.listTeamChatTyping(
+          session.token,
+          activeConversation.id,
+          activeConversation.kind,
+        )
+        if (!cancelled) {
+          setTypingUsers(payload.typing)
+        }
+      } catch {
+        if (!cancelled) {
+          setTypingUsers([])
+        }
+      }
+    }
+
+    void loadTyping()
+    const interval = window.setInterval(() => void loadTyping(), 1800)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [activeConversation.id, activeConversation.kind, session?.token])
+
+  useEffect(() => {
+    if (!session?.token || !draft.trim()) {
+      return
+    }
+    const now = Date.now()
+    if (now - lastTypingSentAtRef.current < 2200) {
+      return
+    }
+    lastTypingSentAtRef.current = now
+    void api.markTeamChatTyping(
+      session.token,
+      activeConversation.id,
+      activeConversation.kind,
+    )
+  }, [activeConversation.id, activeConversation.kind, draft, session?.token])
+
+  async function handleAssistantThreadAction(message: TeamChatMessageRead) {
+    if (!session?.user || !session.token) {
+      return
+    }
+    const snapshot = message.message_metadata?.assistant_thread_snapshot
+    const imported = importAssistantThreadForUser(session.user, snapshot)
+    if (!imported) {
+      setError('This assistant handoff does not include a readable chat.')
+      return
+    }
+    if (message.message_metadata?.action === 'assistant_cowork_invite') {
+      try {
+        await api.createTeamChatMessage(
+          session.token,
+          `${session.user.display_name} joined the shared Izge assistant chat.`,
+          {
+            thread_id: activeConversation.id,
+            thread_title: activeConversation.title,
+            thread_kind: activeConversation.kind,
+            message_metadata: {
+              action: 'assistant_cowork_accept',
+              collab_session_id: message.message_metadata?.collab_session_id,
+            },
+          },
+        )
+      } catch {
+        // Import already succeeded; posting acceptance is a best-effort signal.
+      }
+    }
+    navigate('/query')
+  }
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault()
@@ -542,6 +710,36 @@ export function TeamChatPage() {
                   }
                 >
                   <p className="chat-message-copy">{message.body}</p>
+                  {message.message_metadata?.action ===
+                    'assistant_chat_share' ||
+                  message.message_metadata?.action ===
+                    'assistant_cowork_invite' ? (
+                    <div className="team-chat-assistant-card">
+                      <span>
+                        {message.message_metadata?.action ===
+                        'assistant_cowork_invite'
+                          ? 'Cowork proposal'
+                          : 'Assistant chat'}
+                      </span>
+                      <strong>
+                        {assistantSnapshotTitle(
+                          message.message_metadata?.assistant_thread_snapshot,
+                        )}
+                      </strong>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          void handleAssistantThreadAction(message)
+                        }
+                      >
+                        {message.message_metadata?.action ===
+                        'assistant_cowork_invite'
+                          ? 'Accept and open'
+                          : 'Open in assistant'}
+                      </button>
+                    </div>
+                  ) : null}
                   <div className="message-bubble-meta">
                     <span>{formatDateTime(message.created_at)}</span>
                     {isOwnMessage && receiptState ? (
@@ -565,6 +763,17 @@ export function TeamChatPage() {
                   <span>Sending…</span>
                   <span className="message-receipt">✓</span>
                 </div>
+              </article>
+            ) : null}
+            {typingUsers.length > 0 ? (
+              <article className="team-chat-typing-row">
+                <span className="typing-pen" aria-hidden="true">
+                  ✎
+                </span>
+                <span>
+                  {typingUsers.map((user) => user.display_name).join(', ')}{' '}
+                  writing…
+                </span>
               </article>
             ) : null}
             <div ref={threadEndRef} />

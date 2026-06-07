@@ -34,6 +34,19 @@ export interface TeamChatThreadRead {
   messages: TeamChatMessageRead[]
 }
 
+export interface TeamChatTypingUserRead {
+  user_id: string
+  display_name: string
+  thread_id: string
+  expires_at: string
+}
+
+export interface TeamChatTypingRead {
+  workspace_id: string
+  generated_at: string
+  typing: TeamChatTypingUserRead[]
+}
+
 export interface ArtifactRead {
   artifact_id: string
   workspace_id: string

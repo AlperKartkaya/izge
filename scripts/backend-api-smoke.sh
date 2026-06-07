@@ -51,6 +51,13 @@ try:
         assert employee_response.status_code == 200, employee_response.text
         employee_token = employee_response.json()["access_token"]
 
+        employee_two_response = client.post(
+            "/api/auth/sign-in",
+            json={"email": "employee2@example.com", "password": "change-me-employee2"},
+        )
+        assert employee_two_response.status_code == 200, employee_two_response.text
+        employee_two_token = employee_two_response.json()["access_token"]
+
         users_response = client.get(
             "/api/users",
             headers={"Authorization": f"Bearer {admin_token}"},
@@ -67,12 +74,52 @@ try:
                 "body": "backend API smoke threaded message",
                 "thread_id": "direct:employee1-employee2",
                 "thread_title": "Employee 1 / Employee 2",
+                "thread_kind": "direct",
+                "message_metadata": {
+                    "action": "assistant_chat_share",
+                    "thread_id": "must-not-overwrite-server-thread",
+                    "assistant_thread_snapshot": {"id": "smoke-chat", "title": "Smoke chat", "messages": []},
+                },
             },
         )
         assert chat_response.status_code == 201, chat_response.text
         metadata = chat_response.json()["message_metadata"]
         assert metadata["thread_id"] == "direct:employee1-employee2", metadata
         assert metadata["thread_title"] == "Employee 1 / Employee 2", metadata
+        assert metadata["thread_kind"] == "direct", metadata
+        assert metadata["action"] == "assistant_chat_share", metadata
+
+        colleagues_response = client.get(
+            "/api/users/colleagues",
+            headers={"Authorization": f"Bearer {employee_token}"},
+        )
+        assert colleagues_response.status_code == 200, colleagues_response.text
+        colleague_emails = {user["email"] for user in colleagues_response.json()}
+        assert "employee2@example.com" in colleague_emails, colleague_emails
+
+        chat_list_response = client.get(
+            "/api/team-chat",
+            headers={"Authorization": f"Bearer {employee_token}"},
+        )
+        assert chat_list_response.status_code == 200, chat_list_response.text
+        assert any(
+            message["message_metadata"].get("thread_id") == "direct:employee1-employee2"
+            for message in chat_list_response.json()["messages"]
+        ), chat_list_response.text
+
+        typing_response = client.post(
+            "/api/team-chat/typing",
+            headers={"Authorization": f"Bearer {employee_token}"},
+            json={"thread_id": "direct:employee1-employee2", "thread_kind": "direct"},
+        )
+        assert typing_response.status_code == 200, typing_response.text
+        typing_list_response = client.get(
+            "/api/team-chat/typing?thread_id=direct%3Aemployee1-employee2&thread_kind=direct",
+            headers={"Authorization": f"Bearer {employee_two_token}"},
+        )
+        assert typing_list_response.status_code == 200, typing_list_response.text
+        typing_names = {user["display_name"] for user in typing_list_response.json()["typing"]}
+        assert "Employee 1" in typing_names, typing_list_response.text
 
         llm_response = client.get(
             "/api/system/llm-status",

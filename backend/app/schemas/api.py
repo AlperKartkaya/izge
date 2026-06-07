@@ -49,6 +49,7 @@ class TeamChatMessageCreate(BaseModel):
     thread_id: str | None = Field(default=None, min_length=1, max_length=80)
     thread_title: str | None = Field(default=None, min_length=1, max_length=120)
     thread_kind: Literal["channel", "direct"] = "channel"
+    message_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class TeamChatMessageRead(BaseModel):
@@ -66,6 +67,24 @@ class TeamChatThreadRead(BaseModel):
     workspace_id: str
     generated_at: datetime
     messages: list[TeamChatMessageRead]
+
+
+class TeamChatTypingCreate(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=80)
+    thread_kind: Literal["channel", "direct"] = "channel"
+
+
+class TeamChatTypingUserRead(BaseModel):
+    user_id: str
+    display_name: str
+    thread_id: str
+    expires_at: datetime
+
+
+class TeamChatTypingRead(BaseModel):
+    workspace_id: str
+    generated_at: datetime
+    typing: list[TeamChatTypingUserRead]
 
 
 class ArtifactRead(BaseModel):
