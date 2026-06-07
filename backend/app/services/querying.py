@@ -424,6 +424,19 @@ def _trusted_visible_artifact_ids(db: Session, user: User) -> set[str]:
     return {artifact.artifact_id for artifact in _trusted_visible_artifacts(db, user)}
 
 
+def _review_priority_visible_artifact_ids(db: Session, user: User) -> set[str]:
+    """Prefer reviewed artifacts for employee graph surfaces, with an empty-workspace fallback.
+
+    Query/review flows can still expose submitted items where appropriate, but the graph is an
+    employee-facing memory map. If reviewed sources exist, keep draft/local-test uploads out of
+    that map so the page remains a deployable company graph rather than a mixed scratchpad.
+    """
+
+    artifacts = _trusted_visible_artifacts(db, user)
+    reviewed_artifact_ids = {artifact.artifact_id for artifact in artifacts if artifact.review_status == "reviewed"}
+    return reviewed_artifact_ids or {artifact.artifact_id for artifact in artifacts}
+
+
 def _artifact_review_status_map(db: Session, artifact_ids: set[str]) -> dict[str, str]:
     if not artifact_ids:
         return {}
@@ -2848,7 +2861,7 @@ def build_query_trace_for_reader(db: Session, query_run: QueryRun, reader: User)
 
 
 def graph_summary(db: Session, user: User) -> tuple[dict[str, int], dict[str, int], int, dict[str, int]]:
-    visible_artifact_ids = _trusted_visible_artifact_ids(db, user)
+    visible_artifact_ids = _review_priority_visible_artifact_ids(db, user)
     memory_counts = {
         "decisions": db.query(Decision).filter(Decision.workspace_id == user.workspace_id, Decision.source_artifact_id.in_(visible_artifact_ids)).count(),
         "assumptions": db.query(Assumption).filter(Assumption.workspace_id == user.workspace_id, Assumption.source_artifact_id.in_(visible_artifact_ids)).count(),
@@ -2897,15 +2910,20 @@ def _timeline_status(memory: MemoryRecord, *, node_id: str, edges: list[GraphEdg
 
 
 def graph_timeline(db: Session, user: User, *, limit: int = 40) -> list[GraphTimelineItem]:
-    memories = _load_memory_records(db, user)
+    visible_artifact_ids = _review_priority_visible_artifact_ids(db, user)
+    memories = [memory for memory in _load_memory_records(db, user) if memory.source_artifact_id in visible_artifact_ids]
     nodes_by_id = _load_nodes_by_id(db, user)
     node_id_by_entity_id = {node.entity_id: node_id for node_id, node in nodes_by_id.items()}
-    edges = _visible_edges(db, user)
+    edges = [
+        edge
+        for edge in _visible_edges(db, user)
+        if edge.evidence_artifact_id is None or edge.evidence_artifact_id in visible_artifact_ids
+    ]
     edges_by_node_id: dict[str, list[GraphEdge]] = {}
     for edge in edges:
         edges_by_node_id.setdefault(edge.from_node_id, []).append(edge)
         edges_by_node_id.setdefault(edge.to_node_id, []).append(edge)
-    artifact_titles = _artifact_title_map(db, _visible_artifact_ids(db, user))
+    artifact_titles = _artifact_title_map(db, visible_artifact_ids)
 
     items: list[GraphTimelineItem] = []
     for memory in memories:
@@ -2948,7 +2966,8 @@ def graph_timeline(db: Session, user: User, *, limit: int = 40) -> list[GraphTim
 
 
 def graph_neighborhood(db: Session, user: User, *, memory_type: str, memory_id: str, limit: int = 12) -> GraphNeighborhood | None:
-    memories = _load_memory_records(db, user)
+    visible_artifact_ids = _review_priority_visible_artifact_ids(db, user)
+    memories = [memory for memory in _load_memory_records(db, user) if memory.source_artifact_id in visible_artifact_ids]
     center_memory = next((memory for memory in memories if memory.memory_type == memory_type and memory.memory_id == memory_id), None)
     if center_memory is None:
         return None
@@ -2960,8 +2979,12 @@ def graph_neighborhood(db: Session, user: User, *, memory_type: str, memory_id: 
         return None
 
     memories_by_id = {memory.memory_id: memory for memory in memories}
-    edges = _visible_edges(db, user)
-    artifact_titles = _artifact_title_map(db, _visible_artifact_ids(db, user))
+    edges = [
+        edge
+        for edge in _visible_edges(db, user)
+        if edge.evidence_artifact_id is None or edge.evidence_artifact_id in visible_artifact_ids
+    ]
+    artifact_titles = _artifact_title_map(db, visible_artifact_ids)
     neighbors: list[GraphNeighborhoodNeighbor] = []
     for edge in edges:
         if edge.edge_type == "MENTIONED_IN":

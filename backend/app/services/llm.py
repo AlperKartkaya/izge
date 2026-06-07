@@ -140,11 +140,13 @@ def _extract_json_content(raw: str) -> str:
 def run_structured_local_prompt(*, system_prompt: str, user_prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
     settings = get_settings()
     schema_text = json.dumps(schema, sort_keys=True)
+    schema_properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    max_tokens = 900 if "answer_text" in schema_properties else 420
     payload = {
         "model": settings.local_llm_model,
         "stream": False,
         "format": "json",
-        "options": {"temperature": 0, "num_predict": 256, "num_ctx": 4096},
+        "options": {"temperature": 0, "num_predict": max_tokens, "num_ctx": 4096},
         "think": False,
         "messages": [
             {"role": "system", "content": system_prompt},

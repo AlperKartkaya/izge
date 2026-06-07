@@ -91,6 +91,74 @@ function truncateGraphLabel(value: string, limit = 30): string {
   return value.length > limit ? `${value.slice(0, limit - 1)}…` : value
 }
 
+type GraphClusterKey =
+  | 'launch'
+  | 'security'
+  | 'customer'
+  | 'engineering'
+  | 'operations'
+  | 'general'
+
+const GRAPH_CLUSTER_ANCHORS: Record<
+  GraphClusterKey,
+  { x: number; y: number; label: string }
+> = {
+  launch: { x: 260, y: 210, label: 'Launch cluster' },
+  security: { x: 675, y: 190, label: 'Security cluster' },
+  customer: { x: 690, y: 430, label: 'Customer cluster' },
+  engineering: { x: 455, y: 315, label: 'Engineering cluster' },
+  operations: { x: 265, y: 455, label: 'Operations cluster' },
+  general: { x: 500, y: 520, label: 'Company memory' },
+}
+
+function graphClusterKey(title: string): GraphClusterKey {
+  const normalizedTitle = title.toLowerCase()
+  if (
+    normalizedTitle.includes('security') ||
+    normalizedTitle.includes('payroll') ||
+    normalizedTitle.includes('access') ||
+    normalizedTitle.includes('pii')
+  ) {
+    return 'security'
+  }
+  if (
+    normalizedTitle.includes('support') ||
+    normalizedTitle.includes('customer') ||
+    normalizedTitle.includes('faq') ||
+    normalizedTitle.includes('escalation')
+  ) {
+    return 'customer'
+  }
+  if (
+    normalizedTitle.includes('engineering') ||
+    normalizedTitle.includes('analytics') ||
+    normalizedTitle.includes('incident') ||
+    normalizedTitle.includes('vendor')
+  ) {
+    return 'engineering'
+  }
+  if (
+    normalizedTitle.includes('finance') ||
+    normalizedTitle.includes('hiring') ||
+    normalizedTitle.includes('coverage') ||
+    normalizedTitle.includes('people') ||
+    normalizedTitle.includes('pto') ||
+    normalizedTitle.includes('remote')
+  ) {
+    return 'operations'
+  }
+  if (
+    normalizedTitle.includes('roadmap') ||
+    normalizedTitle.includes('onboarding') ||
+    normalizedTitle.includes('strategy') ||
+    normalizedTitle.includes('runbook') ||
+    normalizedTitle.includes('launch')
+  ) {
+    return 'launch'
+  }
+  return 'general'
+}
+
 function buildInteractiveGraph(
   temporalGraph: TemporalGraphRead | null,
 ): InteractiveGraphModel {
@@ -105,45 +173,88 @@ function buildInteractiveGraph(
       occurrence.source_artifact_title,
     )
   })
-  const artifactEntries = Array.from(artifactMap.entries()).slice(0, 8)
-  const visibleOccurrences = temporalGraph.occurrences.slice(0, 32)
-  const nodes: InteractiveGraphNode[] = []
-
-  artifactEntries.forEach(([artifactId, artifactTitle], index) => {
-    const denominator = Math.max(artifactEntries.length - 1, 1)
-    nodes.push({
-      id: `artifact:${artifactId}`,
-      kind: 'artifact',
-      label: artifactTitle,
-      subtitle: 'Source artifact',
-      x: 110,
-      y: 90 + (index / denominator) * 420,
-      artifactId,
-      artifactTitle,
+  const artifactEntries = Array.from(artifactMap.entries()).slice(0, 14)
+  const visibleArtifactIds = new Set(artifactEntries.map(([artifactId]) => artifactId))
+  const occurrencesByArtifact = new Map<string, TemporalGraphOccurrence[]>()
+  temporalGraph.occurrences
+    .filter((occurrence) => visibleArtifactIds.has(occurrence.source_artifact_id))
+    .slice(0, 72)
+    .forEach((occurrence) => {
+      const current = occurrencesByArtifact.get(occurrence.source_artifact_id) ?? []
+      if (current.length < 7) {
+        current.push(occurrence)
+        occurrencesByArtifact.set(occurrence.source_artifact_id, current)
+      }
     })
+  const nodes: InteractiveGraphNode[] = []
+  const visibleOccurrences: TemporalGraphOccurrence[] = []
+
+  const artifactEntriesByCluster = new Map<
+    GraphClusterKey,
+    Array<[string, string]>
+  >()
+  artifactEntries.forEach((entry) => {
+    const key = graphClusterKey(entry[1])
+    artifactEntriesByCluster.set(key, [
+      ...(artifactEntriesByCluster.get(key) ?? []),
+      entry,
+    ])
   })
 
-  const centerX = 575
-  const centerY = 300
-  const radiusX = 325
-  const radiusY = 220
-  visibleOccurrences.forEach((occurrence, index) => {
-    const angle =
-      -Math.PI / 2 +
-      (index / Math.max(visibleOccurrences.length, 1)) * Math.PI * 2
-    nodes.push({
-      id: occurrence.occurrence_id,
-      kind: 'memory',
-      label: occurrence.title_or_label,
-      subtitle: `${formatLabel(occurrence.memory_type)} · ${formatLabel(occurrence.status)}`,
-      x: centerX + Math.cos(angle) * radiusX,
-      y: centerY + Math.sin(angle) * radiusY,
-      memoryType: occurrence.memory_type,
-      memoryId: occurrence.memory_id,
-      occurrence,
-      artifactId: occurrence.source_artifact_id,
-      artifactTitle: occurrence.source_artifact_title,
-      confidenceScore: occurrence.confidence_score,
+  Array.from(artifactEntriesByCluster.entries()).forEach(([clusterKey, entries]) => {
+    const anchor = GRAPH_CLUSTER_ANCHORS[clusterKey]
+    entries.forEach(([artifactId, artifactTitle], index) => {
+      const angle = -Math.PI / 2 + (index / Math.max(entries.length, 1)) * Math.PI * 2
+      const radius = entries.length === 1 ? 0 : 62 + Math.min(entries.length, 4) * 8
+      const artifactX = anchor.x + Math.cos(angle) * radius
+      const artifactY = anchor.y + Math.sin(angle) * radius * 0.72
+      const artifactOccurrences = occurrencesByArtifact.get(artifactId) ?? []
+      nodes.push({
+        id: `artifact:${artifactId}`,
+        kind: 'artifact',
+        label: artifactTitle,
+        subtitle: GRAPH_CLUSTER_ANCHORS[clusterKey].label,
+        x: clamp(artifactX, 80, GRAPH_VIEWBOX_WIDTH - 80),
+        y: clamp(artifactY, 86, GRAPH_VIEWBOX_HEIGHT - 76),
+        artifactId,
+        artifactTitle,
+      })
+
+      artifactOccurrences.forEach((occurrence, occurrenceIndex) => {
+        visibleOccurrences.push(occurrence)
+        const occurrenceAngle =
+          -Math.PI / 2 +
+          (occurrenceIndex / Math.max(artifactOccurrences.length, 1)) *
+            Math.PI *
+            2
+        const occurrenceRadius =
+          occurrence.memory_type === 'constraint' ||
+          occurrence.memory_type === 'decision'
+            ? 54
+            : 72
+        nodes.push({
+          id: occurrence.occurrence_id,
+          kind: 'memory',
+          label: occurrence.title_or_label,
+          subtitle: `${formatLabel(occurrence.memory_type)} · ${formatLabel(occurrence.status)}`,
+          x: clamp(
+            artifactX + Math.cos(occurrenceAngle) * occurrenceRadius,
+            42,
+            GRAPH_VIEWBOX_WIDTH - 42,
+          ),
+          y: clamp(
+            artifactY + Math.sin(occurrenceAngle) * occurrenceRadius,
+            42,
+            GRAPH_VIEWBOX_HEIGHT - 42,
+          ),
+          memoryType: occurrence.memory_type,
+          memoryId: occurrence.memory_id,
+          occurrence,
+          artifactId: occurrence.source_artifact_id,
+          artifactTitle: occurrence.source_artifact_title,
+          confidenceScore: occurrence.confidence_score,
+        })
+      })
     })
   })
 

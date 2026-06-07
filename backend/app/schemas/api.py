@@ -507,6 +507,7 @@ class TemporalGraphOccurrence(BaseModel):
     valid_to: datetime | None = None
     source_artifact_id: str
     source_artifact_title: str
+    source_artifact_review_status: str = "submitted"
     source_chunk_id: str | None = None
     evidence_span: str | None = None
     status: str

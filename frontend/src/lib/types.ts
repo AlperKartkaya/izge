@@ -699,6 +699,7 @@ export interface TemporalGraphOccurrence {
   valid_to: string | null
   source_artifact_id: string
   source_artifact_title: string
+  source_artifact_review_status: string
   source_chunk_id: string | null
   evidence_span: string | null
   status: string

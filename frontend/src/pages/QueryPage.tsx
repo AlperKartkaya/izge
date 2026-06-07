@@ -346,6 +346,12 @@ function snapshotThread(thread: ChatThread): ChatThread {
   };
 }
 
+function threadHasShareableAnswer(thread: ChatThread): boolean {
+  return thread.messages.some(
+    (message) => message.role === "assistant" && message.content.trim().length > 0,
+  );
+}
+
 function createMessageId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -1392,6 +1398,10 @@ export function QueryPage() {
     if (!session?.token || !session.user) {
       return;
     }
+    if (!threadHasShareableAnswer(thread)) {
+      setActionNotice("Ask Izge first, then share the answered chat.");
+      return;
+    }
     const targetThread = directThreadForUsers(session.user, colleague);
     await api.createTeamChatMessage(
       session.token,
@@ -1416,6 +1426,10 @@ export function QueryPage() {
     colleague: UserRead,
   ) {
     if (!session?.user) {
+      return;
+    }
+    if (!threadHasShareableAnswer(thread)) {
+      setActionNotice("Ask Izge first, then start coworking on the answered chat.");
       return;
     }
     const targetThread = directThreadForUsers(session.user, colleague);
@@ -1502,7 +1516,10 @@ export function QueryPage() {
   return (
     <div className="full-chat-page assistant-clean-page">
       <header className="assistant-topbar assistant-clean-topbar">
-        <div aria-hidden="true" />
+        <div className="assistant-title-block">
+          <p className="eyebrow">Company assistant</p>
+          <h2>Ask Izge</h2>
+        </div>
         <div className="assistant-status-row" aria-label="Assistant controls">
           {activeThread?.collaboration ? (
             <span className="assistant-collaboration-pill">
@@ -1526,14 +1543,6 @@ export function QueryPage() {
               {llmCopy.label}
             </span>
           ) : null}
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={handleNewChat}
-            disabled={isSubmitting}
-          >
-            New chat
-          </button>
         </div>
       </header>
 
@@ -1564,28 +1573,41 @@ export function QueryPage() {
                 </p>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={
-                historyCollapsed ? "Show chat history" : "Hide chat history"
-              }
-              onClick={() => setHistoryCollapsed((current) => !current)}
-            >
-              {historyCollapsed ? "›" : "‹"}
-            </button>
+            <div className="assistant-history-controls">
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Start a new assistant chat"
+                onClick={handleNewChat}
+                disabled={isSubmitting}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={
+                  historyCollapsed ? "Show chat history" : "Hide chat history"
+                }
+                onClick={() => setHistoryCollapsed((current) => !current)}
+              >
+                {historyCollapsed ? "›" : "‹"}
+              </button>
+            </div>
           </div>
           {!historyCollapsed ? (
             <div className="assistant-history-list">
-              {visibleThreads.map((thread) => (
-                <article
-                  key={thread.id}
-                  className={
-                    thread.id === activeThreadId
-                      ? "assistant-history-item assistant-history-item-active"
-                      : "assistant-history-item"
-                  }
-                >
+              {visibleThreads.map((thread) => {
+                const isShareable = threadHasShareableAnswer(thread);
+                return (
+                  <article
+                    key={thread.id}
+                    className={
+                      thread.id === activeThreadId
+                        ? "assistant-history-item assistant-history-item-active"
+                        : "assistant-history-item"
+                    }
+                  >
                   <button
                     type="button"
                     className="assistant-history-select"
@@ -1668,6 +1690,12 @@ export function QueryPage() {
                           <button
                             type="button"
                             onClick={() => setSidebarAction("send")}
+                            disabled={!isShareable || isSubmitting}
+                            title={
+                              isShareable
+                                ? undefined
+                                : "Ask Izge first, then share the answered chat."
+                            }
                           >
                             <span aria-hidden="true">↗</span>
                             <span>Send</span>
@@ -1675,6 +1703,12 @@ export function QueryPage() {
                           <button
                             type="button"
                             onClick={() => setSidebarAction("work")}
+                            disabled={!isShareable || isSubmitting}
+                            title={
+                              isShareable
+                                ? undefined
+                                : "Ask Izge first, then cowork on the answered chat."
+                            }
                           >
                             <span aria-hidden="true">👥</span>
                             <span>Work with colleague</span>
@@ -1728,8 +1762,9 @@ export function QueryPage() {
                       ) : null}
                     </div>
                   ) : null}
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           ) : null}
         </aside>

@@ -123,6 +123,40 @@ function ownersForArtifact(title: string) {
   return ["Employee 1", "Employee 2"];
 }
 
+function memoryTaskSteps(artifact: MemoryFilesystemArtifact) {
+  const extractionComplete = artifact.ingestion_status === "completed";
+  const reviewComplete = artifact.review_status === "reviewed";
+  const hasSignals = artifact.signal_count > 0;
+  const memoryObjects = sumMemoryCounts(artifact);
+  return [
+    {
+      label: "Stored",
+      detail: artifact.organization_path.slice(0, 2).join(" / "),
+      state: "done",
+    },
+    {
+      label: "Extracted",
+      detail: `${artifact.chunk_count} chunks`,
+      state: extractionComplete ? "done" : "now",
+    },
+    {
+      label: "Organized",
+      detail: `${memoryObjects} objects`,
+      state: extractionComplete && memoryObjects > 0 ? "done" : "next",
+    },
+    {
+      label: "Checked",
+      detail: hasSignals ? `${artifact.signal_count} signals` : "clean",
+      state: hasSignals ? "now" : reviewComplete ? "done" : "next",
+    },
+    {
+      label: "Notify",
+      detail: ownersForArtifact(artifact.title).join(" + "),
+      state: hasSignals || !reviewComplete ? "next" : "done",
+    },
+  ];
+}
+
 export function ArtifactsPage() {
   const { session } = useAuth();
   const [artifacts, setArtifacts] = useState<ArtifactRead[]>([]);
@@ -359,6 +393,8 @@ export function ArtifactsPage() {
       })),
     [liveWorkItems],
   );
+  const activeMemoryTask = liveWorkItems[0] ?? null;
+  const queuedMemoryTasks = liveWorkItems.slice(1, 4);
 
   function toggleUserSelection(
     userId: string,
@@ -548,9 +584,6 @@ export function ArtifactsPage() {
           <div className="memory-heart-copy">
             <p className="eyebrow">Memory</p>
             <h2>Living workspace memory</h2>
-            <p>
-              Feed it. It sorts, checks, delegates, and pings the right people.
-            </p>
           </div>
         </div>
 
@@ -588,38 +621,63 @@ export function ArtifactsPage() {
               title="Waiting for source"
               description="Drop a file or note below."
             />
-          ) : (
-            <div className="memory-stream-list">
-              {liveWorkItems.map((artifact) => (
-                <button
-                  type="button"
-                  key={artifact.artifact_id}
-                  className={
-                    artifact.artifact_id === selectedArtifactId
-                      ? "memory-stream-item memory-stream-item-active"
-                      : "memory-stream-item"
-                  }
-                  onClick={() =>
-                    void handleArtifactSelection(artifact.artifact_id)
-                  }
-                >
+          ) : activeMemoryTask ? (
+            <div className="memory-active-task-stack">
+              <button
+                type="button"
+                className={`memory-active-task memory-active-task-${workTone(activeMemoryTask)}`}
+                onClick={() =>
+                  void handleArtifactSelection(activeMemoryTask.artifact_id)
+                }
+              >
+                <span
+                  className={`memory-work-dot memory-work-dot-${workTone(activeMemoryTask)}`}
+                  aria-hidden="true"
+                />
+                <span>
+                  <strong>{activeMemoryTask.title}</strong>
+                  <small>{purposeForArtifact(activeMemoryTask)}</small>
+                </span>
+                <span className="memory-task-count">
+                  {sumMemoryCounts(activeMemoryTask)}
+                </span>
+              </button>
+
+              <div className="memory-task-steps" aria-label="Current memory task steps">
+                {memoryTaskSteps(activeMemoryTask).map((step) => (
                   <span
-                    className={`memory-work-dot memory-work-dot-${workTone(artifact)}`}
-                    aria-hidden="true"
-                  />
-                  <span className="memory-stream-copy">
-                    <strong>{artifact.title}</strong>
-                    <small>
-                      {purposeForArtifact(artifact)} · {artifact.chunk_count}{" "}
-                      chunks · {sumMemoryCounts(artifact)} objects
-                    </small>
+                    key={`${activeMemoryTask.artifact_id}-${step.label}`}
+                    className={`memory-task-step memory-task-step-${step.state}`}
+                  >
+                    <strong>{step.label}</strong>
+                    <small>{step.detail}</small>
                   </span>
-                  <span className="memory-stream-path">
-                    {artifact.organization_path.slice(1, 3).join(" / ")}
-                  </span>
-                </button>
-              ))}
+                ))}
+              </div>
+
+              {queuedMemoryTasks.length > 0 ? (
+                <div className="memory-queue-strip" aria-label="Upcoming memory work">
+                  {queuedMemoryTasks.map((artifact) => (
+                    <button
+                      type="button"
+                      key={artifact.artifact_id}
+                      onClick={() =>
+                        void handleArtifactSelection(artifact.artifact_id)
+                      }
+                      title={`${artifact.title}: ${purposeForArtifact(artifact)}`}
+                    >
+                      <span
+                        className={`memory-work-dot memory-work-dot-${workTone(artifact)}`}
+                        aria-hidden="true"
+                      />
+                      <span>{artifact.title}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
+          ) : (
+            <EmptyState title="Waiting for source" description="Drop a file or note below." />
           )}
         </div>
 
@@ -890,7 +948,7 @@ export function ArtifactsPage() {
       <div className="two-column-layout wide-right-column memory-source-grid">
         <Panel
           title="Sources"
-          description="Every accessible file or note, with preview and download."
+          description="Click a source for details, preview, or download."
         >
           {artifacts.length === 0 ? (
             <EmptyState
@@ -898,81 +956,71 @@ export function ArtifactsPage() {
               description="Feed memory with a file or note."
             />
           ) : (
-            <div className="table-wrap memory-table-wrap">
-              <table className="data-table memory-source-table">
-                <thead>
-                  <tr>
-                    <th>Source</th>
-                    <th>Status</th>
-                    <th>Review</th>
-                    <th>Updated</th>
-                    <th>Open</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {artifacts.map((artifact) => (
-                    <tr
-                      key={artifact.artifact_id}
-                      className={
-                        artifact.artifact_id === selectedArtifactId
-                          ? "row-selected"
-                          : undefined
-                      }
-                      onClick={() =>
-                        void handleArtifactSelection(artifact.artifact_id)
-                      }
+            <div className="memory-source-list">
+              {artifacts.map((artifact) => (
+                <details
+                  key={artifact.artifact_id}
+                  className={
+                    artifact.artifact_id === selectedArtifactId
+                      ? "memory-source-disclosure memory-source-disclosure-active"
+                      : "memory-source-disclosure"
+                  }
+                  open={artifact.artifact_id === selectedArtifactId}
+                >
+                  <summary
+                    onClick={() =>
+                      void handleArtifactSelection(artifact.artifact_id)
+                    }
+                  >
+                    <span className="memory-source-icon" aria-hidden="true">
+                      {artifact.source_type === "pasted_text" ? "✎" : "▣"}
+                    </span>
+                    <span className="memory-source-summary-copy">
+                      <strong>{artifact.title}</strong>
+                      <small>{artifact.original_filename ?? "Pasted text"}</small>
+                    </span>
+                    <span className="memory-source-badges">
+                      <StatusBadge value={formatLabel(artifact.ingestion_status)} />
+                      <StatusBadge value={formatLabel(artifact.review_status)} />
+                    </span>
+                  </summary>
+                  <div className="memory-source-details">
+                    <dl className="meta-list compact-meta-list">
+                      <div>
+                        <dt>Type</dt>
+                        <dd>{formatLabel(artifact.source_type)}</dd>
+                      </div>
+                      <div>
+                        <dt>Updated</dt>
+                        <dd>{formatDateTime(artifact.updated_at)}</dd>
+                      </div>
+                      <div>
+                        <dt>Visibility</dt>
+                        <dd>{formatLabel(artifact.visibility_scope)}</dd>
+                      </div>
+                    </dl>
+                    <div
+                      className="table-action-group"
+                      onClick={(event) => event.stopPropagation()}
                     >
-                      <td>
-                        <button
-                          type="button"
-                          className="row-title-button"
-                          onClick={() =>
-                            void handleArtifactSelection(artifact.artifact_id)
-                          }
-                        >
-                          {artifact.title}
-                        </button>
-                        <p className="table-secondary">
-                          {formatLabel(artifact.source_type)} ·{" "}
-                          {artifact.original_filename ?? "Pasted text"}
-                        </p>
-                      </td>
-                      <td>
-                        <StatusBadge
-                          value={formatLabel(artifact.ingestion_status)}
-                        />
-                      </td>
-                      <td>
-                        <StatusBadge
-                          value={formatLabel(artifact.review_status)}
-                        />
-                      </td>
-                      <td>{formatDateTime(artifact.updated_at)}</td>
-                      <td>
-                        <div
-                          className="table-action-group"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <a
-                            className="table-action-link"
-                            href={api.artifactPreviewUrl(artifact.artifact_id)}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Preview
-                          </a>
-                          <a
-                            className="table-action-link"
-                            href={api.artifactDownloadUrl(artifact.artifact_id)}
-                          >
-                            Download
-                          </a>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      <a
+                        className="table-action-link"
+                        href={api.artifactPreviewUrl(artifact.artifact_id)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Preview
+                      </a>
+                      <a
+                        className="table-action-link"
+                        href={api.artifactDownloadUrl(artifact.artifact_id)}
+                      >
+                        Download
+                      </a>
+                    </div>
+                  </div>
+                </details>
+              ))}
             </div>
           )}
         </Panel>

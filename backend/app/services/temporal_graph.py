@@ -241,12 +241,15 @@ def build_temporal_graph(db: Session, user: User, *, limit: int = 80) -> dict[st
     db.commit()
 
     artifacts = db.scalars(select(Artifact).where(Artifact.workspace_id == user.workspace_id)).all()
-    visible_artifact_ids = {
-        artifact.artifact_id
+    visible_artifacts = [
+        artifact
         for artifact in artifacts
         if artifact.review_status != "rejected" and artifact_is_visible_to_user(db, artifact, user)
-    }
-    artifact_titles = {artifact.artifact_id: artifact.title for artifact in artifacts if artifact.artifact_id in visible_artifact_ids}
+    ]
+    reviewed_artifact_ids = {artifact.artifact_id for artifact in visible_artifacts if artifact.review_status == "reviewed"}
+    visible_artifact_ids = reviewed_artifact_ids or {artifact.artifact_id for artifact in visible_artifacts}
+    artifact_titles = {artifact.artifact_id: artifact.title for artifact in visible_artifacts}
+    artifact_review_statuses = {artifact.artifact_id: artifact.review_status or "submitted" for artifact in visible_artifacts}
     if not visible_artifact_ids:
         return {"workspace_id": user.workspace_id, "families": [], "occurrences": [], "links": [], "sync_summary": sync_summary}
 
@@ -277,6 +280,7 @@ def build_temporal_graph(db: Session, user: User, *, limit: int = 80) -> dict[st
             "valid_to": occurrence.valid_to,
             "source_artifact_id": occurrence.source_artifact_id,
             "source_artifact_title": artifact_titles.get(occurrence.source_artifact_id, "Unknown artifact"),
+            "source_artifact_review_status": artifact_review_statuses.get(occurrence.source_artifact_id, "unknown"),
             "source_chunk_id": occurrence.source_chunk_id,
             "evidence_span": occurrence.evidence_span,
             "status": occurrence.status,

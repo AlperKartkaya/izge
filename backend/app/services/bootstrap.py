@@ -144,6 +144,42 @@ DEFAULT_ARTIFACT_SPECS = [
         "format": "markdown",
         "text": """# Office Ops PTO and Coverage Note\nDate: 2026-04-07\n\n## Decisions\n- Decision: employee PTO coverage will be tracked in the shared operations calendar only, not in ad-hoc chat threads.\n\n## Constraints\n- Constraint: finance approval is required before temporary weekend support coverage is booked.\n\n## Commitments\n- Operations will update the shared coverage calendar every Monday morning.\n- Employee 3 will remind the team to keep urgent customer handoffs inside Team Chat direct conversations.\n""",
     },
+    {
+        "title": "Payroll Import FAQ Draft - Customer Success",
+        "filename": "payroll-import-faq-draft-customer-success.md",
+        "mime_type": "text/markdown",
+        "format": "markdown",
+        "text": """# Payroll Import FAQ Draft - Customer Success\nDate: 2026-04-12\n\n## Customer-facing guidance\n- Decision: the FAQ will explain import validation steps without asking customers to send payroll exports through Team Chat.\n- Constraint: payroll exports remain finance-admin-only and must move through the approved support-ticket path.\n- Assumption: clearer permission copy will reduce repeat import failures for beta customers.\n- Commitment: Employee 2 will revise permission-copy wording by 2026-04-14.\n- Outcome: the FAQ is safe to publish only after Security confirms it matches the April access review.\n""",
+    },
+    {
+        "title": "Self-Serve Onboarding Runbook - Week 16",
+        "filename": "self-serve-onboarding-runbook-week-16.md",
+        "mime_type": "text/markdown",
+        "format": "markdown",
+        "text": """# Self-Serve Onboarding Runbook - Week 16\nDate: 2026-04-12\n\n## Operator checklist\n- Decision: keep beta invites capped at 12 new companies per week until activation events reach 95 percent coverage.\n- Constraint: rollback ownership must be visible in the launch dashboard before any Monday invite batch.\n- Assumption: accounts under 150 employees can self-serve with the current FAQ and one follow-up email.\n- Commitment: Employee 1 will update the invite list every Monday before 10:00.\n- Outcome: Izge should compare this runbook with customer-success notes before recommending expansion.\n""",
+    },
+    {
+        "title": "Vendor Contract Renewal Brief - Mobile Analytics",
+        "filename": "vendor-contract-renewal-brief-mobile-analytics.pdf",
+        "mime_type": "application/pdf",
+        "format": "pdf",
+        "lines": [
+            "Vendor Contract Renewal Brief - Mobile Analytics",
+            "Date: 2026-04-04",
+            "Decision: procurement will renew the mobile analytics vendor for one quarter only.",
+            "Assumption: event-latency monitoring from the vendor remains reliable for internal trend analysis.",
+            "Constraint: launch readiness scoring cannot depend on vendor metrics until the April analytics delay is closed.",
+            "Commitment: Engineering will compare vendor latency with first-party dashboard freshness by 2026-04-13.",
+            "Outcome: this contract is operational support, not a launch gate approval.",
+        ],
+    },
+    {
+        "title": "People Ops Remote Work Policy Update",
+        "filename": "people-ops-remote-work-policy-update.md",
+        "mime_type": "text/markdown",
+        "format": "markdown",
+        "text": """# People Ops Remote Work Policy Update\nDate: 2026-04-02\n\n## Policy notes\n- Decision: remote coverage swaps must be recorded in the shared operations calendar.\n- Constraint: customer-facing support coverage cannot rely on informal direct-message promises.\n- Assumption: two customer-success backfill roles will reduce weekend coverage pressure by May.\n- Commitment: Employee 3 will audit the coverage calendar every Monday morning.\n- Outcome: memory should notify People Ops if support plans cite coverage that is not on the calendar.\n""",
+    },
 ]
 
 
@@ -276,10 +312,96 @@ def _seed_default_artifacts(db: Session, *, workspace: Workspace, admin: User) -
             settings.llm_signal_explanation_enabled = previous_signal_explanation_enabled
 
 
+def _seed_payroll_export_assistant_snapshot() -> dict[str, object]:
+    created_at = "2026-04-10T15:42:00.000Z"
+    answered_at = "2026-04-10T15:42:15.000Z"
+    return {
+        "id": "seed-chat-payroll-export",
+        "title": "Can payroll exports go in chat?",
+        "createdAt": created_at,
+        "updatedAt": answered_at,
+        "messages": [
+            {
+                "id": "seed-chat-payroll-export-user",
+                "role": "user",
+                "content": "Can I attach a payroll export to Team Chat while helping a customer?",
+                "createdAt": created_at,
+            },
+            {
+                "id": "seed-chat-payroll-export-assistant",
+                "role": "assistant",
+                "content": "\n".join(
+                    [
+                        "### No",
+                        "Do not attach payroll exports to Team Chat.",
+                        "",
+                        "Use the support ticket and keep access limited to finance admins or the approved security path.",
+                        "",
+                        "### Safer wording",
+                        "“I can help with the import steps. Please do not share payroll exports in chat.”",
+                    ]
+                ),
+                "createdAt": answered_at,
+                "queryClass": "policy_check",
+                "permissionsLimited": False,
+                "supportingEvidence": [
+                    {
+                        "artifact_id": "security-access-review-april-2026",
+                        "artifact_title": "Security Access Review - April 2026",
+                        "artifact_review_status": "reviewed",
+                        "chunk_id": None,
+                        "excerpt": "Payroll exports cannot be attached to team chat or shared channels.",
+                        "evidence_kind": "graph",
+                    },
+                    {
+                        "artifact_id": "customer-support-escalation-digest-week-15",
+                        "artifact_title": "Customer Support Escalation Digest - Week 15",
+                        "artifact_review_status": "reviewed",
+                        "chunk_id": None,
+                        "excerpt": "Payroll import issues are recurring in beta onboarding escalations.",
+                        "evidence_kind": "graph",
+                    },
+                ],
+                "supportingNodes": [
+                    {
+                        "memory_type": "constraint",
+                        "memory_id": "no-payroll-export-chat",
+                        "title_or_label": "Payroll exports cannot be attached to team chat",
+                        "confidence_score": 0.91,
+                        "source_artifact_id": "security-access-review-april-2026",
+                        "source_artifact_review_status": "reviewed",
+                        "topic_key": "payroll-data-sharing",
+                        "status": None,
+                        "due_date": None,
+                        "owner_label": "Security",
+                    }
+                ],
+                "recommendedNextActions": [
+                    "Use a support ticket for sensitive customer files.",
+                    "Ask Security if a new sharing path is needed.",
+                ],
+                "contradictionCount": 0,
+                "staleAssumptionCount": 0,
+            },
+        ],
+    }
+
+
 def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email: dict[str, User], admin: User) -> None:
     junk_bodies = {"message", "mesafe"}
     for junk_message in db.scalars(select(CompanyChatMessage).where(CompanyChatMessage.workspace_id == workspace.workspace_id)).all():
-        if junk_message.body.strip().lower() in junk_bodies:
+        metadata = junk_message.message_metadata or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        snapshot = metadata.get("assistant_thread_snapshot")
+        snapshot_messages = snapshot.get("messages") if isinstance(snapshot, dict) else None
+        snapshot_title = str(snapshot.get("title") or snapshot.get("id") or "") if isinstance(snapshot, dict) else ""
+        is_empty_smoke_share = (
+            metadata.get("action") == "assistant_chat_share"
+            and snapshot_messages == []
+            and "smoke" in f"{junk_message.body} {snapshot_title}".lower()
+        )
+        if junk_message.body.strip().lower() in junk_bodies or is_empty_smoke_share:
             db.delete(junk_message)
     db.commit()
 
@@ -291,6 +413,14 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             "thread_kind": thread_kind,
             "seeded": True,
             "seed_batch": "northstar-workspace-v3",
+        }
+
+    def assistant_share_metadata(thread_id: str, thread_title: str) -> dict[str, object]:
+        return {
+            **thread_metadata(thread_id, thread_title, "direct"),
+            "action": "assistant_chat_share",
+            "assistant_thread_snapshot": _seed_payroll_export_assistant_snapshot(),
+            "shared_by": "employee1@example.com",
         }
 
     seeded_turns = [
@@ -370,6 +500,18 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             datetime(2026, 4, 9, 13, 19),
             users_by_email.get("employee2@example.com") or admin,
             "Looks good. One edit: mention the security access review before the permission-copy paragraph so nobody treats it as marketing copy.",
+            thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
+        ),
+        (
+            datetime(2026, 4, 9, 13, 26),
+            users_by_email.get("employee1@example.com") or admin,
+            "I asked Izge about the payroll export wording and shared the assistant chat here so we can reuse the answer in the FAQ.",
+            assistant_share_metadata("direct:employee1-employee2", "Employee 1 / Employee 2"),
+        ),
+        (
+            datetime(2026, 4, 9, 13, 31),
+            users_by_email.get("employee2@example.com") or admin,
+            "Opened it. The answer is clear: no exports in Team Chat, use the support-ticket path, and keep the safer customer wording.",
             thread_metadata("direct:employee1-employee2", "Employee 1 / Employee 2", "direct"),
         ),
         (
@@ -454,6 +596,8 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             )
         )
         if existing is not None:
+            existing.message_metadata = metadata
+            existing.created_at = created_at
             continue
         db.add(
             CompanyChatMessage(
