@@ -259,32 +259,54 @@ function buildInteractiveGraph(
   })
 
   const nodeIds = new Set(nodes.map((node) => node.id))
-  const edges: InteractiveGraphEdge[] = visibleOccurrences
-    .filter((occurrence) =>
-      nodeIds.has(`artifact:${occurrence.source_artifact_id}`),
-    )
-    .map((occurrence) => ({
+  const occurrenceArtifactById = new Map(
+    visibleOccurrences.map((occurrence) => [
+      occurrence.occurrence_id,
+      occurrence.source_artifact_id,
+    ]),
+  )
+  const edges: InteractiveGraphEdge[] = []
+  const artifactEdgeKeys = new Set<string>()
+
+  visibleOccurrences.forEach((occurrence) => {
+    const fromId = `artifact:${occurrence.source_artifact_id}`
+    if (!nodeIds.has(fromId) || !nodeIds.has(occurrence.occurrence_id)) {
+      return
+    }
+    edges.push({
       id: `source:${occurrence.occurrence_id}`,
-      fromId: `artifact:${occurrence.source_artifact_id}`,
+      fromId,
       toId: occurrence.occurrence_id,
       edgeType: 'source_artifact',
       confidenceScore: occurrence.confidence_score,
-    }))
+    })
+  })
 
   temporalGraph.links.forEach((link) => {
-    if (
-      nodeIds.has(link.from_occurrence_id) &&
-      nodeIds.has(link.to_occurrence_id)
-    ) {
-      edges.push({
-        id: link.edge_id,
-        fromId: link.from_occurrence_id,
-        toId: link.to_occurrence_id,
-        edgeType: link.edge_type,
-        confidenceScore: link.confidence_score,
-        sourceLink: link,
-      })
+    const fromArtifactId = occurrenceArtifactById.get(link.from_occurrence_id)
+    const toArtifactId = occurrenceArtifactById.get(link.to_occurrence_id)
+    if (!fromArtifactId || !toArtifactId || fromArtifactId === toArtifactId) {
+      return
     }
+    const fromId = `artifact:${fromArtifactId}`
+    const toId = `artifact:${toArtifactId}`
+    if (!nodeIds.has(fromId) || !nodeIds.has(toId)) {
+      return
+    }
+    const [leftArtifactId, rightArtifactId] = [fromArtifactId, toArtifactId].sort()
+    const edgeKey = `${leftArtifactId}:${rightArtifactId}:${link.edge_type}`
+    if (artifactEdgeKeys.has(edgeKey)) {
+      return
+    }
+    artifactEdgeKeys.add(edgeKey)
+    edges.push({
+      id: `artifact-link:${edgeKey}`,
+      fromId,
+      toId,
+      edgeType: link.edge_type,
+      confidenceScore: link.confidence_score,
+      sourceLink: link,
+    })
   })
 
   return { nodes, edges }
@@ -607,9 +629,6 @@ export function GraphPage() {
                 >
                   Reset
                 </button>
-                <span className="graph-toolbar-hint">
-                  Pinch to zoom. Drag the canvas to move.
-                </span>
               </div>
               <svg
                 className="graph-svg-canvas"
@@ -659,14 +678,18 @@ export function GraphPage() {
                         <line
                           className={
                             selectedGraphEdge?.id === edge.id
-                              ? 'graph-svg-edge graph-svg-edge-active'
-                              : 'graph-svg-edge'
+                              ? `graph-svg-edge graph-svg-edge-${edge.edgeType} graph-svg-edge-active`
+                              : `graph-svg-edge graph-svg-edge-${edge.edgeType}`
                           }
                           x1={fromNode.x}
                           y1={fromNode.y}
                           x2={toNode.x}
                           y2={toNode.y}
-                          markerEnd="url(#graph-arrow)"
+                          markerEnd={
+                            edge.edgeType === 'source_artifact'
+                              ? undefined
+                              : 'url(#graph-arrow)'
+                          }
                           onClick={() => {
                             setSelectedGraphEdgeId(edge.id)
                             setSelectedGraphNodeId(null)

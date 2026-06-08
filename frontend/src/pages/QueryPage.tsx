@@ -19,17 +19,21 @@ import type {
   QueryResult,
   QueryTraceRead,
   SignalRead,
+  TeamChatMessageRead,
   TeamChatTypingUserRead,
   UserRead,
 } from "../lib/types";
 
-type ChatRole = "user" | "assistant";
+type ChatRole = "user" | "assistant" | "system";
 
 interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
   createdAt: string;
+  authorDisplayName?: string;
+  authorUserId?: string;
+  systemKind?: string;
   queryRunId?: string;
   queryClass?: string;
   permissionsLimited?: boolean;
@@ -60,7 +64,7 @@ interface ChatThread {
 
 type SidebarAction = "send" | "work" | null;
 
-const CHAT_HISTORY_SEED_VERSION = "northstar-employee-assistant-v3";
+const CHAT_HISTORY_SEED_VERSION = "northstar-employee-assistant-v4";
 
 function seedEvidence(
   artifactId: string,
@@ -338,10 +342,22 @@ function directThreadForUsers(currentUser: UserRead, colleague: UserRead) {
   };
 }
 
-function snapshotThread(thread: ChatThread): ChatThread {
+function snapshotThread(thread: ChatThread, currentUser?: UserRead): ChatThread {
   return {
     ...thread,
-    messages: thread.messages.slice(-24),
+    messages: thread.messages.slice(-24).map((message) => ({
+      ...message,
+      authorDisplayName:
+        message.authorDisplayName ??
+        (message.role === "assistant"
+          ? "Izge"
+          : message.role === "user"
+            ? currentUser?.display_name
+            : "System"),
+      authorUserId:
+        message.authorUserId ??
+        (message.role === "user" ? currentUser?.user_id : undefined),
+    })),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -357,6 +373,68 @@ function createMessageId() {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createSystemChatMessage(
+  id: string,
+  content: string,
+  createdAt = new Date().toISOString(),
+): ChatMessage {
+  return {
+    id,
+    role: "system",
+    content,
+    createdAt,
+    systemKind: "cowork_joined",
+    authorDisplayName: "System",
+  };
+}
+
+function isSameUserMessage(message: ChatMessage, currentUser: UserRead | undefined) {
+  return (
+    message.role === "user" &&
+    (!message.authorUserId || message.authorUserId === currentUser?.user_id)
+  );
+}
+
+function chatMessageAuthorLabel(
+  message: ChatMessage,
+  currentUser: UserRead | undefined,
+) {
+  if (message.role === "assistant") {
+    return "Izge";
+  }
+  if (message.role === "system") {
+    return "System";
+  }
+  return isSameUserMessage(message, currentUser)
+    ? "You"
+    : message.authorDisplayName || "Colleague";
+}
+
+function coworkJoinSystemMessageFromTeamChat(
+  message: TeamChatMessageRead,
+  currentUser: UserRead | undefined,
+) {
+  const actorUserId =
+    typeof message.message_metadata?.actor_user_id === "string"
+      ? message.message_metadata.actor_user_id
+      : message.author_user_id;
+  const actorName =
+    typeof message.message_metadata?.actor_display_name === "string"
+      ? message.message_metadata.actor_display_name
+      : message.author_display_name;
+  return createSystemChatMessage(
+    `system-cowork-join-${
+      typeof message.message_metadata?.collab_session_id === "string"
+        ? message.message_metadata.collab_session_id
+        : message.message_id
+    }-${actorUserId}`,
+    actorUserId === currentUser?.user_id
+      ? "You entered the shared chat."
+      : `${actorName} entered the shared chat.`,
+    message.created_at,
+  );
 }
 
 function legacyChatStorageKey(
@@ -385,7 +463,9 @@ function isValidChatMessage(
 ): message is ChatMessage {
   return Boolean(
     message &&
-    (message.role === "user" || message.role === "assistant") &&
+    (message.role === "user" ||
+      message.role === "assistant" ||
+      message.role === "system") &&
     typeof message.content === "string",
   );
 }
@@ -413,7 +493,21 @@ function normalizeThread(
   if (!rawThread || !Array.isArray(rawThread.messages)) {
     return null;
   }
-  const messages = rawThread.messages.filter(isValidChatMessage);
+  const messages = rawThread.messages.filter(isValidChatMessage).map((message) => ({
+    ...message,
+    authorDisplayName:
+      typeof message.authorDisplayName === "string"
+        ? message.authorDisplayName
+        : message.role === "assistant"
+          ? "Izge"
+          : message.role === "system"
+            ? "System"
+            : undefined,
+    authorUserId:
+      typeof message.authorUserId === "string" ? message.authorUserId : undefined,
+    systemKind:
+      typeof message.systemKind === "string" ? message.systemKind : undefined,
+  }));
   return {
     id: typeof rawThread.id === "string" ? rawThread.id : createMessageId(),
     title:
@@ -521,9 +615,14 @@ function buildConversationContext(
 ): string | undefined {
   const recentTurns = previousMessages
     .slice(-6)
+    .filter((message) => message.role !== "system")
     .map(
       (message) =>
-        `${message.role === "user" ? "Employee" : "Izge"}: ${message.content.replace(/\s+/g, " ").trim()}`,
+        `${
+          message.role === "user"
+            ? message.authorDisplayName || "Employee"
+            : "Izge"
+        }: ${message.content.replace(/\s+/g, " ").trim()}`,
     )
     .join("\n")
     .slice(-2800);
@@ -605,6 +704,7 @@ function resultToAssistantMessage(result: QueryResult): ChatMessage {
   return {
     id: createMessageId(),
     role: "assistant",
+    authorDisplayName: "Izge",
     content: buildEmployeeMarkdownAnswer(result),
     createdAt: result.created_at,
     queryRunId: result.query_run_id,
@@ -955,6 +1055,7 @@ export function QueryPage() {
   const [renameDraft, setRenameDraft] = useState("");
   const [typingUsers, setTypingUsers] = useState<TeamChatTypingUserRead[]>([]);
   const lastTypingSentAtRef = useRef(0);
+  const processedCoworkEventIdsRef = useRef(new Set<string>());
   const [llmStatus, setLlmStatus] = useState<LocalLLMStatusRead | null>(null);
   const [llmStatusError, setLlmStatusError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -1216,12 +1317,51 @@ export function QueryPage() {
         if (cancelled) {
           return;
         }
-        const updates = payload.messages
+        const sessionMessages = payload.messages.filter(
+          (message) => message.message_metadata?.collab_session_id === sessionId,
+        );
+        const joinEvents = sessionMessages
+          .filter(
+            (message) =>
+              message.message_metadata?.action === "assistant_cowork_accept",
+          )
+          .map((message) =>
+            coworkJoinSystemMessageFromTeamChat(message, session?.user),
+          );
+        if (joinEvents.length > 0) {
+          setThreads((currentThreads) =>
+            currentThreads.map((thread) => {
+              if (thread.id !== activeThread.id) {
+                return thread;
+              }
+              const existingIds = new Set(thread.messages.map((item) => item.id));
+              const newSystemMessages = joinEvents.filter((event) => {
+                if (
+                  existingIds.has(event.id) ||
+                  processedCoworkEventIdsRef.current.has(event.id)
+                ) {
+                  return false;
+                }
+                processedCoworkEventIdsRef.current.add(event.id);
+                return true;
+              });
+              return newSystemMessages.length > 0
+                ? {
+                    ...thread,
+                    messages: [...thread.messages, ...newSystemMessages],
+                    updatedAt:
+                      newSystemMessages.at(-1)?.createdAt ?? thread.updatedAt,
+                  }
+                : thread;
+            }),
+          );
+        }
+
+        const updates = sessionMessages
           .filter((message) => {
             const metadata = message.message_metadata;
             return (
               metadata?.action === "assistant_cowork_update" &&
-              metadata?.collab_session_id === sessionId &&
               typeof metadata?.assistant_thread_snapshot === "object"
             );
           })
@@ -1244,16 +1384,25 @@ export function QueryPage() {
           return;
         }
         setThreads((currentThreads) =>
-          currentThreads.map((thread) =>
-            thread.id === activeThread.id
-              ? {
-                  ...newest,
-                  id: thread.id,
-                  pinned: thread.pinned,
-                  collaboration: thread.collaboration,
-                }
-              : thread,
-          ),
+          currentThreads.map((thread) => {
+            if (thread.id !== activeThread.id) {
+              return thread;
+            }
+            const incomingIds = new Set(newest.messages.map((message) => message.id));
+            const localSystemMessages = thread.messages.filter(
+              (message) => message.role === "system" && !incomingIds.has(message.id),
+            );
+            return {
+              ...newest,
+              id: thread.id,
+              pinned: thread.pinned,
+              collaboration: thread.collaboration,
+              messages: [...newest.messages, ...localSystemMessages].sort(
+                (left, right) =>
+                  Date.parse(left.createdAt) - Date.parse(right.createdAt),
+              ),
+            };
+          }),
         );
       } catch {
         // Team-chat transport is best-effort; the local assistant chat still works.
@@ -1266,7 +1415,7 @@ export function QueryPage() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [activeThread, session?.token]);
+  }, [activeThread, session?.token, session?.user]);
 
   function updateActiveThreadMessages(
     updater: (currentMessages: ChatMessage[]) => ChatMessage[],
@@ -1388,7 +1537,7 @@ export function QueryPage() {
         message_metadata: {
           action,
           collab_session_id: thread.collaboration.sessionId,
-          assistant_thread_snapshot: snapshotThread(thread),
+          assistant_thread_snapshot: snapshotThread(thread, session.user),
         },
       },
     );
@@ -1412,7 +1561,7 @@ export function QueryPage() {
         thread_kind: "direct",
         message_metadata: {
           action: "assistant_chat_share",
-          assistant_thread_snapshot: snapshotThread(thread),
+          assistant_thread_snapshot: snapshotThread(thread, session.user),
         },
       },
     );
@@ -1464,6 +1613,8 @@ export function QueryPage() {
     const userMessage: ChatMessage = {
       id: createMessageId(),
       role: "user",
+      authorDisplayName: session.user.display_name,
+      authorUserId: session.user.user_id,
       content: trimmedQuestion,
       createdAt: new Date().toISOString(),
     };
@@ -1516,25 +1667,12 @@ export function QueryPage() {
   return (
     <div className="full-chat-page assistant-clean-page">
       <header className="assistant-topbar assistant-clean-topbar">
-        <div className="assistant-title-block">
-          <p className="eyebrow">Company assistant</p>
-          <h2>Ask Izge</h2>
-        </div>
         <div className="assistant-status-row" aria-label="Assistant controls">
           {activeThread?.collaboration ? (
             <span className="assistant-collaboration-pill">
               <span aria-hidden="true">↔</span>
               Coworking in {activeThread.collaboration.threadTitle}
             </span>
-          ) : null}
-          {historyCollapsed ? (
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setHistoryCollapsed(false)}
-            >
-              History
-            </button>
           ) : null}
           {session?.user.role === "Admin" && llmStatus ? (
             <span
@@ -1589,9 +1727,9 @@ export function QueryPage() {
                 aria-label={
                   historyCollapsed ? "Show chat history" : "Hide chat history"
                 }
-                onClick={() => setHistoryCollapsed((current) => !current)}
+                onClick={() => setHistoryCollapsed(!historyCollapsed)}
               >
-                {historyCollapsed ? "›" : "‹"}
+                {historyCollapsed ? "→" : "←"}
               </button>
             </div>
           </div>
@@ -1784,6 +1922,16 @@ export function QueryPage() {
               </div>
             ) : (
               messages.map((message) => {
+                if (message.role === "system") {
+                  return (
+                    <article
+                      key={message.id}
+                      className="assistant-system-message"
+                    >
+                      <span>{message.content}</span>
+                    </article>
+                  );
+                }
                 const inspectorOpen =
                   message.role === "assistant" &&
                   activeAssistantId === message.id;
@@ -1799,13 +1947,15 @@ export function QueryPage() {
                     key={message.id}
                     className={
                       message.role === "user"
-                        ? "chat-message chat-message-user"
+                        ? isSameUserMessage(message, session?.user)
+                          ? "chat-message chat-message-user"
+                          : "chat-message chat-message-user chat-message-user-remote"
                         : "chat-message chat-message-assistant assistant-message-card"
                     }
                   >
                     <div className="chat-message-head">
                       <span className="section-label">
-                        {message.role === "user" ? "You" : "Izge"}
+                        {chatMessageAuthorLabel(message, session?.user)}
                       </span>
                       <span className="table-secondary">
                         {formatDateTime(message.createdAt)}

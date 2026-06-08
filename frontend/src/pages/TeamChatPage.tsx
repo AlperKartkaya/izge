@@ -17,11 +17,14 @@ interface ConversationSummary {
   title: string
   description: string
   icon: string
-  kind: 'channel' | 'direct'
+  kind: ConversationKind
   searchText: string
   lastMessage: TeamChatMessageRead | null
   messages: TeamChatMessageRead[]
+  participantHandles?: string[]
 }
+
+type ConversationKind = 'channel' | 'direct' | 'group'
 
 const EMPLOYEE_DIRECTORY = [
   {
@@ -77,7 +80,7 @@ const DEFAULT_CHANNELS: ConversationSummary[] = [
   },
 ]
 
-const CHAT_HISTORY_SEED_VERSION = 'northstar-employee-assistant-v3'
+const CHAT_HISTORY_SEED_VERSION = 'northstar-employee-assistant-v4'
 
 function assistantThreadsStorageKey(
   workspaceId: string | undefined,
@@ -96,12 +99,58 @@ function assistantThreadsVersionStorageKey(
 function importAssistantThreadForUser(
   currentUser: UserRead,
   snapshot: unknown,
+  options: {
+    joinSystemMessage?: string
+    collaboration?: Record<string, unknown>
+    fallbackUserAuthorDisplayName?: string
+    fallbackUserAuthorId?: string
+  } = {},
 ) {
   if (!snapshot || typeof snapshot !== 'object') {
     return false
   }
   const candidate = snapshot as Record<string, unknown>
-  const messages = Array.isArray(candidate.messages) ? candidate.messages : []
+  const rawMessages = Array.isArray(candidate.messages) ? candidate.messages : []
+  const messages: Record<string, unknown>[] = rawMessages
+    .filter(
+      (message): message is Record<string, unknown> =>
+        Boolean(
+          message &&
+            typeof message === 'object' &&
+            typeof (message as Record<string, unknown>).content === 'string',
+        ),
+    )
+    .map((message) => {
+      const role = message.role === 'assistant' || message.role === 'system' ? message.role : 'user'
+      return {
+        ...message,
+        role,
+        authorDisplayName:
+          typeof message.authorDisplayName === 'string'
+            ? message.authorDisplayName
+            : role === 'assistant'
+              ? 'Izge'
+              : role === 'user'
+                ? options.fallbackUserAuthorDisplayName
+                : undefined,
+        authorUserId:
+          typeof message.authorUserId === 'string'
+            ? message.authorUserId
+            : role === 'user'
+              ? options.fallbackUserAuthorId
+              : undefined,
+      }
+    })
+  if (options.joinSystemMessage) {
+    messages.push({
+      id: `system-cowork-join-${String(options.collaboration?.sessionId ?? candidate.id ?? Date.now())}-${currentUser.user_id}`,
+      role: 'system',
+      content: options.joinSystemMessage,
+      createdAt: new Date().toISOString(),
+      systemKind: 'cowork_joined',
+      authorDisplayName: 'System',
+    })
+  }
   const importedThread = {
     ...candidate,
     id:
@@ -118,6 +167,10 @@ function importAssistantThreadForUser(
         : new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     messages,
+    collaboration:
+      options.collaboration && typeof options.collaboration.sessionId === 'string'
+        ? options.collaboration
+        : candidate.collaboration,
   }
   const storageKey = assistantThreadsStorageKey(
     currentUser.workspace_id,
@@ -158,16 +211,36 @@ function assistantSnapshotTitle(snapshot: unknown) {
     : 'Shared Izge chat'
 }
 
-function roleLabel(role: TeamChatMessageRead['author_role']) {
-  return role === 'Admin' ? 'Admin' : 'Employee'
-}
-
 function metadataString(
   message: TeamChatMessageRead,
   key: string,
 ): string | null {
   const value = message.message_metadata?.[key]
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function metadataStringArray(
+  message: TeamChatMessageRead,
+  key: string,
+): string[] {
+  const value = message.message_metadata?.[key]
+  return Array.isArray(value)
+    ? value
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean)
+    : []
+}
+
+function employeeByHandle(handle: string | null | undefined) {
+  return handle
+    ? EMPLOYEE_DIRECTORY.find((employee) => employee.handle === handle)
+    : undefined
+}
+
+function employeeByDisplayName(displayName: string | null | undefined) {
+  return displayName
+    ? EMPLOYEE_DIRECTORY.find((employee) => employee.displayName === displayName)
+    : undefined
 }
 
 function employeeHandleForUser(user: UserRead | undefined): string | null {
@@ -202,6 +275,17 @@ function directThreadIncludesUser(
   return threadId.replace(/^direct:/, '').split('-').includes(currentHandle)
 }
 
+function groupThreadIncludesUser(
+  participantHandles: string[] | undefined,
+  currentUser: UserRead | undefined,
+) {
+  const currentHandle = employeeHandleForUser(currentUser)
+  if (!currentHandle) {
+    return false
+  }
+  return !participantHandles?.length || participantHandles.includes(currentHandle)
+}
+
 function directConversationTitle(
   threadId: string,
   currentUser: UserRead | undefined,
@@ -214,6 +298,15 @@ function directConversationTitle(
     EMPLOYEE_DIRECTORY.find((employee) => employee.handle === partnerHandle)
       ?.displayName ?? threadId.replace(/^direct:/, '').replace(/-/g, ' / ')
   )
+}
+
+function groupConversationDescription(participantHandles: string[] | undefined) {
+  if (!participantHandles?.length) {
+    return 'Group conversation'
+  }
+  return participantHandles
+    .map((handle) => employeeByHandle(handle)?.displayName ?? handle)
+    .join(', ')
 }
 
 function directConversationIcon(
@@ -272,11 +365,15 @@ function threadTitleForMessage(message: TeamChatMessageRead, threadId: string) {
 
 function threadKindForMessage(
   message: TeamChatMessageRead,
-): 'channel' | 'direct' {
-  return metadataString(message, 'thread_kind') === 'direct' ||
-    threadIdForMessage(message).startsWith('direct:')
-    ? 'direct'
-    : 'channel'
+): ConversationKind {
+  const metadataKind = metadataString(message, 'thread_kind')
+  if (metadataKind === 'group' || threadIdForMessage(message).startsWith('group:')) {
+    return 'group'
+  }
+  if (metadataKind === 'direct' || threadIdForMessage(message).startsWith('direct:')) {
+    return 'direct'
+  }
+  return 'channel'
 }
 
 function initials(value: string) {
@@ -305,13 +402,21 @@ function buildConversations(
   messages.forEach((message) => {
     const threadId = threadIdForMessage(message)
     const threadKind = threadKindForMessage(message)
-    if (currentUser?.role !== 'Admin' && threadKind !== 'direct') {
+    const participantHandles = metadataStringArray(message, 'participant_handles')
+    if (currentUser?.role !== 'Admin' && threadKind === 'channel') {
       return
     }
     if (
       currentUser?.role !== 'Admin' &&
       threadKind === 'direct' &&
       !directThreadIncludesUser(threadId, currentUser)
+    ) {
+      return
+    }
+    if (
+      currentUser?.role !== 'Admin' &&
+      threadKind === 'group' &&
+      !groupThreadIncludesUser(participantHandles, currentUser)
     ) {
       return
     }
@@ -329,16 +434,21 @@ function buildConversations(
         existing?.description ||
         (threadKind === 'direct'
           ? 'Direct conversation'
+          : threadKind === 'group'
+            ? groupConversationDescription(participantHandles)
           : 'Conversation'),
       icon:
         existing?.icon ||
         (threadId.startsWith('direct:')
           ? directConversationIcon(threadId, currentUser)
-          : initials(title)),
+          : threadKind === 'group'
+            ? 'GR'
+            : initials(title)),
       kind: existing?.kind || threadKind,
       searchText: existing?.searchText || `${title} ${threadId}`,
       lastMessage: message,
       messages: nextMessages,
+      participantHandles: existing?.participantHandles || participantHandles,
     })
   })
 
@@ -379,6 +489,65 @@ function messageReceiptState(
   return laterReply ? 'seen' : 'delivered'
 }
 
+function messageAction(message: TeamChatMessageRead): string | null {
+  const action = message.message_metadata?.action
+  return typeof action === 'string' ? action : null
+}
+
+function isSystemMessage(message: TeamChatMessageRead) {
+  return (
+    message.message_metadata?.system_event === true ||
+    messageAction(message) === 'assistant_cowork_accept' ||
+    messageAction(message) === 'group_created'
+  )
+}
+
+function assistantJoinSystemCopy(
+  message: TeamChatMessageRead,
+  currentUserId: string | undefined,
+) {
+  const actorUserId =
+    typeof message.message_metadata?.actor_user_id === 'string'
+      ? message.message_metadata.actor_user_id
+      : message.author_user_id
+  const actorName =
+    typeof message.message_metadata?.actor_display_name === 'string'
+      ? message.message_metadata.actor_display_name
+      : message.author_display_name
+  if (actorUserId === currentUserId) {
+    return 'You entered the shared chat.'
+  }
+  return `${actorName} entered the shared chat.`
+}
+
+function systemMessageCopy(
+  message: TeamChatMessageRead,
+  currentUserId: string | undefined,
+) {
+  if (messageAction(message) === 'assistant_cowork_accept') {
+    return assistantJoinSystemCopy(message, currentUserId)
+  }
+  if (messageAction(message) === 'group_created') {
+    return message.author_user_id === currentUserId
+      ? `You created ${metadataString(message, 'thread_title') ?? 'this group'}.`
+      : message.body
+  }
+  return message.body
+}
+
+function conversationPreview(message: TeamChatMessageRead) {
+  if (messageAction(message) === 'assistant_cowork_accept') {
+    return 'Entered shared assistant chat'
+  }
+  if (messageAction(message) === 'assistant_chat_share') {
+    return `Assistant chat: ${assistantSnapshotTitle(message.message_metadata?.assistant_thread_snapshot)}`
+  }
+  if (messageAction(message) === 'assistant_cowork_invite') {
+    return `Cowork proposal: ${assistantSnapshotTitle(message.message_metadata?.assistant_thread_snapshot)}`
+  }
+  return message.body
+}
+
 export function TeamChatPage() {
   const { session } = useAuth()
   const navigate = useNavigate()
@@ -393,16 +562,21 @@ export function TeamChatPage() {
   const [typingUsers, setTypingUsers] = useState<TeamChatTypingUserRead[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [isGroupComposerOpen, setIsGroupComposerOpen] = useState(false)
+  const [groupName, setGroupName] = useState('')
+  const [selectedGroupHandles, setSelectedGroupHandles] = useState<string[]>([])
 
   useEffect(() => {
     let cancelled = false
 
-    async function loadThread() {
+    async function loadThread(showLoading = false) {
       if (!session?.token) {
         return
       }
 
-      setIsLoading(true)
+      if (showLoading) {
+        setIsLoading(true)
+      }
       try {
         const payload = await api.listTeamChatMessages(session.token, 160)
         if (!cancelled) {
@@ -418,16 +592,18 @@ export function TeamChatPage() {
           )
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && showLoading) {
           setIsLoading(false)
         }
       }
     }
 
-    void loadThread()
+    void loadThread(true)
+    const interval = window.setInterval(() => void loadThread(false), 3600)
 
     return () => {
       cancelled = true
+      window.clearInterval(interval)
     }
   }, [session?.token])
 
@@ -456,6 +632,10 @@ export function TeamChatPage() {
     [activeConversationId, conversations, session?.user],
   )
   const activeMessages = activeConversation.messages
+  const currentEmployeeHandle = employeeHandleForUser(session?.user)
+  const groupParticipantOptions = EMPLOYEE_DIRECTORY.filter(
+    (employee) => employee.handle !== currentEmployeeHandle,
+  )
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ block: 'end' })
@@ -517,26 +697,55 @@ export function TeamChatPage() {
       return
     }
     const snapshot = message.message_metadata?.assistant_thread_snapshot
-    const imported = importAssistantThreadForUser(session.user, snapshot)
+    const collabSessionId =
+      typeof message.message_metadata?.collab_session_id === 'string'
+        ? message.message_metadata.collab_session_id
+        : null
+    const imported = importAssistantThreadForUser(session.user, snapshot, {
+      joinSystemMessage:
+        messageAction(message) === 'assistant_cowork_invite'
+          ? 'You entered the shared chat.'
+          : undefined,
+      collaboration:
+        messageAction(message) === 'assistant_cowork_invite' && collabSessionId
+          ? {
+              sessionId: collabSessionId,
+              threadId: activeConversation.id,
+              threadTitle: activeConversation.title,
+              participants: [
+                message.author_user_id,
+                session.user.user_id,
+              ].filter(Boolean),
+            }
+          : undefined,
+      fallbackUserAuthorDisplayName: message.author_display_name,
+      fallbackUserAuthorId: message.author_user_id,
+    })
     if (!imported) {
       setError('This assistant handoff does not include a readable chat.')
       return
     }
     if (message.message_metadata?.action === 'assistant_cowork_invite') {
       try {
-        await api.createTeamChatMessage(
+        const created = await api.createTeamChatMessage(
           session.token,
-          `${session.user.display_name} joined the shared Izge assistant chat.`,
+          `${session.user.display_name} entered the shared chat.`,
           {
             thread_id: activeConversation.id,
             thread_title: activeConversation.title,
             thread_kind: activeConversation.kind,
             message_metadata: {
               action: 'assistant_cowork_accept',
-              collab_session_id: message.message_metadata?.collab_session_id,
+              system_event: true,
+              system_event_type: 'assistant_cowork_joined',
+              actor_user_id: session.user.user_id,
+              actor_display_name: session.user.display_name,
+              collab_session_id: collabSessionId,
+              assistant_thread_snapshot: snapshot,
             },
           },
         )
+        setMessages((current) => [...current, created])
       } catch {
         // Import already succeeded; posting acceptance is a best-effort signal.
       }
@@ -563,6 +772,14 @@ export function TeamChatPage() {
         thread_id: activeConversation.id,
         thread_title: activeConversation.title,
         thread_kind: activeConversation.kind,
+        message_metadata:
+          activeConversation.kind === 'group'
+            ? {
+                participant_handles:
+                  activeConversation.participantHandles ??
+                  selectedGroupHandles,
+              }
+            : undefined,
       })
       setMessages((current) => [...current, created])
       setDraft('')
@@ -577,31 +794,69 @@ export function TeamChatPage() {
     }
   }
 
+  function toggleGroupParticipant(handle: string) {
+    setSelectedGroupHandles((current) =>
+      current.includes(handle)
+        ? current.filter((candidate) => candidate !== handle)
+        : [...current, handle],
+    )
+  }
+
+  const handleCreateGroup: FormEventHandler<HTMLFormElement> = async (event) => {
+    event.preventDefault()
+    if (!session?.token || !session.user || !currentEmployeeHandle) {
+      return
+    }
+    const title = groupName.trim()
+    const participantHandles = Array.from(
+      new Set([currentEmployeeHandle, ...selectedGroupHandles]),
+    )
+    if (!title || participantHandles.length < 2) {
+      setError('Choose a group name and at least one colleague.')
+      return
+    }
+    const threadId = `group:${title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 54)}-${Date.now().toString(36)}`
+    setIsSending(true)
+    setError(null)
+    try {
+      const created = await api.createTeamChatMessage(
+        session.token,
+        `${session.user.display_name} created ${title}.`,
+        {
+          thread_id: threadId,
+          thread_title: title,
+          thread_kind: 'group',
+          message_metadata: {
+            action: 'group_created',
+            system_event: true,
+            system_event_type: 'group_created',
+            participant_handles: participantHandles,
+          },
+        },
+      )
+      setMessages((current) => [...current, created])
+      setActiveConversationId(threadId)
+      setGroupName('')
+      setSelectedGroupHandles([])
+      setIsGroupComposerOpen(false)
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof ApiError
+          ? caughtError.message
+          : 'Unable to create group.',
+      )
+    } finally {
+      setIsSending(false)
+    }
+  }
+
   return (
     <div className="full-chat-page team-chat-product-page">
-      <header className="assistant-topbar team-chat-topbar">
-        <div>
-          <p className="eyebrow">Team chat</p>
-          <h2 className="page-title">Messages</h2>
-        </div>
-        <div
-          className="team-chat-presence panel-subtle"
-          aria-label="Current chat identity"
-        >
-          <span
-            className="conversation-avatar conversation-avatar-small"
-            aria-hidden="true"
-          >
-            {initials(session?.user.display_name || 'ME')}
-          </span>
-          <span>
-            <span className="table-primary">{session?.user.display_name}</span>
-            <span className="table-secondary">
-              {roleLabel(session?.user.role ?? 'Member')}
-            </span>
-          </span>
-        </div>
-      </header>
+      <header className="assistant-topbar team-chat-topbar team-chat-topbar-compact" />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
@@ -612,19 +867,62 @@ export function TeamChatPage() {
         >
           <div className="team-chat-conversations-head">
             <p className="section-label">Conversations</p>
-            <span className="conversation-count">
-              {filteredConversations.length}
+            <span className="team-chat-head-actions">
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Create a group chat"
+                onClick={() => setIsGroupComposerOpen((current) => !current)}
+              >
+                +
+              </button>
+              <span className="conversation-count">
+                {filteredConversations.length}
+              </span>
             </span>
           </div>
           <label className="field team-chat-search-field">
-            <span className="field-label">Search employee</span>
+            <span className="field-label">Search chats</span>
             <input
               type="search"
               value={conversationSearch}
               onChange={(event) => setConversationSearch(event.target.value)}
-              placeholder="employee1, employee2…"
+              placeholder="employee1, launch room…"
             />
           </label>
+          {isGroupComposerOpen ? (
+            <form className="team-chat-group-form" onSubmit={handleCreateGroup}>
+              <label className="field">
+                <span className="field-label">Group name</span>
+                <input
+                  value={groupName}
+                  onChange={(event) => setGroupName(event.target.value)}
+                  placeholder="e.g. Launch handoff"
+                  maxLength={80}
+                />
+              </label>
+              <fieldset className="team-chat-group-people">
+                <legend className="field-label">Add colleagues</legend>
+                {groupParticipantOptions.map((employee) => (
+                  <label key={employee.handle} className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={selectedGroupHandles.includes(employee.handle)}
+                      onChange={() => toggleGroupParticipant(employee.handle)}
+                    />
+                    <span>{employee.displayName}</span>
+                  </label>
+                ))}
+              </fieldset>
+              <button
+                type="submit"
+                className="secondary-button"
+                disabled={isSending}
+              >
+                Create group
+              </button>
+            </form>
+          ) : null}
           <div className="team-chat-conversation-list">
             {filteredConversations.length === 0 ? (
               <p className="muted-copy">No employee conversation found.</p>
@@ -654,7 +952,7 @@ export function TeamChatPage() {
                   </span>
                   <span className="conversation-preview">
                     {conversation.lastMessage
-                      ? conversation.lastMessage.body
+                      ? conversationPreview(conversation.lastMessage)
                       : conversation.description}
                   </span>
                 </span>
@@ -676,7 +974,9 @@ export function TeamChatPage() {
               <span className="table-secondary">
                 {activeConversation.kind === 'direct'
                   ? 'Direct conversation'
-                  : 'Channel'}{' '}
+                  : activeConversation.kind === 'group'
+                    ? 'Group chat'
+                    : 'Channel'}{' '}
                 · {activeMessages.length} message
                 {activeMessages.length === 1 ? '' : 's'}
               </span>
@@ -694,66 +994,90 @@ export function TeamChatPage() {
             {activeMessages.map((message, messageIndex) => {
               const isOwnMessage =
                 message.author_user_id === session?.user.user_id
+              if (isSystemMessage(message)) {
+                return (
+                  <article
+                    key={message.message_id}
+                    className="team-chat-system-message"
+                  >
+                    <span>{systemMessageCopy(message, session?.user.user_id)}</span>
+                  </article>
+                )
+              }
               const receiptState = messageReceiptState(
                 message,
                 messageIndex,
                 activeMessages,
                 session?.user.user_id,
               )
+              const senderAvatar =
+                employeeByDisplayName(message.author_display_name)?.icon ??
+                initials(message.author_display_name)
               return (
-                <article
+                <div
                   key={message.message_id}
                   className={
                     isOwnMessage
-                      ? 'team-chat-message team-chat-message-own'
-                      : 'team-chat-message'
+                      ? 'team-chat-message-row team-chat-message-row-own'
+                      : 'team-chat-message-row'
                   }
                 >
-                  <p className="chat-message-copy">{message.body}</p>
-                  {message.message_metadata?.action ===
-                    'assistant_chat_share' ||
-                  message.message_metadata?.action ===
-                    'assistant_cowork_invite' ? (
-                    <div className="team-chat-assistant-card">
-                      <span>
-                        {message.message_metadata?.action ===
-                        'assistant_cowork_invite'
-                          ? 'Cowork proposal'
-                          : 'Assistant chat'}
-                      </span>
-                      <strong>
-                        {assistantSnapshotTitle(
-                          message.message_metadata?.assistant_thread_snapshot,
-                        )}
-                      </strong>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() =>
-                          void handleAssistantThreadAction(message)
-                        }
-                      >
-                        {message.message_metadata?.action ===
-                        'assistant_cowork_invite'
-                          ? 'Accept and open'
-                          : 'Open in assistant'}
-                      </button>
-                    </div>
+                  {!isOwnMessage ? (
+                    <span
+                      className="team-chat-message-avatar"
+                      title={message.author_display_name}
+                      aria-hidden="true"
+                    >
+                      {senderAvatar}
+                    </span>
                   ) : null}
-                  <div className="message-bubble-meta">
-                    <span>{formatDateTime(message.created_at)}</span>
-                    {isOwnMessage && receiptState ? (
-                      <span
-                        className={`message-receipt message-receipt-${receiptState}`}
-                        aria-label={receiptState === 'seen' ? 'Seen' : 'Delivered'}
-                      >
-                        ✓✓
-                      </span>
-                    ) : (
-                      <span>{message.author_display_name}</span>
-                    )}
-                  </div>
-                </article>
+                  <article
+                    className={
+                      isOwnMessage
+                        ? 'team-chat-message team-chat-message-own'
+                        : 'team-chat-message'
+                    }
+                  >
+                    <p className="chat-message-copy">{message.body}</p>
+                    {messageAction(message) === 'assistant_chat_share' ||
+                    messageAction(message) === 'assistant_cowork_invite' ? (
+                      <div className="team-chat-assistant-card">
+                        <span>
+                          {messageAction(message) === 'assistant_cowork_invite'
+                            ? 'Cowork proposal'
+                            : 'Assistant chat'}
+                        </span>
+                        <strong>
+                          {assistantSnapshotTitle(
+                            message.message_metadata?.assistant_thread_snapshot,
+                          )}
+                        </strong>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() =>
+                            void handleAssistantThreadAction(message)
+                          }
+                        >
+                          {messageAction(message) === 'assistant_cowork_invite'
+                            ? 'Accept and open'
+                            : 'Open in assistant'}
+                        </button>
+                      </div>
+                    ) : null}
+                    <div className="message-bubble-meta">
+                      <span>{formatDateTime(message.created_at)}</span>
+                      {isOwnMessage && receiptState ? (
+                        <span
+                          className={`message-receipt message-receipt-${receiptState}`}
+                          aria-label={receiptState === 'seen' ? 'Seen' : 'Delivered'}
+                        >
+                          ✓✓
+                        </span>
+                      ) : null}
+                    </div>
+                  </article>
+                </div>
               )
             })}
             {isSending ? (

@@ -36,13 +36,6 @@ const defaultReviewState = {
   review_notes: "",
 };
 
-const oracleLoopSteps = [
-  { icon: "◉", title: "Feed", detail: "source" },
-  { icon: "⌁", title: "Shape", detail: "memory" },
-  { icon: "✦", title: "Send", detail: "subagent" },
-  { icon: "!", title: "Ping", detail: "owner" },
-];
-
 function sumMemoryCounts(artifact: MemoryFilesystemArtifact) {
   return Object.values(artifact.memory_counts).reduce(
     (total, value) => total + value,
@@ -50,111 +43,8 @@ function sumMemoryCounts(artifact: MemoryFilesystemArtifact) {
   );
 }
 
-function purposeForArtifact(artifact: MemoryFilesystemArtifact) {
-  if (artifact.ingestion_status === "pending") {
-    return "waiting for extraction";
-  }
-  if (artifact.ingestion_status === "processing") {
-    return "extracting chunks";
-  }
-  if (artifact.ingestion_status === "failed") {
-    return "needs repair";
-  }
-  if (artifact.signal_count > 0) {
-    return "checking drift + notifying owners";
-  }
-  if (
-    artifact.review_status === "submitted" ||
-    artifact.review_status === "needs_review"
-  ) {
-    return "trust review";
-  }
-  return "retrieval-ready";
-}
-
-function workTone(artifact: MemoryFilesystemArtifact) {
-  if (artifact.ingestion_status === "failed") {
-    return "critical";
-  }
-  if (artifact.signal_count > 0) {
-    return "active";
-  }
-  if (
-    artifact.ingestion_status === "pending" ||
-    artifact.review_status === "needs_review" ||
-    artifact.review_status === "submitted"
-  ) {
-    return "waiting";
-  }
-  return "calm";
-}
-
 function signalCount(signals: ArtifactProactiveSignals | null, key: string) {
   return signals?.signal_counts[key] ?? 0;
-}
-
-function ownersForArtifact(title: string) {
-  const normalizedTitle = title.toLowerCase();
-  if (
-    normalizedTitle.includes("security") ||
-    normalizedTitle.includes("payroll")
-  ) {
-    return ["Employee 2", "Employee 3"];
-  }
-  if (
-    normalizedTitle.includes("support") ||
-    normalizedTitle.includes("customer")
-  ) {
-    return ["Employee 1", "Employee 2"];
-  }
-  if (
-    normalizedTitle.includes("finance") ||
-    normalizedTitle.includes("coverage") ||
-    normalizedTitle.includes("pto")
-  ) {
-    return ["Employee 3", "Admin"];
-  }
-  if (
-    normalizedTitle.includes("engineering") ||
-    normalizedTitle.includes("analytics")
-  ) {
-    return ["Employee 1", "Employee 3"];
-  }
-  return ["Employee 1", "Employee 2"];
-}
-
-function memoryTaskSteps(artifact: MemoryFilesystemArtifact) {
-  const extractionComplete = artifact.ingestion_status === "completed";
-  const reviewComplete = artifact.review_status === "reviewed";
-  const hasSignals = artifact.signal_count > 0;
-  const memoryObjects = sumMemoryCounts(artifact);
-  return [
-    {
-      label: "Stored",
-      detail: artifact.organization_path.slice(0, 2).join(" / "),
-      state: "done",
-    },
-    {
-      label: "Extracted",
-      detail: `${artifact.chunk_count} chunks`,
-      state: extractionComplete ? "done" : "now",
-    },
-    {
-      label: "Organized",
-      detail: `${memoryObjects} objects`,
-      state: extractionComplete && memoryObjects > 0 ? "done" : "next",
-    },
-    {
-      label: "Checked",
-      detail: hasSignals ? `${artifact.signal_count} signals` : "clean",
-      state: hasSignals ? "now" : reviewComplete ? "done" : "next",
-    },
-    {
-      label: "Notify",
-      detail: ownersForArtifact(artifact.title).join(" + "),
-      state: hasSignals || !reviewComplete ? "next" : "done",
-    },
-  ];
 }
 
 export function ArtifactsPage() {
@@ -303,77 +193,6 @@ export function ArtifactsPage() {
     };
   }, [artifacts, memoryFilesystem?.artifacts]);
 
-  const liveWorkItems = useMemo(() => {
-    const filesystemArtifacts = memoryFilesystem?.artifacts ?? [];
-    return [...filesystemArtifacts]
-      .sort((left, right) => {
-        const leftPriority =
-          left.signal_count * 4 +
-          (left.review_status === "needs_review" ? 3 : 0) +
-          (left.ingestion_status === "pending" ? 2 : 0);
-        const rightPriority =
-          right.signal_count * 4 +
-          (right.review_status === "needs_review" ? 3 : 0) +
-          (right.ingestion_status === "pending" ? 2 : 0);
-        if (leftPriority !== rightPriority) {
-          return rightPriority - leftPriority;
-        }
-        return Date.parse(right.updated_at) - Date.parse(left.updated_at);
-      })
-      .slice(0, 6);
-  }, [memoryFilesystem?.artifacts]);
-
-  const importantItems = useMemo(() => {
-    const items: Array<{
-      label: string;
-      title: string;
-      detail: string;
-      to?: string;
-    }> = [];
-
-    selectedArtifactSignals?.introduced_contradictions
-      .slice(0, 1)
-      .forEach((item) => {
-        items.push({
-          label: "Contradiction",
-          title: `${item.from_title} ↔ ${item.to_title}`,
-          detail: item.topic_key,
-        });
-      });
-    selectedArtifactSignals?.revealed_assumption_drift
-      .slice(0, 1)
-      .forEach((item) => {
-        items.push({
-          label: "Drift",
-          title: item.title_or_label,
-          detail:
-            item.validity_notes || item.evidence_provenance || item.topic_key,
-        });
-      });
-    selectedArtifactSignals?.recommended_next_actions
-      .slice(0, 1)
-      .forEach((item) => {
-        items.push({
-          label: "Next action",
-          title: item.title,
-          detail: item.recommended_action ?? item.summary,
-          to: `/signals/${item.signal_id}`,
-        });
-      });
-
-    if (items.length < 3) {
-      liveWorkItems.slice(0, 3 - items.length).forEach((artifact) => {
-        items.push({
-          label: purposeForArtifact(artifact),
-          title: artifact.title,
-          detail: artifact.coverage_notes[0] ?? artifact.retrieval_state,
-        });
-      });
-    }
-
-    return items.slice(0, 3);
-  }, [liveWorkItems, selectedArtifactSignals]);
-
   const memoryVitals = useMemo(
     () => [
       { label: "sources", value: memoryStats.sourceCount },
@@ -383,18 +202,6 @@ export function ArtifactsPage() {
     ],
     [memoryStats],
   );
-
-  const liveNotifications = useMemo(
-    () =>
-      liveWorkItems.slice(0, 4).map((artifact) => ({
-        artifact,
-        owners: ownersForArtifact(artifact.title),
-        purpose: purposeForArtifact(artifact),
-      })),
-    [liveWorkItems],
-  );
-  const activeMemoryTask = liveWorkItems[0] ?? null;
-  const queuedMemoryTasks = liveWorkItems.slice(1, 4);
 
   function toggleUserSelection(
     userId: string,
@@ -600,154 +407,11 @@ export function ArtifactsPage() {
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {success ? <Callout>{success}</Callout> : null}
 
-      <section className="memory-flow-board" aria-label="Oracle memory loop">
-        <div className="memory-loop-rail">
-          {oracleLoopSteps.map((step) => (
-            <article key={step.title} className="memory-loop-node">
-              <span aria-hidden="true">{step.icon}</span>
-              <strong>{step.title}</strong>
-              <small>{step.detail}</small>
-            </article>
-          ))}
-        </div>
-
-        <div className="memory-live-stream panel-subtle">
-          <div className="memory-strip-head">
-            <span className="memory-live-dot" aria-hidden="true" />
-            <strong>Working now</strong>
-          </div>
-          {liveWorkItems.length === 0 ? (
-            <EmptyState
-              title="Waiting for source"
-              description="Drop a file or note below."
-            />
-          ) : activeMemoryTask ? (
-            <div className="memory-active-task-stack">
-              <button
-                type="button"
-                className={`memory-active-task memory-active-task-${workTone(activeMemoryTask)}`}
-                onClick={() =>
-                  void handleArtifactSelection(activeMemoryTask.artifact_id)
-                }
-              >
-                <span
-                  className={`memory-work-dot memory-work-dot-${workTone(activeMemoryTask)}`}
-                  aria-hidden="true"
-                />
-                <span>
-                  <strong>{activeMemoryTask.title}</strong>
-                  <small>{purposeForArtifact(activeMemoryTask)}</small>
-                </span>
-                <span className="memory-task-count">
-                  {sumMemoryCounts(activeMemoryTask)}
-                </span>
-              </button>
-
-              <div className="memory-task-steps" aria-label="Current memory task steps">
-                {memoryTaskSteps(activeMemoryTask).map((step) => (
-                  <span
-                    key={`${activeMemoryTask.artifact_id}-${step.label}`}
-                    className={`memory-task-step memory-task-step-${step.state}`}
-                  >
-                    <strong>{step.label}</strong>
-                    <small>{step.detail}</small>
-                  </span>
-                ))}
-              </div>
-
-              {queuedMemoryTasks.length > 0 ? (
-                <div className="memory-queue-strip" aria-label="Upcoming memory work">
-                  {queuedMemoryTasks.map((artifact) => (
-                    <button
-                      type="button"
-                      key={artifact.artifact_id}
-                      onClick={() =>
-                        void handleArtifactSelection(artifact.artifact_id)
-                      }
-                      title={`${artifact.title}: ${purposeForArtifact(artifact)}`}
-                    >
-                      <span
-                        className={`memory-work-dot memory-work-dot-${workTone(artifact)}`}
-                        aria-hidden="true"
-                      />
-                      <span>{artifact.title}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <EmptyState title="Waiting for source" description="Drop a file or note below." />
-          )}
-        </div>
-
-        <div className="memory-alert-stack panel-subtle">
-          <div className="memory-strip-head">
-            <strong>Important</strong>
-            <span>{importantItems.length}</span>
-          </div>
-          {importantItems.length === 0 ? (
-            <p className="muted-copy">No active drift or conflict.</p>
-          ) : (
-            importantItems.map((item) => {
-              const content = (
-                <>
-                  <span>{item.label}</span>
-                  <strong>{item.title}</strong>
-                  <small>{item.detail}</small>
-                </>
-              );
-              return item.to ? (
-                <Link
-                  key={`${item.label}-${item.title}`}
-                  className="memory-alert-card"
-                  to={item.to}
-                >
-                  {content}
-                </Link>
-              ) : (
-                <article
-                  key={`${item.label}-${item.title}`}
-                  className="memory-alert-card"
-                >
-                  {content}
-                </article>
-              );
-            })
-          )}
-        </div>
-
-        <div className="memory-notify-stack panel-subtle">
-          <div className="memory-strip-head">
-            <strong>Notify</strong>
-            <span>owners</span>
-          </div>
-          {liveNotifications.length === 0 ? (
-            <p className="muted-copy">No owners waiting.</p>
-          ) : (
-            liveNotifications.map((item) => (
-              <button
-                type="button"
-                key={`notify-${item.artifact.artifact_id}`}
-                className="memory-notify-card"
-                onClick={() =>
-                  void handleArtifactSelection(item.artifact.artifact_id)
-                }
-              >
-                <span>{item.owners.join(" + ")}</span>
-                <strong>{item.purpose}</strong>
-                <small>{item.artifact.title}</small>
-              </button>
-            ))
-          )}
-        </div>
-      </section>
-
       <section className="memory-feed-station panel" aria-label="Feed memory">
         <div className="memory-feed-head">
           <div>
-            <p className="eyebrow">Feed</p>
-            <h3>Artifacts in, memory out</h3>
+            <p className="eyebrow">Add source</p>
+            <h3>File or note</h3>
           </div>
           <span>{isBusy ? "processing" : "ready"}</span>
         </div>

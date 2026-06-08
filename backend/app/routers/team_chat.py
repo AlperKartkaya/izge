@@ -43,15 +43,32 @@ def _employee_handle_for_user(user: User) -> str | None:
     return normalized_name if normalized_name.startswith("employee") else None
 
 
+ThreadKind = Literal["channel", "direct", "group"]
+
+
+def _participant_handles_from_metadata(metadata: dict[str, object]) -> set[str]:
+    raw_participants = metadata.get("participant_handles")
+    if not isinstance(raw_participants, list):
+        return set()
+    return {
+        str(participant).strip().lower()
+        for participant in raw_participants
+        if str(participant).strip()
+    }
+
+
 def _message_is_visible_to_user(message: CompanyChatMessage, current_user: User) -> bool:
     if current_user.role == "Admin":
         return True
     metadata = message.message_metadata or {}
     thread_id = str(metadata.get("thread_id") or metadata.get("channel") or "company-general")
     thread_kind = str(metadata.get("thread_kind") or ("direct" if thread_id.startswith("direct:") else "channel"))
+    current_handle = _employee_handle_for_user(current_user)
+    if thread_kind == "group":
+        participant_handles = _participant_handles_from_metadata(metadata)
+        return not participant_handles or (current_handle in participant_handles if current_handle else False)
     if thread_kind != "direct":
         return True
-    current_handle = _employee_handle_for_user(current_user)
     if not current_handle:
         return False
     participants = thread_id.replace("direct:", "", 1).split("-")
@@ -59,7 +76,9 @@ def _message_is_visible_to_user(message: CompanyChatMessage, current_user: User)
 
 
 def _thread_is_visible_to_user(thread_id: str, thread_kind: str, current_user: User) -> bool:
-    if current_user.role == "Admin" or thread_kind != "direct":
+    if current_user.role == "Admin" or thread_kind not in {"direct", "group"}:
+        return True
+    if thread_kind == "group":
         return True
     if thread_id.startswith("assistant-cowork:"):
         return True
@@ -126,7 +145,7 @@ def list_team_chat_messages(
 @router.get("/typing", response_model=TeamChatTypingRead)
 def list_typing_users(
     thread_id: str,
-    thread_kind: Literal["channel", "direct"] = "channel",
+    thread_kind: ThreadKind = "channel",
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> TeamChatTypingRead:

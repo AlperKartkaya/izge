@@ -48,7 +48,7 @@ class TeamChatMessageCreate(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
     thread_id: str | None = Field(default=None, min_length=1, max_length=80)
     thread_title: str | None = Field(default=None, min_length=1, max_length=120)
-    thread_kind: Literal["channel", "direct"] = "channel"
+    thread_kind: Literal["channel", "direct", "group"] = "channel"
     message_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -71,7 +71,7 @@ class TeamChatThreadRead(BaseModel):
 
 class TeamChatTypingCreate(BaseModel):
     thread_id: str = Field(min_length=1, max_length=80)
-    thread_kind: Literal["channel", "direct"] = "channel"
+    thread_kind: Literal["channel", "direct", "group"] = "channel"
 
 
 class TeamChatTypingUserRead(BaseModel):

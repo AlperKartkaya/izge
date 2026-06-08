@@ -405,8 +405,13 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             db.delete(junk_message)
     db.commit()
 
-    def thread_metadata(thread_id: str, thread_title: str, thread_kind: str = "channel") -> dict[str, object]:
-        return {
+    def thread_metadata(
+        thread_id: str,
+        thread_title: str,
+        thread_kind: str = "channel",
+        participant_handles: list[str] | None = None,
+    ) -> dict[str, object]:
+        metadata: dict[str, object] = {
             "channel": thread_id,
             "thread_id": thread_id,
             "thread_title": thread_title,
@@ -414,6 +419,9 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             "seeded": True,
             "seed_batch": "northstar-workspace-v3",
         }
+        if participant_handles:
+            metadata["participant_handles"] = participant_handles
+        return metadata
 
     def assistant_share_metadata(thread_id: str, thread_title: str) -> dict[str, object]:
         return {
@@ -585,6 +593,50 @@ def _seed_default_team_chat(db: Session, *, workspace: Workspace, users_by_email
             users_by_email.get("employee1@example.com") or admin,
             "That works. I will ask Izge to check the FAQ against the security review after this.",
             thread_metadata("customer-success", "Customer Success"),
+        ),
+        (
+            datetime(2026, 4, 11, 10, 5),
+            users_by_email.get("employee1@example.com") or admin,
+            "I created this room for the onboarding launch handoff. Let's keep artifacts, owner changes, and FAQ wording in one thread.",
+            thread_metadata(
+                "group:onboarding-launch",
+                "Onboarding Launch Room",
+                "group",
+                ["employee1", "employee2", "employee3"],
+            ),
+        ),
+        (
+            datetime(2026, 4, 11, 10, 8),
+            users_by_email.get("employee2@example.com") or admin,
+            "I will own the customer-facing FAQ edits. Please send me anything Izge flags as permission-sensitive.",
+            thread_metadata(
+                "group:onboarding-launch",
+                "Onboarding Launch Room",
+                "group",
+                ["employee1", "employee2", "employee3"],
+            ),
+        ),
+        (
+            datetime(2026, 4, 11, 10, 12),
+            users_by_email.get("employee3@example.com") or admin,
+            "I am checking coverage and escalation assumptions. If weekend support is still only tentative, Memory should notify People Ops before launch notes go out.",
+            thread_metadata(
+                "group:onboarding-launch",
+                "Onboarding Launch Room",
+                "group",
+                ["employee1", "employee2", "employee3"],
+            ),
+        ),
+        (
+            datetime(2026, 4, 11, 10, 18),
+            users_by_email.get("employee1@example.com") or admin,
+            "Good. I just shared the assistant answer about payroll export wording with Employee 2 and will reuse the safe phrasing here once it is reviewed.",
+            thread_metadata(
+                "group:onboarding-launch",
+                "Onboarding Launch Room",
+                "group",
+                ["employee1", "employee2", "employee3"],
+            ),
         ),
     ]
     for created_at, author, body, metadata in seeded_turns:

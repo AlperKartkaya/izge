@@ -249,7 +249,7 @@ export const api = {
     return request<TeamChatThreadRead>(`/team-chat?limit=${limit}`, { token })
   },
 
-  createTeamChatMessage(token: string, body: string, options: { thread_id?: string; thread_title?: string; thread_kind?: 'channel' | 'direct'; message_metadata?: Record<string, unknown> } = {}) {
+  createTeamChatMessage(token: string, body: string, options: { thread_id?: string; thread_title?: string; thread_kind?: 'channel' | 'direct' | 'group'; message_metadata?: Record<string, unknown> } = {}) {
     return request<TeamChatMessageRead>('/team-chat', {
       method: 'POST',
       token,
@@ -257,7 +257,7 @@ export const api = {
     })
   },
 
-  markTeamChatTyping(token: string, thread_id: string, thread_kind: 'channel' | 'direct' = 'channel') {
+  markTeamChatTyping(token: string, thread_id: string, thread_kind: 'channel' | 'direct' | 'group' = 'channel') {
     return request<TeamChatTypingRead>('/team-chat/typing', {
       method: 'POST',
       token,
@@ -265,7 +265,7 @@ export const api = {
     })
   },
 
-  listTeamChatTyping(token: string, thread_id: string, thread_kind: 'channel' | 'direct' = 'channel') {
+  listTeamChatTyping(token: string, thread_id: string, thread_kind: 'channel' | 'direct' | 'group' = 'channel') {
     return request<TeamChatTypingRead>(`/team-chat/typing?thread_id=${encodeURIComponent(thread_id)}&thread_kind=${thread_kind}`, { token })
   },
 
