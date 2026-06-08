@@ -1491,6 +1491,41 @@ def _next_action_signal_payload(
     }
 
 
+_CLAIM_TITLE_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    (
+        "we decided to keep the self-serve launch decision gate open until security and activation instrumentation evidence can be compared",
+        "launch gate stays open",
+    ),
+    (
+        "move the self-serve onboarding launch target to Q3 2026 and prioritize foundation work first",
+        "move launch to Q3 2026",
+    ),
+)
+
+
+def _compact_signal_claim_title(value: str, *, max_length: int = 72) -> str:
+    compacted = " ".join(value.split())
+    lowered = compacted.lower()
+    for source, replacement in _CLAIM_TITLE_REPLACEMENTS:
+        if lowered == source:
+            return replacement
+        compacted = compacted.replace(source, replacement).replace(source.capitalize(), replacement)
+
+    if len(compacted) <= max_length:
+        return compacted
+    return f"{compacted[: max_length - 1].rstrip()}…"
+
+
+def _contradiction_next_action_title(item: dict[str, Any]) -> str:
+    from_title = _compact_signal_claim_title(str(item.get("from_title") or "new claim"))
+    to_title = _compact_signal_claim_title(str(item.get("to_title") or "prior claim"))
+    if from_title == "launch gate stays open" and to_title == "move launch to Q3 2026":
+        return "Resolve launch timing: gate open ↔ Q3 2026"
+    if from_title == "move launch to Q3 2026" and to_title == "launch gate stays open":
+        return "Resolve launch timing: Q3 2026 ↔ gate open"
+    return f"Resolve contradiction: {from_title} ↔ {to_title}"
+
+
 def _contradiction_next_action_signal(
     db: Session,
     user: User,
@@ -1507,7 +1542,7 @@ def _contradiction_next_action_signal(
     return _next_action_signal_payload(
         db,
         signal_id=_stable_signal_id("sig_next", "contradiction", str(item.get("edge_id"))),
-        title=f"Resolve contradiction: {item['from_title']} ↔ {item['to_title']}",
+        title=_contradiction_next_action_title(item),
         summary="A later roadmap claim now collides with an earlier decision or commitment in the reconstructed memory graph.",
         related_topic=str(item.get("topic_key") or item.get("claim_family_key") or "general"),
         urgency_score=0.92 if has_commitment else 0.84,

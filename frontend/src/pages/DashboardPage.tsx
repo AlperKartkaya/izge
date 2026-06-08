@@ -17,6 +17,8 @@ interface DashboardSignalRow {
   detail: string
   tone: DashboardSignalTone
   to?: string
+  fullTitle?: string
+  fullSummary?: string
 }
 
 function signalTone(signalType: string): DashboardSignalTone {
@@ -34,6 +36,45 @@ function signalTone(signalType: string): DashboardSignalTone {
 
 function decisionRowClass(tone: DashboardSignalTone): string {
   return `decision-row decision-row-${tone}`
+}
+
+const DASHBOARD_COPY_REPLACEMENTS: Array<[RegExp, string]> = [
+  [
+    /we decided to keep the self-serve launch decision gate open until security and activation instrumentation evidence can be compared/gi,
+    'launch gate stays open',
+  ],
+  [
+    /move the self-serve onboarding launch target to Q3 2026 and prioritize foundation work first/gi,
+    'move launch to Q3 2026',
+  ],
+  [/security and activation instrumentation evidence/gi, 'security + activation evidence'],
+]
+
+function compactDashboardCopy(value: string | null | undefined, maxLength = 112): string {
+  if (!value) {
+    return ''
+  }
+
+  let copy = value.replace(/\s+/g, ' ').trim()
+  for (const [pattern, replacement] of DASHBOARD_COPY_REPLACEMENTS) {
+    copy = copy.replace(pattern, replacement)
+  }
+  copy = copy.replace(/^Resolve contradiction:\s*launch gate stays open\s*↔\s*move launch to Q3 2026$/i, 'Resolve launch timing: gate open ↔ Q3 2026')
+
+  if (copy.length <= maxLength) {
+    return copy
+  }
+
+  return `${copy.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`
+}
+
+function hasNoDashboardData(
+  summary: GraphSummary | null,
+  artifacts: ArtifactRead[],
+  persistedSignals: SignalRead[],
+  nextActions: NextActionSignalItem[],
+): boolean {
+  return !summary && artifacts.length === 0 && persistedSignals.length === 0 && nextActions.length === 0
 }
 
 export function DashboardPage() {
@@ -103,6 +144,7 @@ export function DashboardPage() {
     [summary],
   )
   const isAdmin = session?.user.role === 'Admin'
+  const isInitialLoad = isLoading && hasNoDashboardData(summary, artifacts, persistedSignals, nextActions)
   const reviewQueue = useMemo(
     () => artifacts.filter((artifact) => artifact.review_status === 'submitted' || artifact.review_status === 'needs_review'),
     [artifacts],
@@ -119,6 +161,15 @@ export function DashboardPage() {
   const reviewedRatio = artifactCount > 0 ? reviewedArtifactCount / artifactCount : 0
 
   const workspaceReadiness = useMemo(() => {
+    if (isInitialLoad) {
+      return {
+        status: 'Loading',
+        title: 'Loading workspace state',
+        detail: 'Checking sources, memory, review state, and current signals.',
+        actionLabel: 'Open memory',
+        actionTo: '/memory',
+      }
+    }
     if (!latestCompletedArtifact) {
       return {
         status: 'Needs source',
@@ -162,32 +213,44 @@ export function DashboardPage() {
       actionLabel: 'Ask workspace question',
       actionTo: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
     }
-  }, [isAdmin, latestCompletedArtifact, reviewQueue.length, topPersistedSignal, totalMemoryObjects])
+  }, [isAdmin, isInitialLoad, latestCompletedArtifact, reviewQueue.length, topPersistedSignal, totalMemoryObjects])
 
   const dashboardStats = useMemo(
     () => [
       {
         label: 'Sources',
-        value: artifactCount,
-        detail: `${reviewQueue.length} awaiting review`,
+        value: isInitialLoad ? '—' : artifactCount,
+        detail: isInitialLoad ? 'Checking source inventory' : `${reviewQueue.length} awaiting review`,
       },
       {
         label: 'Memory objects',
-        value: totalMemoryObjects,
-        detail: 'Structured decisions, assumptions, constraints, outcomes, and commitments',
+        value: isInitialLoad ? '—' : totalMemoryObjects,
+        detail: isInitialLoad ? 'Checking reconstructed memory' : 'Structured decisions, assumptions, constraints, outcomes, and commitments',
       },
       {
         label: 'Signals',
-        value: persistedSignalCount || nextActions.length,
-        detail: `${contradictions.length + assumptionDrift.length} active tensions`,
+        value: isInitialLoad ? '—' : persistedSignalCount || nextActions.length,
+        detail: isInitialLoad ? 'Checking active tensions' : `${contradictions.length + assumptionDrift.length} active tensions`,
       },
       {
         label: 'Review coverage',
-        value: artifactCount > 0 ? formatPercent(reviewedRatio) : '0%',
-        detail: `${reviewedArtifactCount} reviewed / ${rejectedArtifactCount} rejected`,
+        value: isInitialLoad ? '—' : artifactCount > 0 ? formatPercent(reviewedRatio) : '0%',
+        detail: isInitialLoad ? 'Checking review state' : `${reviewedArtifactCount} reviewed / ${rejectedArtifactCount} rejected`,
       },
     ],
-    [artifactCount, assumptionDrift.length, contradictions.length, nextActions.length, persistedSignalCount, rejectedArtifactCount, reviewQueue.length, reviewedArtifactCount, reviewedRatio, totalMemoryObjects],
+    [
+      artifactCount,
+      assumptionDrift.length,
+      contradictions.length,
+      isInitialLoad,
+      nextActions.length,
+      persistedSignalCount,
+      rejectedArtifactCount,
+      reviewQueue.length,
+      reviewedArtifactCount,
+      reviewedRatio,
+      totalMemoryObjects,
+    ],
   )
 
   const workflowSteps = useMemo(
@@ -221,8 +284,10 @@ export function DashboardPage() {
       {
         step: '04',
         label: 'Use',
-        title: topPersistedSignal?.title ?? 'Ask an evidence-backed question',
-        detail: topPersistedSignal ? 'Open the newest persisted signal or ask the canonical workspace question.' : canonicalWorkspacePrompt,
+        title: topPersistedSignal ? compactDashboardCopy(topPersistedSignal.title, 78) : 'Ask an evidence-backed question',
+        detail: topPersistedSignal
+          ? compactDashboardCopy(topPersistedSignal.summary || 'Open the newest persisted signal or ask the canonical workspace question.', 118)
+          : canonicalWorkspacePrompt,
         status: topPersistedSignal ? formatLabel(topPersistedSignal.signal_type) : 'Question',
         to: topPersistedSignal ? `/signals/${topPersistedSignal.signal_id}` : `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
       },
@@ -235,35 +300,53 @@ export function DashboardPage() {
       ...persistedSignals.slice(0, 4).map((signal) => ({
         id: signal.signal_id,
         type: `Persisted ${formatLabel(signal.signal_type)}`,
-        title: signal.title,
-        summary: signal.summary,
-        detail: `${signal.source_artifact_title ?? signal.source_artifact_id ?? 'Unknown source'} · urgency ${formatPercent(signal.urgency_score)} · ${formatDateTime(signal.created_at)}`,
+        title: compactDashboardCopy(signal.title, 92),
+        summary: compactDashboardCopy(signal.summary, 142),
+        detail: compactDashboardCopy(
+          `${signal.source_artifact_title ?? signal.source_artifact_id ?? 'Unknown source'} · urgency ${formatPercent(signal.urgency_score)} · ${formatDateTime(signal.created_at)}`,
+          128,
+        ),
         tone: signalTone(signal.signal_type),
         to: `/signals/${signal.signal_id}`,
+        fullTitle: signal.title,
+        fullSummary: signal.summary,
       })),
-      ...contradictions.slice(0, 2).map((item) => ({
-        id: item.edge_id,
-        type: 'Contradiction',
-        title: `${item.from_title} ↔ ${item.to_title}`,
-        summary: item.evidence_provenance ?? 'Two pieces of memory conflict and require a decision.',
-        detail: `Topic ${item.topic_key} · confidence ${formatPercent(item.confidence_score)}`,
-        tone: 'critical' as const,
-      })),
-      ...assumptionDrift.slice(0, 2).map((item) => ({
-        id: item.assumption_id,
-        type: 'Assumption drift',
-        title: item.title_or_label,
-        summary: item.validity_notes || item.evidence_provenance || 'Later evidence weakened this assumption.',
-        detail: `Status ${formatLabel(item.status)} · topic ${item.topic_key}`,
-        tone: 'drift' as const,
-      })),
+      ...contradictions.slice(0, 2).map((item) => {
+        const fullTitle = `${item.from_title} ↔ ${item.to_title}`
+        const fullSummary = item.evidence_provenance ?? 'Two pieces of memory conflict and require a decision.'
+        return {
+          id: item.edge_id,
+          type: 'Contradiction',
+          title: compactDashboardCopy(fullTitle, 92),
+          summary: compactDashboardCopy(fullSummary, 142),
+          detail: `Topic ${item.topic_key} · confidence ${formatPercent(item.confidence_score)}`,
+          tone: 'critical' as const,
+          fullTitle,
+          fullSummary,
+        }
+      }),
+      ...assumptionDrift.slice(0, 2).map((item) => {
+        const fullSummary = item.validity_notes || item.evidence_provenance || 'Later evidence weakened this assumption.'
+        return {
+          id: item.assumption_id,
+          type: 'Assumption drift',
+          title: compactDashboardCopy(item.title_or_label, 92),
+          summary: compactDashboardCopy(fullSummary, 142),
+          detail: `Status ${formatLabel(item.status)} · topic ${item.topic_key}`,
+          tone: 'drift' as const,
+          fullTitle: item.title_or_label,
+          fullSummary,
+        }
+      }),
       ...nextActions.slice(0, 2).map((item) => ({
         id: item.signal_id,
         type: 'Next action',
-        title: item.title,
-        summary: item.recommended_action,
+        title: compactDashboardCopy(item.title, 92),
+        summary: compactDashboardCopy(item.recommended_action, 142),
         detail: `Urgency ${formatPercent(item.urgency_score)} · uncertainty ${formatPercent(item.uncertainty_score)}`,
         tone: 'action' as const,
+        fullTitle: item.title,
+        fullSummary: item.recommended_action,
       })),
     ]
 
@@ -276,6 +359,15 @@ export function DashboardPage() {
   )
   const employeeEvidenceRows = useMemo(() => accessibleArtifacts.slice(0, 5), [accessibleArtifacts])
   const employeeReadiness = useMemo(() => {
+    if (isInitialLoad) {
+      return {
+        status: 'Loading',
+        title: 'Loading current focus',
+        detail: 'Checking your accessible sources, memory graph, and current signals.',
+        to: '/memory',
+        actionLabel: 'Open memory',
+      }
+    }
     if (!latestCompletedArtifact) {
       return {
         status: 'Needs source',
@@ -310,13 +402,17 @@ export function DashboardPage() {
       to: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
       actionLabel: 'Ask Izge',
     }
-  }, [latestCompletedArtifact, signalRows, totalMemoryObjects])
+  }, [isInitialLoad, latestCompletedArtifact, signalRows, totalMemoryObjects])
   const employeeActions = useMemo(
     () => [
       {
         title: 'Ask Izge',
         detail: 'Ask questions grounded in your permitted artifacts.',
-        meta: totalMemoryObjects > 0 ? `${totalMemoryObjects} memory object${totalMemoryObjects === 1 ? '' : 's'} available` : 'Works best after evidence is processed',
+        meta: isInitialLoad
+          ? 'Checking memory access'
+          : totalMemoryObjects > 0
+            ? `${totalMemoryObjects} memory object${totalMemoryObjects === 1 ? '' : 's'} available`
+            : 'Works best after evidence is processed',
         to: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
         cta: 'Ask now',
         icon: '✦',
@@ -334,7 +430,7 @@ export function DashboardPage() {
       {
         title: 'Open memory',
         detail: 'Preview accessible sources and check their status.',
-        meta: `${accessibleArtifacts.length} accessible source${accessibleArtifacts.length === 1 ? '' : 's'}`,
+        meta: isInitialLoad ? 'Checking source access' : `${accessibleArtifacts.length} accessible source${accessibleArtifacts.length === 1 ? '' : 's'}`,
         to: '/memory',
         cta: 'View memory',
         icon: '□',
@@ -342,15 +438,15 @@ export function DashboardPage() {
       },
       {
         title: 'Inspect graph',
-        detail: signalRows[0]?.title ?? 'Explore linked decisions, assumptions, and evidence.',
-        meta: signalRows.length > 0 ? `${signalRows.length} focus item${signalRows.length === 1 ? '' : 's'}` : 'No urgent signals yet',
+        detail: signalRows[0]?.title ?? (isInitialLoad ? 'Checking current signals.' : 'Explore linked decisions, assumptions, and evidence.'),
+        meta: signalRows.length > 0 ? `${signalRows.length} focus item${signalRows.length === 1 ? '' : 's'}` : isInitialLoad ? 'Checking signals' : 'No urgent signals yet',
         to: signalRows[0]?.to ?? '/graph',
         cta: signalRows.length > 0 ? 'Review signal' : 'Open graph',
         icon: '◇',
         primary: false,
       },
     ],
-    [accessibleArtifacts.length, signalRows, totalMemoryObjects],
+    [accessibleArtifacts.length, isInitialLoad, signalRows, totalMemoryObjects],
   )
 
   const memoryComposition = useMemo(
@@ -450,7 +546,7 @@ export function DashboardPage() {
                     key={row.id}
                     className={`employee-work-item employee-work-item-${row.tone}`}
                     to={row.to ?? '/graph'}
-                    title={`${row.title}. ${row.summary}. ${row.detail}`}
+                    title={`${row.fullTitle ?? row.title}. ${row.fullSummary ?? row.summary}. ${row.detail}`}
                   >
                     <span className="employee-work-kind">{row.type}</span>
                     <span className="employee-work-copy">
@@ -748,11 +844,11 @@ export function DashboardPage() {
               )
 
               return row.to ? (
-                <Link key={row.id} className={decisionRowClass(row.tone)} to={row.to}>
+                <Link key={row.id} className={decisionRowClass(row.tone)} to={row.to} title={`${row.fullTitle ?? row.title}. ${row.fullSummary ?? row.summary}. ${row.detail}`}>
                   {content}
                 </Link>
               ) : (
-                <article key={row.id} className={decisionRowClass(row.tone)}>
+                <article key={row.id} className={decisionRowClass(row.tone)} title={`${row.fullTitle ?? row.title}. ${row.fullSummary ?? row.summary}. ${row.detail}`}>
                   {content}
                 </article>
               )
