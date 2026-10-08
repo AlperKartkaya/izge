@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ValidationError, field_validator
 from pypdf import PdfReader
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -15,6 +15,7 @@ from app.models import (
     Artifact,
     ArtifactChunk,
     Assumption,
+    ClaimOccurrence,
     Commitment,
     Constraint,
     Decision,
@@ -27,6 +28,7 @@ from app.models import (
 from app.services import LocalLLMError, run_structured_local_prompt
 from app.services.audit import log_event
 from app.services.storage import resolve_artifact_source_path
+from app.services.turkish_text import matching_tokens, normalize_for_match, word_tokens
 
 MEMORY_MODELS = {
     "decision": (Decision, "decision_id"),
@@ -39,6 +41,7 @@ MEMORY_MODELS = {
 DATE_PATTERNS = [
     re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b"),
     re.compile(r"\b(20\d{2}/\d{2}/\d{2})\b"),
+    re.compile(r"\b(\d{1,2}\.\d{1,2}\.20\d{2})\b"),
 ]
 HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(?P<title>.+?)\s*$")
 STOPWORDS = {
@@ -71,8 +74,19 @@ STOPWORDS = {
     "we",
     "will",
     "with",
+    "ama",
+    "artık",
+    "bir",
+    "bu",
+    "da",
+    "de",
+    "daha",
+    "için",
+    "ile",
+    "ise",
+    "ve",
 }
-MEMORY_TYPE_TERMS = {"decision", "assumption", "constraint", "outcome", "commitment", "decisions", "assumptions", "constraints", "outcomes", "commitments"}
+MEMORY_TYPE_TERMS = {"decision", "assumption", "constraint", "outcome", "commitment", "decisions", "assumptions", "constraints", "outcomes", "commitments", "karar", "kararlar", "varsayım", "varsayımlar", "kısıt", "kısıtlar", "sonuç", "sonuçlar", "taahhüt", "taahhütler"}
 
 DECISION_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
@@ -88,6 +102,12 @@ DECISION_PATTERNS = [
         r"\bpostpone(?:d)?\b",
         r"\breintroduce\b",
         r"\blaunch target\b",
+        r"\bkarar(?:ı|ımız|ımızı)?\b",
+        r"\bkararlaştır(?:ıldı|dık|dı)?\b",
+        r"\bonaylan(?:dı|mıştır)?\b",
+        r"\bseçildi\b",
+        r"\bönceliklendir(?:ildi|dik)?\b",
+        r"\bertele(?:ndi|dik)?\b",
     )
 ]
 ASSUMPTION_PATTERNS = [
@@ -98,6 +118,9 @@ ASSUMPTION_PATTERNS = [
         r"\bbelieved\b",
         r"\bforecast\b",
         r"\bplanned on\b",
+        r"\bvarsay(?:ım|dık|ıldı|ıyoruz)\b",
+        r"\bbeklen(?:iyor|di|mektedir)\b",
+        r"\böngör(?:üldü|ülüyor|dük)\b",
     )
 ]
 CONSTRAINT_PATTERNS = [
@@ -112,6 +135,12 @@ CONSTRAINT_PATTERNS = [
         r"\bdepends on\b",
         r"\bcapacity\b",
         r"\breview must\b",
+        r"\bgerek(?:ir|iyor|li)\b",
+        r"\bzorunlu\b",
+        r"\byapılamaz\b",
+        r"\bolmadan\b",
+        r"\bbağlı\b",
+        r"\bkapasite\b",
     )
 ]
 OUTCOME_PATTERNS = [
@@ -127,6 +156,12 @@ OUTCOME_PATTERNS = [
         r"\bdecreased\b",
         r"\breached\b",
         r"\blacks?\b",
+        r"\bsonuç\b",
+        r"\bneden oldu\b",
+        r"\bart(?:tı|mıştır)\b",
+        r"\bazal(?:dı|mıştır)\b",
+        r"\başıldı\b",
+        r"\bkaçırıldı\b",
     )
 ]
 COMMITMENT_PATTERNS = [
@@ -140,6 +175,12 @@ COMMITMENT_PATTERNS = [
         r"\bfollow up\b",
         r"\bprepare\b",
         r"\bpublish\b",
+        r"\bhazırla(?:yacak|nacak|mak)\b",
+        r"\byayınla(?:yacak|nacak|mak)\b",
+        r"\btamamla(?:yacak|nacak|mak)\b",
+        r"\btakip edecek\b",
+        r"\bsorumlu\b",
+        r"\btarihine kadar\b",
     )
 ]
 NEGATIVE_OUTCOME_PATTERNS = [
@@ -153,9 +194,15 @@ NEGATIVE_OUTCOME_PATTERNS = [
         r"\bincreased\b",
         r"\breached\b",
         r"\bdelayed\b",
+        r"\bengellendi\b",
+        r"\bertelendi\b",
+        r"\bkaçırıldı\b",
+        r"\başıldı\b",
+        r"\barttı\b",
+        r"\bgecikti\b",
     )
 ]
-CONTRADICTION_TERMS = {"delay", "delayed", "postpone", "postponed", "q2", "q3", "q4", "advance", "reintroduce", "ship", "launch", "keep", "revert"}
+CONTRADICTION_TERMS = {"delay", "delayed", "postpone", "postponed", "q2", "q3", "q4", "advance", "reintroduce", "ship", "launch", "keep", "revert", "ertele", "ertelendi", "öne çek", "yeniden", "yayınla", "devam", "vazgeç"}
 
 
 @dataclass(frozen=True)
@@ -278,10 +325,12 @@ def chunk_text(text: str) -> list[str]:
 
 def _parse_date(raw_value: str) -> datetime | None:
     candidate = raw_value.strip().replace("/", "-")
-    try:
-        return datetime.strptime(candidate, "%Y-%m-%d")
-    except ValueError:
-        return None
+    for date_format in ("%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(candidate, date_format)
+        except ValueError:
+            continue
+    return None
 
 
 def _infer_artifact_timestamp(artifact: Artifact, text: str) -> datetime:
@@ -301,12 +350,12 @@ def _normalize_whitespace(value: str) -> str:
 
 def _trim_label(value: str) -> str:
     normalized = _normalize_whitespace(value)
-    normalized = re.sub(r"^(we decided to|decision:?|assumption:?|constraint:?|outcome:?|commitment:?|we assumed that|we assumed)\s+", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"^(we decided to|decision:?|assumption:?|constraint:?|outcome:?|commitment:?|we assumed that|we assumed|karar:?|varsayım:?|kısıt:?|sonuç:?|taahhüt:?)\s+", "", normalized, flags=re.IGNORECASE)
     return normalized[:255].rstrip(" .")
 
 
 def _topic_tokens(value: str) -> list[str]:
-    tokens = re.findall(r"[a-z0-9]+", value.lower())
+    tokens = word_tokens(value)
     return [token for token in tokens if token not in STOPWORDS and token not in MEMORY_TYPE_TERMS and len(token) > 2]
 
 
@@ -321,7 +370,9 @@ def _topic_key(value: str) -> str:
 
 
 def _token_overlap(left: str, right: str) -> int:
-    return len(set(_topic_tokens(left)) & set(_topic_tokens(right)))
+    left_tokens = matching_tokens(" ".join(_topic_tokens(left)))
+    right_tokens = matching_tokens(" ".join(_topic_tokens(right)))
+    return len(left_tokens & right_tokens)
 
 
 def _clean_sentence_for_extraction(text: str) -> str:
@@ -382,9 +433,16 @@ def _segment_sequence_map(chunks: list[str]) -> dict[str, int]:
 
 
 def _infer_memory_type(text: str, section_path: str) -> tuple[str | None, float]:
-    lowered_section = section_path.lower()
-    for label in MEMORY_MODELS:
-        if label in lowered_section or f"{label}s" in lowered_section:
+    lowered_section = normalize_for_match(section_path)
+    section_labels = {
+        "decision": ("decision", "decisions", "karar", "kararlar"),
+        "assumption": ("assumption", "assumptions", "varsayım", "varsayımlar"),
+        "constraint": ("constraint", "constraints", "kısıt", "kısıtlar"),
+        "outcome": ("outcome", "outcomes", "sonuç", "sonuçlar"),
+        "commitment": ("commitment", "commitments", "taahhüt", "taahhütler", "aksiyonlar"),
+    }
+    for label, aliases in section_labels.items():
+        if any(alias in lowered_section for alias in aliases):
             return label, 0.92
 
     detectors = [
@@ -411,18 +469,18 @@ def _infer_memory_type(text: str, section_path: str) -> tuple[str | None, float]
 
 
 def _extract_owner_hint(text: str) -> str | None:
-    owner_match = re.match(r"(?P<owner>.+?)\s+will\b", text)
+    owner_match = re.match(r"(?P<owner>.+?)\s+(?:will\b|.+?\b(?:hazırlayacak|yayınlayacak|tamamlayacak|takip edecek)\b)", text, re.IGNORECASE)
     if owner_match:
         owner = _normalize_whitespace(owner_match.group("owner"))
-        if owner and owner.lower() not in {"we", "team", "leadership"} and len(owner) <= 80:
+        if owner and normalize_for_match(owner) not in {"we", "team", "leadership", "biz", "ekip", "yönetim"} and len(owner) <= 80:
             return owner
     return None
 
 
 def _extract_due_date_hint(text: str) -> datetime | None:
-    due_date_match = re.search(r"\bby\s+(20\d{2}[-/]\d{2}[-/]\d{2})\b", text, re.IGNORECASE)
+    due_date_match = re.search(r"(?:\bby\s+(?P<iso>20\d{2}[-/]\d{2}[-/]\d{2})\b|(?P<tr>\d{1,2}\.\d{1,2}\.20\d{2})\s+tarihine\s+kadar)", text, re.IGNORECASE)
     if due_date_match:
-        return _parse_date(due_date_match.group(1))
+        return _parse_date(due_date_match.group("iso") or due_date_match.group("tr"))
     return None
 
 
@@ -438,24 +496,22 @@ def _extract_segment_timestamp(segment_text: str, fallback: datetime) -> datetim
 
 def _llm_system_prompt() -> str:
     return (
-        "Extract institutional memory objects from one artifact chunk. "
-        "Return JSON only, matching the provided schema exactly. "
-        "Allowed memory_type values are decision, assumption, constraint, outcome, and commitment. "
-        "Only emit objects directly supported by the chunk text. "
-        "Each object must include an evidence_quote copied from the chunk. "
-        "For commitments, include owner and due_date only when the chunk states them explicitly. "
-        "Do not invent evidence or summarize the entire chunk."
+        "Tek bir belge parçasından kurumsal hafıza kayıtlarını çıkar. Türkçe metni doğal anlamıyla yorumla. "
+        "Yalnızca verilen şemaya tam uyan JSON döndür. memory_type değerleri sadece decision, assumption, "
+        "constraint, outcome ve commitment olabilir. Yalnızca parçada doğrudan desteklenen kayıtları üret. "
+        "Her kayıt, parçadan aynen alınmış evidence_quote içermeli. Taahhütlerde owner ve due_date alanlarını "
+        "yalnızca metin açıkça belirtiyorsa doldur. Kanıt uydurma ve parçanın tamamını özetleme."
     )
 
 
 def _llm_user_prompt(*, artifact_title: str, chunk_sequence: int, chunk_text: str, artifact_timestamp: datetime) -> str:
     return (
-        f"Artifact title: {artifact_title}\n"
-        f"Chunk sequence: {chunk_sequence}\n"
-        f"Artifact observed_at fallback: {artifact_timestamp.strftime('%Y-%m-%d')}\n\n"
-        "Extract memory-worthy claims from this chunk. If nothing qualifies, return {\"objects\": []}. "
-        "Use observed_at only when the chunk explicitly states a concrete YYYY-MM-DD date; otherwise leave it null.\n\n"
-        f"Chunk text:\n{chunk_text}"
+        f"Belge başlığı: {artifact_title}\n"
+        f"Parça sırası: {chunk_sequence}\n"
+        f"Varsayılan belge tarihi: {artifact_timestamp.strftime('%Y-%m-%d')}\n\n"
+        "Bu parçadaki hafızaya değer kayıtları çıkar. Uygun kayıt yoksa {\"objects\": []} döndür. "
+        "observed_at alanını yalnızca parça somut bir tarih veriyorsa kullan; aksi halde null bırak.\n\n"
+        f"Belge parçası:\n{chunk_text}"
     )
 
 
@@ -507,10 +563,17 @@ def _extract_memory_candidates_with_local_llm(chunks: list[str], artifact: Artif
     return items
 
 
-def extract_memory_candidates(chunks: list[str], artifact: Artifact, artifact_text: str) -> tuple[list[ExtractionItem], ExtractionDiagnostics]:
+def extract_memory_candidates(
+    chunks: list[str],
+    artifact: Artifact,
+    artifact_text: str,
+    *,
+    use_local_llm: bool | None = None,
+) -> tuple[list[ExtractionItem], ExtractionDiagnostics]:
     settings = get_settings()
+    local_llm_enabled = settings.local_llm_enabled if use_local_llm is None else use_local_llm
     fallback_reason: str | None = None
-    if settings.local_llm_enabled:
+    if local_llm_enabled:
         try:
             llm_items = _extract_memory_candidates_with_local_llm(chunks, artifact, artifact_text)
             if llm_items:
@@ -559,7 +622,7 @@ def extract_memory_candidates(chunks: list[str], artifact: Artifact, artifact_te
                 due_date=_extract_due_date_hint(normalized_text) if memory_type == "commitment" else None,
             )
         )
-    return items, ExtractionDiagnostics(extraction_method="heuristic", fallback_reason=fallback_reason if settings.local_llm_enabled else None)
+    return items, ExtractionDiagnostics(extraction_method="heuristic", fallback_reason=fallback_reason if local_llm_enabled else None)
 
 
 def _create_graph_node(db: Session, *, workspace_id: str, node_type: str, entity_id: str, title_or_label: str, visibility_scope: str) -> GraphNode:
@@ -665,7 +728,7 @@ def _store_memory_item(db: Session, *, artifact: Artifact, chunk: ArtifactChunk,
     if item.memory_type == "decision":
         entity = model(status="active", **common_kwargs)
     elif item.memory_type == "assumption":
-        entity = model(status="active", validity_notes="Awaiting later evidence review.", **common_kwargs)
+        entity = model(status="active", validity_notes="Daha yeni kanıtlarla yeniden değerlendirilecek.", **common_kwargs)
     elif item.memory_type == "constraint":
         entity = model(category="delivery", **common_kwargs)
     elif item.memory_type == "outcome":
@@ -760,18 +823,21 @@ def _is_supersede_relationship(earlier: PersistedMemory, later: PersistedMemory)
         return False
     if later.event_timestamp <= earlier.event_timestamp:
         return False
-    return any(term in later.normalized_text.lower() for term in ("reintroduce", "revert", "instead", "update", "move", "delay", "advance", "launch"))
+    later_text = normalize_for_match(later.normalized_text)
+    return any(term in later_text for term in ("reintroduce", "revert", "instead", "update", "move", "delay", "advance", "launch", "yeniden", "yerine", "güncelle", "taşı", "ertele", "öne çek", "yayınla"))
 
 
 def _is_contradiction_relationship(earlier: PersistedMemory, later: PersistedMemory) -> bool:
     if _token_overlap(earlier.title_or_label, later.title_or_label) < 2:
         return False
-    combined = f"{earlier.normalized_text.lower()} {later.normalized_text.lower()}"
+    earlier_text = normalize_for_match(earlier.normalized_text)
+    later_text = normalize_for_match(later.normalized_text)
+    combined = f"{earlier_text} {later_text}"
     if "q2" in combined and "q3" in combined:
         return True
     if any(term in combined for term in CONTRADICTION_TERMS):
-        return any(term in earlier.normalized_text.lower() for term in ("delay", "q3", "revert")) and any(
-            term in later.normalized_text.lower() for term in ("q2", "launch", "reintroduce", "keep")
+        return any(term in earlier_text for term in ("delay", "q3", "revert", "ertele", "vazgeç")) and any(
+            term in later_text for term in ("q2", "launch", "reintroduce", "keep", "yayınla", "yeniden", "devam")
         )
     return False
 
@@ -888,13 +954,13 @@ def _update_assumption_drift(db: Session, memories: list[PersistedMemory], artif
         if not related_signals:
             continue
         strongest_signal = related_signals[0]
-        combined_text = " ".join(signal.normalized_text.lower() for signal in related_signals)
+        combined_text = " ".join(normalize_for_match(signal.normalized_text) for signal in related_signals)
         if any(pattern.search(combined_text) for pattern in NEGATIVE_OUTCOME_PATTERNS):
             assumption_row.status = "stale"
-            assumption_row.validity_notes = f"Later evidence weakened this assumption: {strongest_signal.title_or_label}"
-        if any(term in combined_text for term in ("reintroduce", "revert", "instead", "launch in q2", "delay to q3")):
+            assumption_row.validity_notes = f"Daha yeni kanıt bu varsayımı zayıflattı: {strongest_signal.title_or_label}"
+        if any(term in combined_text for term in ("reintroduce", "revert", "instead", "launch in q2", "delay to q3", "yeniden", "yerine", "vazgeç", "q2'de yayın", "q3'e ertele")):
             assumption_row.status = "reversed"
-            assumption_row.validity_notes = f"Later decision shifted the operating basis: {strongest_signal.title_or_label}"
+            assumption_row.validity_notes = f"Daha yeni karar çalışma dayanağını değiştirdi: {strongest_signal.title_or_label}"
         for signal in related_signals:
             _create_edge_if_missing(
                 db,
@@ -909,7 +975,14 @@ def _update_assumption_drift(db: Session, memories: list[PersistedMemory], artif
             )
 
 
-def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJob:
+def run_ingestion(
+    db: Session,
+    *,
+    artifact: Artifact,
+    actor: User,
+    use_local_llm: bool | None = None,
+    use_signal_explanations: bool | None = None,
+) -> IngestionJob:
     job = IngestionJob(
         workspace_id=artifact.workspace_id,
         artifact_id=artifact.artifact_id,
@@ -934,12 +1007,24 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
         artifact.extracted_text = artifact_text
         artifact.ingestion_status = "processing"
         prior_entity_ids = _memory_entity_ids_for_artifact(db, artifact.artifact_id)
-        db.query(ArtifactChunk).where(ArtifactChunk.artifact_id == artifact.artifact_id).delete(synchronize_session=False)
-        db.execute(delete(GraphEdge).where(GraphEdge.evidence_artifact_id == artifact.artifact_id))
-        if prior_entity_ids:
-            db.execute(delete(GraphNode).where(GraphNode.workspace_id == artifact.workspace_id, GraphNode.entity_id.in_(prior_entity_ids)))
+        prior_node_ids = set(
+            db.scalars(
+                select(GraphNode.node_id).where(
+                    GraphNode.workspace_id == artifact.workspace_id,
+                    GraphNode.entity_id.in_(prior_entity_ids),
+                )
+            ).all()
+        ) if prior_entity_ids else set()
+        db.execute(delete(ClaimOccurrence).where(ClaimOccurrence.source_artifact_id == artifact.artifact_id))
+        edge_filters = [GraphEdge.evidence_artifact_id == artifact.artifact_id]
+        if prior_node_ids:
+            edge_filters.extend((GraphEdge.from_node_id.in_(prior_node_ids), GraphEdge.to_node_id.in_(prior_node_ids)))
+        db.execute(delete(GraphEdge).where(or_(*edge_filters)))
         for model, _pk_name in MEMORY_MODELS.values():
             db.execute(delete(model).where(model.source_artifact_id == artifact.artifact_id))
+        if prior_entity_ids:
+            db.execute(delete(GraphNode).where(GraphNode.workspace_id == artifact.workspace_id, GraphNode.entity_id.in_(prior_entity_ids)))
+        db.query(ArtifactChunk).where(ArtifactChunk.artifact_id == artifact.artifact_id).delete(synchronize_session=False)
         db.commit()
 
         job.stage = "chunking"
@@ -975,7 +1060,12 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
 
         job.stage = "structured_extraction"
         db.commit()
-        candidates, extraction_diagnostics = extract_memory_candidates(chunks, artifact, artifact_text)
+        candidates, extraction_diagnostics = extract_memory_candidates(
+            chunks,
+            artifact,
+            artifact_text,
+            use_local_llm=use_local_llm,
+        )
         chunk_by_seq = {chunk.sequence_number: chunk for chunk in stored_chunks}
         extracted_counts = {key: 0 for key in MEMORY_MODELS}
         per_chunk_object_counts = {chunk.sequence_number: 0 for chunk in stored_chunks}
@@ -1014,9 +1104,9 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
             artifact.review_status = "needs_review"
         job.status = "completed"
         job.detail = (
-            f"Stored {len(stored_chunks)} chunks and {sum(extracted_counts.values())} extracted memory objects "
-            f"using {extraction_diagnostics.extraction_method} extraction. "
-            f"Synced {temporal_sync_summary['occurrence_count']} temporal claim occurrence(s)."
+            f"{len(stored_chunks)} metin parçası ve {sum(extracted_counts.values())} kurumsal hafıza kaydı işlendi. "
+            f"{temporal_sync_summary['occurrence_count']} zaman bağlantılı kayıt eşitlendi."
+            + (" Sinyal metinleri bu işlemde yerel model kullanılmadan oluşturuldu." if use_signal_explanations is False else "")
         )
         db.commit()
         log_event(
@@ -1056,6 +1146,9 @@ def run_ingestion(db: Session, *, artifact: Artifact, actor: User) -> IngestionJ
         db.refresh(job)
         return job
     except Exception as exc:
+        db.rollback()
+        db.refresh(job)
+        db.refresh(artifact)
         job.status = "failed"
         job.stage = "failed"
         job.detail = str(exc)

@@ -1,101 +1,46 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { formatDateTime } from '../lib/format'
 import { applyThemePreference, nextThemePreference, readInitialThemePreference, type ThemePreference } from '../lib/theme'
 
 const employeeNavigation = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/query', label: 'Assistant' },
-  { to: '/team-chat', label: 'Team chat' },
-  { to: '/memory', label: 'Memory' },
-  { to: '/graph', label: 'Graph' },
+  { to: '/', label: 'Ana sayfa', end: true },
+  { to: '/query', label: 'İzge' },
+  { to: '/team-chat', label: 'Team Chat' },
+  { to: '/memory', label: 'Hafıza' },
+  { to: '/tasks', label: 'İşlerim' },
 ]
-
 const adminNavigation = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/operations', label: 'Operations' },
-  { to: '/memory', label: 'Memory' },
-  { to: '/ingestion', label: 'Ingestion' },
-  { to: '/team-chat', label: 'Team chat' },
-  { to: '/graph', label: 'Graph' },
-  { to: '/memory-filesystem', label: 'Memory FS' },
-  { to: '/orchestration', label: 'Jobs' },
-  { to: '/readiness', label: 'Readiness' },
+  { to: '/', label: 'Kontrol paneli', end: true }, { to: '/operations', label: 'Operasyonlar' },
+  { to: '/memory', label: 'Hafıza' }, { to: '/ingestion', label: 'İşleme' },
+  { to: '/team-chat', label: 'Team Chat' }, { to: '/graph', label: 'Bilgi grafiği' },
+  { to: '/tasks', label: 'İşler' }, { to: '/memory-filesystem', label: 'Dosya sistemi' },
+  { to: '/orchestration', label: 'Çalışmalar' }, { to: '/readiness', label: 'Hazırlık' },
 ]
 
 export function AppShell() {
   const { session, signOut } = useAuth()
+  const { pathname } = useLocation()
+  const isChatPage = pathname === '/query' || pathname === '/team-chat'
   const [theme, setTheme] = useState<ThemePreference>(() => readInitialThemePreference())
   const isAdmin = session?.user.role === 'Admin'
-  const navigationItems = isAdmin
-    ? [...adminNavigation, { to: '/admin/data', label: 'Data' }, { to: '/audit', label: 'Audit' }, { to: '/admin/users', label: 'Users' }]
-    : employeeNavigation
+  const navigationItems = isAdmin ? [...adminNavigation, { to: '/admin/data', label: 'Veri' }, { to: '/audit', label: 'Denetim' }, { to: '/admin/users', label: 'Kullanıcılar' }] : employeeNavigation
   const nextTheme = nextThemePreference(theme)
-  const roleLabel = isAdmin ? 'Admin' : 'Employee'
+  useEffect(() => { applyThemePreference(theme) }, [theme])
 
-  useEffect(() => {
-    applyThemePreference(theme)
-  }, [theme])
-
-  return (
-    <div className="app-frame">
-      <div className="site-atmosphere" aria-hidden="true">
-        <span className="atmosphere-plane atmosphere-plane-one" />
-        <span className="atmosphere-plane atmosphere-plane-two" />
-        <span className="atmosphere-scanline" />
+  return <div className={isChatPage ? 'app-frame app-frame-chat' : 'app-frame'}>
+    <div className="site-atmosphere" aria-hidden="true"><span className="atmosphere-plane atmosphere-plane-one" /><span className="atmosphere-plane atmosphere-plane-two" /><span className="atmosphere-scanline" /></div>
+    <header className="top-nav">
+      <NavLink to="/" end className="brand-mark" aria-label="Izge ana sayfa"><span className="brand-sigil">İZ</span><span><span className="brand-kicker">{isAdmin ? 'Hafıza operasyonları' : 'Şirket hafızası'}</span><span className="brand-name">Izge</span></span></NavLink>
+      <nav className="nav-group" aria-label="Ana menü">{navigationItems.map((item) => <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => isActive ? 'nav-link nav-link-active' : 'nav-link'}>{item.label}</NavLink>)}</nav>
+      <div className="session-cluster">
+        <label className="language-select"><span className="sr-only">Dil</span><select defaultValue="tr" aria-label="Dil"><option value="tr">Türkçe</option><option value="en" disabled>English — Yakında</option></select></label>
+        <button type="button" className="theme-toggle" aria-label={`${nextTheme === 'dark' ? 'Koyu' : 'Açık'} temaya geç`} aria-pressed={theme === 'light'} onClick={() => setTheme(nextTheme)}><span aria-hidden="true" className="theme-toggle-icon">{theme === 'dark' ? '☀' : '☾'}</span><span className="theme-toggle-label">{theme === 'dark' ? 'Açık' : 'Koyu'}</span></button>
+        <div className="identity-block"><p className="identity-name">{session?.user.display_name}</p><p className="identity-meta">{isAdmin ? 'Yönetici' : 'Çalışan'} / {session?.expiresAt ? formatDateTime(session.expiresAt) : 'Oturum açık'}</p></div>
+        <button type="button" className="text-button" onClick={signOut}>Çıkış yap</button>
       </div>
-
-      <header className="top-nav">
-        <NavLink to="/" end className="brand-mark" aria-label="Izge home">
-          <span className="brand-sigil">IZ</span>
-          <span>
-            <span className="brand-kicker">{isAdmin ? 'Memory operations' : 'Company memory'}</span>
-            <span className="brand-name">Izge</span>
-          </span>
-        </NavLink>
-
-        <nav className="nav-group" aria-label="Primary">
-          {navigationItems.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => (isActive ? 'nav-link nav-link-active' : 'nav-link')}>
-              {item.label}
-            </NavLink>
-          ))}
-          {isAdmin ? (
-            <a className="nav-link" href="/docs/IZGE_OFFICIAL_DOCUMENTATION.html">
-              Docs
-            </a>
-          ) : null}
-        </nav>
-
-        <div className="session-cluster">
-          <NavLink
-            to="/query"
-            className={({ isActive }) => (isActive ? 'chat-launcher chat-launcher-active' : 'chat-launcher')}
-            aria-label="Open company memory chat"
-          >
-            <span aria-hidden="true" className="chat-launcher-icon">💬</span>
-            <span className="chat-launcher-label">Chat</span>
-          </NavLink>
-          <button type="button" className="theme-toggle" aria-label={`Switch to ${nextTheme} theme`} aria-pressed={theme === 'light'} onClick={() => setTheme(nextTheme)}>
-            <span aria-hidden="true" className="theme-toggle-icon">{theme === 'dark' ? '☀' : '☾'}</span>
-            <span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
-          </button>
-          <div className="identity-block">
-            <p className="identity-name">{session?.user.display_name}</p>
-            <p className="identity-meta">{roleLabel} / {session?.expiresAt ? formatDateTime(session.expiresAt) : 'Active session'}</p>
-          </div>
-          <button type="button" className="text-button" onClick={signOut}>
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      <main className="workspace-column">
-        <section className="workspace-content">
-          <Outlet />
-        </section>
-      </main>
-    </div>
-  )
+    </header>
+    <main className="workspace-column"><section className="workspace-content"><Outlet /></section></main>
+  </div>
 }

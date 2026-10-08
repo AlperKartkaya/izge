@@ -36,6 +36,10 @@ import type {
   TokenResponse,
   UserRead,
   UserRole,
+  WorkTaskRead,
+  WorkTaskStatus,
+  AgentRunCreated,
+  AgentRunRead,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() || '/api'
@@ -267,6 +271,75 @@ export const api = {
 
   listTeamChatTyping(token: string, thread_id: string, thread_kind: 'channel' | 'direct' | 'group' = 'channel') {
     return request<TeamChatTypingRead>(`/team-chat/typing?thread_id=${encodeURIComponent(thread_id)}&thread_kind=${thread_kind}`, { token })
+  },
+
+  listWorkTasks(token: string) {
+    return request<{ items: WorkTaskRead[] }>('/work/tasks', { token }).then((response) => response.items)
+  },
+
+  createWorkTask(token: string, payload: {
+    title: string
+    description?: string | null
+    assignee_user_id?: string | null
+    due_at?: string | null
+    remind_at?: string | null
+    source_artifact_ids?: string[]
+  }) {
+    return request<WorkTaskRead>('/work/tasks', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(payload),
+    })
+  },
+
+  updateWorkTask(token: string, taskId: string, payload: Partial<{
+    title: string
+    description: string | null
+    status: WorkTaskStatus
+    assignee_user_id: string | null
+    due_at: string | null
+    remind_at: string | null
+    source_artifact_ids: string[]
+  }>) {
+    return request<WorkTaskRead>(`/work/tasks/${taskId}`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify(payload),
+    })
+  },
+
+  askColleague(token: string, payload: {
+    message: string
+    thread_id?: string
+    thread_title?: string
+    thread_kind?: 'channel' | 'direct' | 'group'
+    participant_user_ids?: string[]
+    client_request_id?: string
+  }) {
+    return request<AgentRunCreated>('/work/ask', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(payload),
+    })
+  },
+
+  listAgentRuns(token: string) {
+    return request<{ items: AgentRunRead[] }>('/work/runs', { token }).then((response) => response.items)
+  },
+
+  getAgentRun(token: string, runId: string) {
+    return request<AgentRunRead>(`/work/runs/${runId}`, { token })
+  },
+
+  requestEveningReview(token: string) {
+    return request<{ run_id: string; status: 'queued' | 'running' }>('/work/review', {
+      method: 'POST',
+      token,
+    })
+  },
+
+  agentRunEventsUrl(runId: string) {
+    return `${API_BASE}/work/runs/${encodeURIComponent(runId)}/events`
   },
 
   getGraphSummary(token: string) {

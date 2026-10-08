@@ -3,10 +3,9 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthGate, useAuth } from './auth/AuthContext'
 import { AppShell } from './layout/AppShell'
 import { AdminPage } from './pages/AdminPage'
-import { ArtifactsPage } from './pages/ArtifactsPage'
 import { AuditPage } from './pages/AuditPage'
 import { DataAdminPage } from './pages/DataAdminPage'
-import { DashboardPage } from './pages/DashboardPage'
+import { HomePage } from './pages/HomePage'
 import { GraphPage } from './pages/GraphPage'
 import { IngestionPage } from './pages/IngestionPage'
 import { MemoryFilesystemPage } from './pages/MemoryFilesystemPage'
@@ -19,6 +18,8 @@ import { SignalDetailPage } from './pages/SignalDetailPage'
 import { SignInPage } from './pages/SignInPage'
 import { TargetReadinessPage } from './pages/TargetReadinessPage'
 import { TeamChatPage } from './pages/TeamChatPage'
+import { MemoryPage } from './pages/MemoryPage'
+import { TasksPage } from './pages/TasksPage'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -54,9 +55,9 @@ function App() {
             </AuthGate>
           }
         >
-          <Route index element={<DashboardPage />} />
-          <Route path="memory" element={<ArtifactsPage />} />
-          <Route path="artifacts" element={<ArtifactsPage />} />
+          <Route index element={<HomePage />} />
+          <Route path="memory" element={<MemoryPage />} />
+          <Route path="artifacts" element={<MemoryPage />} />
           <Route
             path="ingestion"
             element={
@@ -66,11 +67,12 @@ function App() {
             }
           />
           <Route path="team-chat" element={<TeamChatPage />} />
+          <Route path="tasks" element={<TasksPage />} />
           <Route path="query" element={<QueryPage />} />
-          <Route path="query/:queryRunId" element={<QueryResultPage />} />
+          <Route path="query/:queryRunId" element={<AdminOnlyRoute><QueryResultPage /></AdminOnlyRoute>} />
           <Route path="signals/:signalId" element={<SignalDetailPage />} />
-          <Route path="memory/:memoryType/:memoryId" element={<MemoryDetailPage />} />
-          <Route path="graph" element={<GraphPage />} />
+          <Route path="memory/:memoryType/:memoryId" element={<AdminOnlyRoute><MemoryDetailPage /></AdminOnlyRoute>} />
+          <Route path="graph" element={<AdminOnlyRoute><GraphPage /></AdminOnlyRoute>} />
           <Route
             path="operations"
             element={

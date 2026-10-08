@@ -26,6 +26,7 @@ try:
             "IZGE_STORAGE_ROOT": str(root / "storage"),
             "IZGE_PASTED_TEXT_ROOT": str(root / "pasted"),
             "IZGE_BOOTSTRAP_ADMIN_CREDENTIALS_PATH": str(root / "bootstrap_admin_credentials.json"),
+            "IZGE_DEMO_SEED_ENABLED": "true",
             "IZGE_DEFAULT_ADMIN_EMAIL": "admin@example.com",
             "IZGE_DEFAULT_ADMIN_PASSWORD": "change-me-admin",
             "IZGE_SYNC_DEFAULT_ADMIN_PASSWORD": "true",
@@ -63,7 +64,8 @@ try:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert users_response.status_code == 200, users_response.text
-        emails = {user["email"] for user in users_response.json()}
+        user_ids = {user["email"]: user["user_id"] for user in users_response.json()}
+        emails = set(user_ids)
         expected_employees = {"employee1@example.com", "employee2@example.com", "employee3@example.com"}
         assert expected_employees <= emails, emails
 
@@ -76,6 +78,7 @@ try:
                 "thread_title": "Employee 1 / Employee 2",
                 "thread_kind": "direct",
                 "message_metadata": {
+                    "participant_user_ids": [user_ids["employee1@example.com"], user_ids["employee2@example.com"]],
                     "action": "assistant_chat_share",
                     "thread_id": "must-not-overwrite-server-thread",
                     "assistant_thread_snapshot": {"id": "smoke-chat", "title": "Smoke chat", "messages": []},

@@ -17,7 +17,7 @@ def create_ingestion_run(payload: IngestionRunCreate, current_user: User = Depen
     require_admin(current_user)
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == payload.artifact_id, Artifact.workspace_id == current_user.workspace_id))
     if artifact is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
     require_artifact_access(db, artifact, current_user)
     job = run_ingestion(db, artifact=artifact, actor=current_user)
     return IngestionJobRead.model_validate(job)
@@ -27,9 +27,9 @@ def create_ingestion_run(payload: IngestionRunCreate, current_user: User = Depen
 def get_ingestion_job(job_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> IngestionJobRead:
     job = db.scalar(select(IngestionJob).where(IngestionJob.job_id == job_id, IngestionJob.workspace_id == current_user.workspace_id))
     if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ingestion job not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak işleme kaydı bulunamadı.")
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == job.artifact_id))
     if artifact is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
     require_artifact_access(db, artifact, current_user)
     return IngestionJobRead.model_validate(job)

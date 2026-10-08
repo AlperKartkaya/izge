@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 OLLAMA_BASE_URL="${IZGE_LOCAL_LLM_BASE_URL:-http://127.0.0.1:11434}"
-OLLAMA_MODEL="${IZGE_LOCAL_LLM_MODEL:-qwen3.5:4b}"
+OLLAMA_MODEL="${IZGE_LOCAL_LLM_MODEL:-qwen3.5:9b}"
 
 python3 - "$OLLAMA_BASE_URL" "$OLLAMA_MODEL" <<'PY'
 import json

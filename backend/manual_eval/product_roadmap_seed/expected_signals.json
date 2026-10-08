@@ -33,7 +33,7 @@
       ],
       "expected_top_provenance_contains": [
         "03 Self Serve Onboarding Launch Reversal Or Conflict",
-        "later-vs-earlier conflict"
+        "doğrudan alıntı"
       ],
       "expected_top_from_evidence_contains": [
         "late Q2 2026"
@@ -58,7 +58,7 @@
       ],
       "expected_top_provenance_contains": [
         "04 Self Serve Onboarding Launch Checkpoint",
-        "Direct later-signal excerpt"
+        "daha yeni alıntı"
       ]
     },
     {
@@ -66,9 +66,9 @@
       "query": "What should the team do next about self-serve onboarding launch?",
       "expected_query_class": "Next-action guidance",
       "expected_actions_contains": [
-        "Resolve the conflict",
-        "Revalidate the assumption",
-        "Review the open commitment"
+        "çelişkiyi çözün",
+        "varsayımını yeniden doğrulayın",
+        "açık taahhüdü"
       ],
       "expected_supporting_memory_types": [
         "commitment"

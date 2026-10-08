@@ -192,7 +192,7 @@ def _normalize_llm_query_intent_payload(payload: dict[str, Any], *, deterministi
 
     rationale = _first_string(normalized, ("route_rationale", "rationale", "reason", "reasoning", "explanation"))
     if rationale is None:
-        rationale = _first_string(deterministic_route, ("route_rationale", "rationale")) or "Local LLM returned a compact route label."
+        rationale = _first_string(deterministic_route, ("route_rationale", "rationale")) or "Yerel model kısa bir yönlendirme etiketi döndürdü."
     normalized["route_rationale"] = rationale
 
     if not isinstance(normalized.get("secondary_signals"), list):
@@ -209,12 +209,12 @@ def _normalize_llm_answer_payload(payload: dict[str, Any], *, deterministic_resu
     normalized = dict(payload)
     answer_text = _first_string(normalized, ("answer_text", "answer", "summary", "response", "final_answer"))
     if answer_text is None:
-        answer_text = _first_string(deterministic_result, ("answer_text", "answer")) or "The current visible memory does not provide enough evidence for a stronger answer."
+        answer_text = _first_string(deterministic_result, ("answer_text", "answer")) or "Mevcut görünür şirket hafızası daha güçlü bir yanıt için yeterli kanıt sunmuyor."
     normalized["answer_text"] = answer_text
 
     why_this_answer = _first_string(normalized, ("why_this_answer", "why", "rationale", "reasoning", "grounded_reasoning", "confidence_rationale"))
     if why_this_answer is None:
-        why_this_answer = _first_string(deterministic_result, ("why_this_answer", "rationale")) or "This wording is constrained to the deterministic evidence packet."
+        why_this_answer = _first_string(deterministic_result, ("why_this_answer", "rationale")) or "Bu yanıt yalnızca sağlanan kanıtlarla sınırlandırıldı."
     normalized["why_this_answer"] = why_this_answer
 
     if not isinstance(normalized.get("recommended_next_actions"), list):
@@ -284,19 +284,18 @@ def _filter_to_allowed(returned_ids: list[str], allowed_ids: set[str]) -> list[s
 
 def _signal_explanation_system_prompt() -> str:
     return (
-        "You are Izge's local, company-controlled inference helper. Rewrite proactive signal explanations only. "
-        "The deterministic graph engine has already detected and classified the signal; do not invent a new signal, "
-        "new memory object, new artifact, or unsupported claim. Use only the provided JSON context. Keep the wording "
-        "serious, evidence-first, and implementation-aware. Return strict JSON matching the schema."
+        "Sen İzge'nin şirket kontrolündeki yerel çıkarım yardımcısısın. Yalnızca mevcut proaktif sinyalin açıklamasını "
+        "doğal Türkçeyle yeniden yaz. Sinyal zaten tespit edilip sınıflandırıldı; yeni sinyal, hafıza kaydı, belge veya "
+        "desteksiz iddia üretme. Yalnızca verilen JSON bağlamını kullan. Kanıtı öncele ve şemaya uyan katı JSON döndür."
     )
 
 
 def _query_intent_system_prompt() -> str:
     return (
-        "You are Izge's local, company-controlled query intent router. Classify the user's question into one of the "
-        "fixed MVP reasoning modes only. Do not answer the question, retrieve evidence, invent facts, or create new "
-        "memory. Your output only helps deterministic graph execution choose the route and topic focus. Return strict "
-        "JSON matching the schema. Use these exact top-level keys: query_class, confidence, route_rationale, "
+        "Sen İzge'nin şirket kontrolündeki yerel sorgu yönlendiricisisin. Kullanıcının Türkçe sorusunu yalnızca sabit "
+        "MVP akıl yürütme modlarından birine sınıflandır. Soruyu yanıtlama, kanıt getirme, bilgi uydurma veya yeni hafıza "
+        "oluşturma. Çıktın yalnızca rota ve konu odağı seçiminde kullanılır. Şemaya uyan katı JSON döndür. "
+        "Şu üst düzey anahtarları aynen kullan: query_class, confidence, route_rationale, "
         "secondary_signals, topic_terms, asks_for_evidence, needs_next_action."
     )
 
@@ -315,19 +314,19 @@ def classify_query_intent_with_local_llm(*, query_text: str, deterministic_route
             "deterministic_execution_remains_authority": True,
         },
         "mode_definitions": {
-            "Decision lineage": "Use when the user asks why/when/how a decision changed, the history of a topic, or what led to the current state.",
-            "Contradiction analysis": "Use when the user asks whether something conflicts with prior history, is inconsistent, or creates tension.",
-            "Assumption drift": "Use when the user asks what changed, whether assumptions still hold, or which beliefs became stale/reversed.",
-            "Next-action guidance": "Use when the user asks what to do next, needs a recommendation, or asks for a decision/action after evidence.",
+            "Decision lineage": "Bir kararın neden, ne zaman veya nasıl değiştiği ya da konunun geçmişi sorulduğunda kullan.",
+            "Contradiction analysis": "Bir şeyin önceki kayıtlarla çelişip çelişmediği veya tutarsızlık yaratıp yaratmadığı sorulduğunda kullan.",
+            "Assumption drift": "Neyin değiştiği, varsayımların hâlâ geçerli olup olmadığı veya hangilerinin eskidiği sorulduğunda kullan.",
+            "Next-action guidance": "Kullanıcı bundan sonra ne yapılacağını veya kanıta dayalı öneri istediğinde kullan.",
         },
         "deterministic_keyword_route": _compact_for_prompt(deterministic_route),
         "query_text": query_text,
     }
     user_prompt = (
-        "Classify this Izge query into exactly one MVP reasoning mode. Prefer the user's dominant intent, not generic "
-        "search. If the query asks both what changed and what to do, choose Next-action guidance and include Assumption "
-        "drift as a secondary signal. If it asks whether a new statement conflicts with history, choose Contradiction "
-        "analysis. Extract concise topic_terms that deterministic graph search can use.\n\n"
+        "Bu İzge sorgusunu tam olarak bir MVP akıl yürütme moduna sınıflandır. Genel arama yerine baskın kullanıcı "
+        "niyetini seç. Sorgu hem neyin değiştiğini hem ne yapılacağını soruyorsa Next-action guidance seç ve Assumption "
+        "drift'i ikincil sinyal yap. Yeni bir ifadenin geçmişle çelişip çelişmediğini soruyorsa Contradiction analysis "
+        "seç. Aramada kullanılabilecek kısa Türkçe topic_terms çıkar.\n\n"
         f"Context JSON:\n{json.dumps(context, sort_keys=True, default=str)}"
     )
     try:
@@ -340,12 +339,11 @@ def classify_query_intent_with_local_llm(*, query_text: str, deterministic_route
 
 def _query_answer_system_prompt() -> str:
     return (
-        "You are Izge's local, company-controlled answer synthesis helper for real company employees. Rewrite a final "
-        "answer only from the deterministic evidence packet and optional conversation context. The employee is a human, "
-        "not a database operator: answer in plain workplace language, concise Markdown, and with a useful conclusion "
-        "first. Do not expose internal mechanics such as deterministic routes, graph engines, packet IDs, or memory-object "
-        "implementation details unless the employee explicitly asks about them. Do not retrieve, infer hidden facts, "
-        "invent citations, or alter the selected query class. If evidence is thin, say so plainly. Return strict JSON "
+        "Sen gerçek şirket çalışanlarına yardım eden, şirket kontrolündeki yerel İzge ekip arkadaşısın. Son yanıtı yalnızca "
+        "verilen kanıt paketi ve isteğe bağlı konuşma bağlamından üret. Kullanıcı bir veritabanı operatörü değil: açık, doğal "
+        "Türkçe ve kısa Markdown kullan; işe yarayan sonucu başta söyle. Kullanıcı özellikle sormadıkça rota, grafik motoru, "
+        "paket kimliği veya hafıza nesnesi gibi iç teknik ayrıntıları gösterme. Gizli bilgi çıkarma, kaynak uydurma veya seçili "
+        "sorgu sınıfını değiştirme. Kanıt zayıfsa bunu açıkça söyle. Şemaya uyan katı JSON döndür. "
         "matching the schema. Use these exact top-level keys: answer_text, why_this_answer, recommended_next_actions, "
         "cited_evidence_ids, cited_memory_ids, confidence_rationale."
     )
@@ -377,11 +375,11 @@ def synthesize_query_answer_with_local_llm(
         "deterministic_result": _compact_for_prompt(deterministic_result),
     }
     user_prompt = (
-        "Rewrite this Izge query result for an employee who wants to finish a work task. Use Markdown in answer_text. "
-        "Recommended shape: a short direct answer first, then bullets only if they help. Preserve the deterministic "
-        "conclusion if it is already specific. Use cited_evidence_ids and cited_memory_ids only from the provided packet. "
-        "Keep recommendations concrete but do not add actions unsupported by the packet. Use conversation_context only "
-        "to resolve pronouns or follow-up intent; do not treat it as evidence.\n\n"
+        "Bu İzge sorgu sonucunu işini tamamlamak isteyen bir çalışan için doğal Türkçeyle yeniden yaz. answer_text içinde "
+        "Markdown kullan. Önce kısa ve doğrudan yanıt ver; yalnızca faydalıysa maddeler ekle. Mevcut kesin sonucu koru. "
+        "cited_evidence_ids ve cited_memory_ids alanlarında yalnızca paketteki kimlikleri kullan. Önerileri somut tut ama "
+        "paketin desteklemediği eylem ekleme. conversation_context yalnızca zamirleri ve takip niyetini anlamak içindir; "
+        "onu kanıt sayma.\n\n"
         f"Context JSON:\n{json.dumps(context, sort_keys=True, default=str)}"
     )
     try:

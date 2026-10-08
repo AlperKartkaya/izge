@@ -104,3 +104,12 @@ Recommended employee copy:
 - Employee `/` renders a task-first home inside `DashboardPage`.
 - Admin `/` keeps the operations dashboard inside `DashboardPage`.
 - Admin-only operational routes are guarded in `App.tsx` so employees who manually enter those URLs return to the employee home.
+
+## Employee chat and source previews (2026-10-09)
+
+- `/query` and `/team-chat` fill the viewport below the shared navigation. The document never scrolls; message history and the conversation directory scroll independently. Polling must not move a reader away from older messages; new replies follow only while already near the bottom, after sending, or on thread selection.
+- Adapt beautiful-ui 07 Chat (message hierarchy), 08 Prompt Bar (two-row composer, source chip and send control), and 10 Context Cards (daily review with evidence cards) to existing CSS tokens and real API state. No scripted replies, fake tools, model picker or new dependencies.
+- Enter sends, Shift+Enter adds a line; IME composition is not submitted. The composer remains visible and keyboard accessible.
+- Evidence opens in a centered native modal, not a new tab: roughly 620×440px maximum, responsive on small screens, scrollable content, top-right close button, Escape and focus return. Render text safely and PDFs as authenticated blob previews; permission errors remain visible and unsupported binary is never rendered as text. Browsers without a native PDF viewer show a clearly labeled 500-character extracted-text preview and a download link rather than a blank frame.
+- The memory source directory has a bounded scroll region. Daily evaluation keeps its complete answer and source quotes available without expanding an unbounded card stack.
+- Website content, backend behavior and administration features remain outside this UI change. Existing admin source-preview links also reuse the same modal; downloads remain unchanged.

@@ -21,6 +21,7 @@ from app.routers.signals import router as signals_router
 from app.routers.system import router as system_router
 from app.routers.team_chat import router as team_chat_router
 from app.routers.users import router as users_router
+from app.routers.work import router as work_router
 from app.services.bootstrap import initialize_database, seed_defaults
 
 
@@ -46,6 +47,7 @@ def health() -> dict[str, str]:
 
 app.include_router(auth_router, prefix=settings.api_prefix)
 app.include_router(users_router, prefix=settings.api_prefix)
+app.include_router(work_router, prefix=settings.api_prefix)
 app.include_router(artifacts_router, prefix=settings.api_prefix)
 app.include_router(ingestion_router, prefix=settings.api_prefix)
 app.include_router(query_router, prefix=settings.api_prefix)

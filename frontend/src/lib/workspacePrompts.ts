@@ -1,10 +1,10 @@
 export const canonicalWorkspacePrompt =
-  'What changed in the company record, does it conflict with prior decisions, and what should the team do next?'
+  'Şirket kayıtlarında ne değişti, bu değişiklik önceki kararlarla çelişiyor mu ve ekip sırada ne yapmalı?'
 
 export const workspaceStarterPrompts = [
   canonicalWorkspacePrompt,
-  'What was decided about the current launch plan and why?',
-  'Which recent notes contradict earlier commitments?',
-  'Which assumptions now look stale based on newer evidence?',
-  'What should the team do next based on unresolved commitments?',
+  'Mevcut lansman planı hakkında neye, neden karar verildi?',
+  'Hangi yeni notlar önceki taahhütlerle çelişiyor?',
+  'Yeni kanıtlara göre hangi varsayımlar artık geçerliliğini yitirmiş görünüyor?',
+  'Ekip, sonuçlanmamış taahhütlere göre sırada ne yapmalı?',
 ]

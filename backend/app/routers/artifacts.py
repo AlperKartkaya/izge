@@ -30,25 +30,24 @@ router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 
 
 def _feed_memory_inline(db: Session, artifact: Artifact, actor: User) -> None:
-    """Index newly added source material now with deterministic extraction so intake stays responsive."""
+    """Index newly added source material immediately without mutating process-wide settings."""
     from app.config import get_settings
     from app.services.ingestion import run_ingestion
 
     settings = get_settings()
-    previous_local_llm_enabled = settings.local_llm_enabled
-    previous_signal_explanation_enabled = settings.llm_signal_explanation_enabled
-    settings.local_llm_enabled = False
-    settings.llm_signal_explanation_enabled = False
     try:
-        run_ingestion(db, artifact=artifact, actor=actor)
+        run_ingestion(
+            db,
+            artifact=artifact,
+            actor=actor,
+            use_local_llm=settings.local_llm_enabled,
+            use_signal_explanations=False,
+        )
     except Exception as exc:
         artifact.ingestion_status = "failed"
         artifact.review_status = "needs_review"
         artifact.review_notes = f"Memory ingestion failed after intake: {exc}"
         db.commit()
-    finally:
-        settings.local_llm_enabled = previous_local_llm_enabled
-        settings.llm_signal_explanation_enabled = previous_signal_explanation_enabled
 
 
 @router.post("/upload", response_model=ArtifactRead, status_code=status.HTTP_201_CREATED)
@@ -62,16 +61,16 @@ async def upload_artifact(
 ) -> ArtifactRead:
     settings = get_settings()
     if visibility_scope not in {"workspace", "restricted"}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="visibility_scope must be workspace or restricted")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Görünürlük şirket geneli veya kısıtlı olmalıdır.")
     if current_user.role != "Admin" and visibility_scope != "workspace":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can create restricted artifacts")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Kısıtlı kaynakları yalnızca yöneticiler oluşturabilir.")
     try:
         ensure_supported_upload(file)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     content = await file.read()
     if len(content) > settings.max_upload_bytes:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Upload exceeds maximum allowed size")
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Dosya izin verilen boyut sınırını aşıyor.")
     artifact = Artifact(
         workspace_id=current_user.workspace_id,
         title=title,
@@ -114,9 +113,9 @@ async def upload_artifact(
 def create_pasted_text_artifact(payload: PastedTextCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ArtifactRead:
     settings = get_settings()
     if len(payload.text.encode("utf-8")) > settings.max_pasted_text_bytes:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Pasted text exceeds maximum allowed size")
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Not izin verilen boyut sınırını aşıyor.")
     if current_user.role != "Admin" and payload.visibility_scope != "workspace":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can create restricted artifacts")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Kısıtlı kaynakları yalnızca yöneticiler oluşturabilir.")
     artifact = Artifact(
         workspace_id=current_user.workspace_id,
         title=payload.title,
@@ -161,7 +160,7 @@ def list_artifacts(current_user: User = Depends(get_current_user), db: Session =
 def get_artifact(artifact_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ArtifactDetail:
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
     if artifact is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
     require_artifact_access(db, artifact, current_user)
     chunks = db.scalars(select(ArtifactChunk).where(ArtifactChunk.artifact_id == artifact.artifact_id).order_by(ArtifactChunk.sequence_number.asc())).all()
     chunk_count = len(chunks)
@@ -213,7 +212,7 @@ def download_artifact_source(artifact_id: str, current_user: User = Depends(get_
 def get_artifact_signals(artifact_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ArtifactProactiveSignals:
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
     if artifact is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
     require_artifact_access(db, artifact, current_user)
     return ArtifactProactiveSignals(**artifact_proactive_signals(db, current_user, artifact))
 
@@ -228,7 +227,7 @@ def update_artifact_permissions(
     require_admin(current_user)
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
     if artifact is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
     artifact.visibility_scope = payload.visibility_scope
     db.commit()
     set_artifact_permissions(db, artifact=artifact, actor=current_user, permitted_user_ids=payload.permitted_user_ids)
@@ -254,7 +253,7 @@ def update_artifact_metadata(
     require_admin(current_user)
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
     if artifact is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
     old_title = artifact.title
     artifact.title = payload.title
     db.commit()
@@ -280,7 +279,7 @@ def update_artifact_review_status(
     require_admin(current_user)
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
     if artifact is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
     artifact.review_status = payload.review_status
     artifact.review_notes = payload.review_notes
     artifact.reviewed_by = current_user.user_id
@@ -301,18 +300,18 @@ def update_artifact_review_status(
 def _get_accessible_artifact(db: Session, artifact_id: str, current_user: User) -> Artifact:
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
     if artifact is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
     require_artifact_access(db, artifact, current_user)
     return artifact
 
 
 def _artifact_source_file(artifact: Artifact) -> Path:
     if not artifact.source_path or artifact.source_path == "pending":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact source file is not available yet")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak dosyası henüz hazır değil.")
 
     source_path = resolve_artifact_source_path(source_path=artifact.source_path, artifact_id=artifact.artifact_id, source_type=artifact.source_type)
     if source_path is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact source path is not a file")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak dosyası bulunamadı.")
     return source_path
 
 

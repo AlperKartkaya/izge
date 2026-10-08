@@ -1,3 +1,4 @@
+import { SourcePreviewButton } from '../components/SourcePreviewButton'
 import {
   useEffect,
   useMemo,
@@ -838,16 +839,7 @@ export function GraphPage() {
                   {selectedGraphNode.kind === 'artifact' &&
                   selectedGraphNode.artifactId ? (
                     <div className="graph-detail-actions inline-actions">
-                      <a
-                        className="primary-button"
-                        href={api.artifactPreviewUrl(
-                          selectedGraphNode.artifactId,
-                        )}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Preview artifact
-                      </a>
+                      <SourcePreviewButton artifactId={selectedGraphNode.artifactId} title={selectedGraphNode.label} className="primary-button">Preview artifact</SourcePreviewButton>
                       <a
                         className="secondary-button"
                         href={api.artifactDownloadUrl(
@@ -896,16 +888,7 @@ export function GraphPage() {
                           Open memory
                         </Link>
                         {selectedGraphNode.artifactId ? (
-                          <a
-                            className="secondary-button"
-                            href={api.artifactPreviewUrl(
-                              selectedGraphNode.artifactId,
-                            )}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Preview source
-                          </a>
+                          <SourcePreviewButton artifactId={selectedGraphNode.artifactId} title={selectedGraphNode.label} className="secondary-button">Preview source</SourcePreviewButton>
                         ) : null}
                       </div>
                     </div>

@@ -52,7 +52,7 @@ def enforce_sign_in_rate_limit(*, client_host: str | None, email: str) -> None:
         if len(attempts) >= max(settings.auth_rate_limit_max_attempts, 1):
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many failed sign-in attempts. Try again later.",
+                detail="Çok fazla başarısız giriş denemesi. Lütfen daha sonra tekrar deneyin.",
             )
 
 
@@ -91,17 +91,17 @@ def create_session(db: Session, user: User) -> tuple[UserSession, str]:
 def authenticate_user(db: Session, email: str, password: str) -> User:
     user = db.scalar(select(User).where(User.email == email))
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı.")
     return user
 
 
 def get_user_by_token(db: Session, token: str) -> User:
     session = db.scalar(select(UserSession).where(UserSession.token == hash_session_token(token)))
     if session is None or session.expires_at < datetime.utcnow():
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Oturumunuzun süresi doldu. Lütfen yeniden giriş yapın.")
     user = db.scalar(select(User).where(User.user_id == session.user_id))
     if user is None or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive user")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bu kullanıcı hesabı etkin değil.")
     return user
 
 

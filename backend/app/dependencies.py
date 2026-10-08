@@ -17,7 +17,7 @@ def get_bearer_token(request: Request, authorization: str | None = Header(defaul
     session_cookie = request.cookies.get(get_settings().session_cookie_name)
     if session_cookie:
         return session_cookie
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token or session cookie required")
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Lütfen giriş yapın.")
 
 
 def get_current_user(token: str = Depends(get_bearer_token), db: Session = Depends(get_db)) -> User:

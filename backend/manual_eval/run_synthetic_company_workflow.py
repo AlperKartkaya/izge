@@ -52,7 +52,7 @@ def expect_list(payload: dict | list | None, label: str) -> list[dict[str, Any]]
 
 
 def serialize(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, default=str)
+    return json.dumps(value, sort_keys=True, default=str, ensure_ascii=False)
 
 
 def contains_all(value: Any, fragments: list[str]) -> bool:
@@ -382,7 +382,7 @@ def standalone_checks(admin_token: str, uploaded: dict[str, dict[str, Any]], res
                 "scenario_packet_is_typed": scenario.get("scenario_packet", {}).get("schema_version") == "scenario_context_packet.v1",
                 "scenario_disallows_forecasting_and_trusted_writes": scenario.get("scenario_packet", {}).get("replay_contract", {}).get("forecasting_allowed") is False
                 and scenario.get("scenario_packet", {}).get("replay_contract", {}).get("trusted_write_allowed") is False,
-                "prompt_injection_keeps_boundary": any("bounded scenario support" in str(note).lower() for note in scenario.get("uncertainty_notes", [])),
+                "prompt_injection_keeps_boundary": any("bilinen kayıtları" in str(note).lower() and "kanıtsız bir tahmin değildir" in str(note).lower() for note in scenario.get("uncertainty_notes", [])),
                 "persists_and_replays_scenario": bool(scenario_run_id)
                 and scenario_run_id in {str(run.get("scenario_run_id")) for run in scenario_runs.get("runs", []) if isinstance(run, dict)}
                 and scenario_detail.get("scenario_run_id") == scenario_run_id
@@ -449,7 +449,7 @@ def rejection_checks(admin_token: str, artifact_id: str) -> dict[str, Any]:
                     "related_signals": query.get("related_signals", []),
                 }
             ),
-            "query_names_rejected_boundary": any("rejected" in str(note).lower() for note in query.get("uncertainty_notes", [])),
+            "query_names_rejected_boundary": any("reddettiği" in str(note).lower() for note in query.get("uncertainty_notes", [])),
             "temporal_graph_hides_rejected_source": artifact_id not in serialize(temporal),
         }
     }

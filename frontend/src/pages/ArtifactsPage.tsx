@@ -1,3 +1,4 @@
+import { SourcePreviewButton } from '../components/SourcePreviewButton'
 import { useEffect, useMemo, useState, type FormEventHandler } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -667,14 +668,7 @@ export function ArtifactsPage() {
                       className="table-action-group"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <a
-                        className="table-action-link"
-                        href={api.artifactPreviewUrl(artifact.artifact_id)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Preview
-                      </a>
+                      <SourcePreviewButton artifactId={artifact.artifact_id} title={artifact.title} className="table-action-link">Preview</SourcePreviewButton>
                       <a
                         className="table-action-link"
                         href={api.artifactDownloadUrl(artifact.artifact_id)}
@@ -723,14 +717,7 @@ export function ArtifactsPage() {
                   </h3>
                 </div>
                 <div className="artifact-action-strip">
-                  <a
-                    className="secondary-button"
-                    href={api.artifactPreviewUrl(selectedArtifact.artifact_id)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Preview
-                  </a>
+                  <SourcePreviewButton artifactId={selectedArtifact.artifact_id} title={selectedArtifact.title} className="secondary-button">Preview</SourcePreviewButton>
                   <a
                     className="secondary-button"
                     href={api.artifactDownloadUrl(selectedArtifact.artifact_id)}

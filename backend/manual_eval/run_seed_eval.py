@@ -305,7 +305,7 @@ def permission_regression_checks(admin_token: str) -> dict[str, Any]:
         "restricted_artifact_signals_forbidden": artifact_signals_status == 403,
         "restricted_artifact_hidden_from_list": RESTRICTED_TITLE not in visible_artifact_titles,
         "member_result_permission_limited": result.get("permissions_limited") is True,
-        "member_result_has_permission_caveat": any("permission" in str(note).lower() for note in result.get("uncertainty_notes", [])),
+        "member_result_has_permission_caveat": any(contains_any_fragment(str(note), ["permission", "izinleri", "erişim"]) for note in result.get("uncertainty_notes", [])),
         "supporting_evidence_redacted": not payload_contains_forbidden_value(
             forbidden_payloads["supporting_evidence"], restricted_artifact_id=restricted_artifact_id
         ),
@@ -933,14 +933,14 @@ def run_eval() -> dict[str, Any]:
                 and prompt_injection_scenario.get("scenario_packet", {}).get("replay_contract", {}).get("forecasting_allowed") is False
                 and prompt_injection_scenario.get("scenario_packet", {}).get("replay_contract", {}).get("trusted_write_allowed") is False
                 and any(
-                    "bounded scenario support" in str(note).lower() and "not an unsupported forecast" in str(note).lower()
+                    (contains_all_fragments(str(note), ["bounded scenario support", "not an unsupported forecast"]) or contains_all_fragments(str(note), ["bilinen kayıtları", "kanıtsız bir tahmin değildir"]))
                     for note in prompt_injection_scenario.get("uncertainty_notes", [])
                 ),
                 "supported_templates_have_review_guidance": all(
                     len(template.review_lens) >= 3 and len(template.example_prompts) >= 2 for template in supported_template_payloads
                 ),
                 "classifies_supported_template": scenario_template.get("template_key") == "launch_change"
-                and scenario_template.get("title") == "Launch acceleration or delay",
+                and scenario_template.get("title") == "Yayını hızlandırma veya erteleme",
                 "template_has_review_lens": len(scenario_template.get("review_lens", [])) >= 3
                 and len(scenario_template.get("example_prompts", [])) >= 2,
                 "scenario_packet_is_typed": scenario_packet.get("schema_version") == "scenario_context_packet.v1"
@@ -982,7 +982,7 @@ def run_eval() -> dict[str, Any]:
                 "items_have_matched_terms": all(isinstance(item.get("matched_terms"), list) and item.get("matched_terms") for item in scenario_items),
                 "items_have_evidence_excerpt": all(bool(item.get("evidence_excerpt")) for item in scenario_items),
                 "answer_is_bounded_not_forecast": any(
-                    "bounded scenario support" in str(note).lower() and "not an unsupported forecast" in str(note).lower()
+                    (contains_all_fragments(str(note), ["bounded scenario support", "not an unsupported forecast"]) or contains_all_fragments(str(note), ["bilinen kayıtları", "kanıtsız bir tahmin değildir"]))
                     for note in scenario_impact.get("uncertainty_notes", [])
                 ),
                 "recommends_followup_questions": len(scenario_impact.get("recommended_questions", [])) >= 3,
@@ -1053,7 +1053,7 @@ def run_eval() -> dict[str, Any]:
                     next_action_list
                     and contains_any_fragment(
                         str(next_action_list[0].get("recommended_action", "")),
-                        ["Resolve the conflict", "Revalidate the assumption", "Review the open commitment"],
+                        ["çelişkiyi çözün", "varsayımını yeniden doğrulayın", "açık taahhüdü"],
                     )
                 ),
             },
@@ -1064,7 +1064,7 @@ def run_eval() -> dict[str, Any]:
             "checks": {
                 "summary_mentions_artifact_impact": contains_any_fragment(
                     str(reversal_signals.get("summary", "")),
-                    ["contradiction signal", "supersession", "next-action"],
+                    ["çelişki", "güncelleme/yeniden açma", "sonraki adım"],
                 ),
                 "has_introduced_contradiction": bool(reversal_signals.get("introduced_contradictions")),
                 "has_artifact_scoped_next_action": bool(reversal_signals.get("recommended_next_actions")),
@@ -1082,7 +1082,7 @@ def run_eval() -> dict[str, Any]:
             "checks": {
                 "summary_mentions_artifact_impact": contains_any_fragment(
                     str(checkpoint_signals.get("summary", "")),
-                    ["assumption-drift signal", "next-action"],
+                    ["varsayım değişikliği", "sonraki adım"],
                 ),
                 "has_revealed_drift": bool(checkpoint_signals.get("revealed_assumption_drift")),
                 "has_prior_relevant_work": bool(checkpoint_signals.get("prior_relevant_work")),
@@ -1143,8 +1143,8 @@ def run_eval() -> dict[str, Any]:
                     signal_detail.get("payload_json", {}).get("reasoning_boundary", {}).get("llm_role")
                 ),
                 "detail_names_inference_boundary": contains_any_fragment(
-                    json.dumps(signal_detail.get("intelligence_path", []), sort_keys=True, default=str),
-                    ["central company-controlled", "deterministic graph", "Signal was classified"],
+                    json.dumps(signal_detail.get("intelligence_path", []), sort_keys=True, default=str, ensure_ascii=False),
+                    ["yerel model", "kayıtlı kurallar", "olarak sınıflandırıldı"],
                 ),
                 "audit_has_proactive_signal_generation": any(
                     event.get("event_type") == "PROACTIVE_SIGNALS_GENERATED" for event in audit_events
@@ -1205,9 +1205,9 @@ def run_eval() -> dict[str, Any]:
                 },
                 reversal_artifact["artifact_id"],
             ),
-            "query_names_rejected_evidence_boundary": any("rejected" in str(note).lower() for note in rejected_query.get("uncertainty_notes", [])),
+            "query_names_rejected_evidence_boundary": any("reddettiği" in str(note).lower() for note in rejected_query.get("uncertainty_notes", [])),
             "artifact_signals_suppressed_when_rejected": sum(int(value) for value in rejected_signals.get("signal_counts", {}).values()) == 0,
-            "artifact_signal_summary_names_rejection": "rejected" in str(rejected_signals.get("summary", "")).lower(),
+            "artifact_signal_summary_names_rejection": "yönetici incelemesinde reddedildi" in str(rejected_signals.get("summary", "")).lower(),
             "persisted_signals_hide_rejected_source": all(
                 signal.get("source_artifact_id") != reversal_artifact["artifact_id"] for signal in signals_after_rejection
             ),

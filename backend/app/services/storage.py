@@ -19,7 +19,7 @@ SUPPORTED_EXTENSIONS = {".txt", ".md", ".markdown", ".pdf"}
 def ensure_supported_upload(upload: UploadFile) -> None:
     suffix = Path(upload.filename or "").suffix.lower()
     if upload.content_type not in SUPPORTED_CONTENT_TYPES or suffix not in SUPPORTED_EXTENSIONS:
-        raise ValueError("Supported file types are Markdown, plain text, and text-extractable PDF")
+        raise ValueError("Markdown, düz metin veya metni okunabilir PDF dosyası yükleyin.")
 
 
 def persist_upload_bytes(content: bytes, *, artifact_id: str, filename: str | None) -> tuple[str, str]:

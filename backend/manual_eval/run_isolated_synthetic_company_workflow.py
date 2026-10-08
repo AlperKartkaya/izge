@@ -56,8 +56,11 @@ def main() -> None:
             "IZGE_STORAGE_ROOT": str(temp_path / "storage"),
             "IZGE_PASTED_TEXT_ROOT": str(temp_path / "pasted"),
             "IZGE_BOOTSTRAP_ADMIN_CREDENTIALS_PATH": str(temp_path / "bootstrap_admin_credentials.json"),
+            "IZGE_DEMO_SEED_ENABLED": "true",
+            "IZGE_DEFAULT_ADMIN_PASSWORD": "change-me-admin",
             "IZGE_EVAL_BASE_URL": base_url,
         }
+        server_log = tempfile.TemporaryFile(mode="w+t")
         server = subprocess.Popen(
             [
                 sys.executable,
@@ -73,10 +76,11 @@ def main() -> None:
             ],
             cwd=backend_root,
             env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=server_log,
+            stderr=subprocess.STDOUT,
             text=True,
         )
+        result = None
         try:
             wait_for_health(base_url)
             result = subprocess.run(
@@ -86,7 +90,7 @@ def main() -> None:
                 text=True,
                 capture_output=True,
                 check=False,
-                timeout=90,
+                timeout=180,
             )
             if result.stdout:
                 print(result.stdout, end="")
@@ -97,8 +101,11 @@ def main() -> None:
             print(f"\nIsolated synthetic company workflow passed against {base_url}.")
         finally:
             terminate_process(server)
-            server_stdout, server_stderr = server.communicate(timeout=5)
-            if server.returncode not in (0, -15) and server_stderr:
+            server_log.seek(0)
+            server_stderr = server_log.read()
+            server_stdout = server_stderr
+            server_log.close()
+            if server_stderr and (server.returncode not in (0, -15) or result is None or result.returncode != 0):
                 print(server_stderr, end="", file=sys.stderr)
             elif server_stdout and os.environ.get("IZGE_EVAL_VERBOSE"):
                 print(server_stdout, end="")

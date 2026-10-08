@@ -47,6 +47,75 @@ export interface TeamChatTypingRead {
   typing: TeamChatTypingUserRead[]
 }
 
+export type WorkTaskStatus = 'open' | 'in_progress' | 'done'
+
+export interface WorkTaskRead {
+  task_id: string
+  workspace_id: string
+  title: string
+  description: string | null
+  status: WorkTaskStatus
+  assignee_user_id: string | null
+  assignee_display_name: string | null
+  due_at: string | null
+  remind_at: string | null
+  reminder_sent_at: string | null
+  source_artifact_ids: string[]
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export type AgentRunStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+export interface AgentSourceRead {
+  artifact_id: string
+  title: string
+  quote: string
+  chunk_id?: string | null
+}
+
+export interface AgentRunStageRead {
+  sequence: number
+  key: string
+  label: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  created_at: string
+}
+
+export interface AgentRunRead {
+  run_id: string
+  kind: 'ask' | 'evening_review'
+  thread_id: string
+  thread_title: string
+  thread_kind: 'channel' | 'direct' | 'group'
+  participant_user_ids: string[]
+  status: AgentRunStatus
+  question: string
+  answer: string | null
+  error: string | null
+  sources: AgentSourceRead[]
+  stages: AgentRunStageRead[]
+  created_at: string
+  updated_at: string
+}
+
+export interface AgentRunCreated {
+  run_id: string
+  thread_id: string
+  status: AgentRunStatus
+}
+
+export interface AgentRunEvent {
+  sequence: number
+  event_type: 'stage' | 'delta' | 'source' | 'reset' | 'done' | 'failed'
+  stage_key?: string
+  label?: string
+  text?: string
+  source?: AgentSourceRead
+  status?: AgentRunStatus
+}
+
 export interface ArtifactRead {
   artifact_id: string
   workspace_id: string

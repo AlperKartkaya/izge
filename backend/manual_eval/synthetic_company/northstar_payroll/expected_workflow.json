@@ -25,7 +25,7 @@
       "name": "next_action",
       "query": "What should the team do next about Northstar Payroll enterprise onboarding launch?",
       "expected_query_class": "Next-action guidance",
-      "expected_fragments": ["Resolve", "Revalidate", "Review"]
+      "expected_fragments": ["çelişkiyi çözün", "varsayımını yeniden doğrulayın", "taahhüdü"]
     }
   ]
 }

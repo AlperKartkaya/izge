@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from typing import Any
 
@@ -21,6 +20,7 @@ from app.models import (
     User,
 )
 from app.services.permissions import artifact_is_visible_to_user
+from app.services.turkish_text import word_tokens
 
 MEMORY_MODELS = [
     ("decision", Decision, "decision_id", "status"),
@@ -32,8 +32,8 @@ MEMORY_MODELS = [
 
 
 def _family_key(memory_type: str, topic_key: str, title: str) -> str:
-    tokens = re.findall(r"[a-z0-9]+", f"{topic_key} {title}".lower())
-    useful = [token for token in tokens if len(token) > 2 and token not in {"the", "and", "for", "with", "that", "this"}]
+    tokens = word_tokens(f"{topic_key} {title}")
+    useful = [token for token in tokens if len(token) > 2 and token not in {"the", "and", "for", "with", "that", "this", "bir", "bu", "için", "ile", "ve"}]
     return f"{memory_type}:{'-'.join(useful[:8]) or 'general'}"
 
 

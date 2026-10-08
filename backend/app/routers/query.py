@@ -23,9 +23,9 @@ def submit_query(payload: QueryCreate, current_user: User = Depends(get_current_
 def get_query_result(query_run_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> QueryResult:
     query_run = db.scalar(select(QueryRun).where(QueryRun.query_run_id == query_run_id, QueryRun.workspace_id == current_user.workspace_id))
     if query_run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Query run not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Yanıt bulunamadı.")
     if current_user.role != "Admin" and query_run.created_by != current_user.user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Query result access denied")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu yanıta erişim izniniz yok.")
     return build_query_result_for_reader(db, query_run, current_user)
 
 
@@ -33,7 +33,7 @@ def get_query_result(query_run_id: str, current_user: User = Depends(get_current
 def get_query_trace(query_run_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> QueryTraceRead:
     query_run = db.scalar(select(QueryRun).where(QueryRun.query_run_id == query_run_id, QueryRun.workspace_id == current_user.workspace_id))
     if query_run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Query run not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Yanıt bulunamadı.")
     if current_user.role != "Admin" and query_run.created_by != current_user.user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Query trace access denied")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu işlem kaydına erişim izniniz yok.")
     return build_query_trace_for_reader(db, query_run, current_user)

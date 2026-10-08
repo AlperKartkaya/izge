@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Artifact, Assumption, Commitment, Constraint, Decision, Outcome, ScenarioRun, User
 from app.services.permissions import artifact_is_visible_to_user
+from app.services.turkish_text import matching_tokens
 
 SCENARIO_MODELS = [
     ("assumption", Assumption, "assumption_id"),
@@ -20,7 +21,7 @@ SCENARIO_MODELS = [
     ("decision", Decision, "decision_id"),
     ("outcome", Outcome, "outcome_id"),
 ]
-STOPWORDS = {"the", "and", "for", "with", "that", "this", "would", "could", "should", "about", "into", "from", "your", "company"}
+STOPWORDS = {"the", "and", "for", "with", "that", "this", "would", "could", "should", "about", "into", "from", "your", "company", "bir", "bu", "için", "ile", "ve", "şirket"}
 CLASSIFIER_VERSION = "scenario_classifier.v1"
 TEMPLATE_CATALOG_VERSION = "scenario_template_catalog.v1"
 SCENARIO_RANKING_RECIPE_VERSION = "scenario_ranking_recipe.v1"
@@ -52,12 +53,12 @@ class ScenarioTemplate:
 SCENARIO_TEMPLATES = [
     ScenarioTemplate(
         template_key="launch_change",
-        title="Launch acceleration or delay",
-        keywords={"launch", "release", "rollout", "onboarding", "activation", "adoption", "pipeline", "customer", "enterprise"},
+        title="Yayını hızlandırma veya erteleme",
+        keywords={"launch", "release", "rollout", "onboarding", "activation", "adoption", "pipeline", "customer", "enterprise", "yayın", "sürüm", "devreye", "müşteri", "kurumsal", "aktivasyon", "erteleme"},
         review_lens=[
-            "Recheck launch-readiness assumptions against later evidence.",
-            "Identify commitments whose owner or due date changes.",
-            "Surface constraints that block acceleration or delay decisions.",
+            "Yayına hazırlık varsayımlarını daha yeni kanıtlarla yeniden kontrol edin.",
+            "Sorumlusu veya son tarihi değişen taahhütleri belirleyin.",
+            "Hızlandırma veya erteleme kararlarını engelleyen kısıtları gösterin.",
         ],
         example_prompts=[
             "What changes if we accelerate the enterprise onboarding launch?",
@@ -66,12 +67,12 @@ SCENARIO_TEMPLATES = [
     ),
     ScenarioTemplate(
         template_key="pricing_or_packaging",
-        title="Pricing or packaging change",
-        keywords={"pricing", "price", "packaging", "monetization", "revenue", "discount", "tier", "plan", "sales"},
+        title="Fiyatlandırma veya paket değişikliği",
+        keywords={"pricing", "price", "packaging", "monetization", "revenue", "discount", "tier", "plan", "sales", "fiyat", "fiyatlandırma", "paket", "gelir", "indirim", "satış"},
         review_lens=[
-            "Check decisions and constraints tied to packaging or revenue assumptions.",
-            "Review commitments to sales, support, or customer success teams.",
-            "Ask for fresh evidence before projecting financial outcomes.",
+            "Paketleme veya gelir varsayımlarına bağlı karar ve kısıtları kontrol edin.",
+            "Satış, destek veya müşteri başarısı ekiplerine verilen taahhütleri gözden geçirin.",
+            "Finansal sonuç öngörmeden önce güncel kanıt isteyin.",
         ],
         example_prompts=[
             "What memory is affected if we introduce a new enterprise tier?",
@@ -80,12 +81,12 @@ SCENARIO_TEMPLATES = [
     ),
     ScenarioTemplate(
         template_key="platform_migration",
-        title="Platform migration or architecture shift",
-        keywords={"migration", "platform", "infrastructure", "infra", "database", "backend", "rewrite", "vendor", "integration"},
+        title="Platform geçişi veya mimari değişiklik",
+        keywords={"migration", "platform", "infrastructure", "infra", "database", "backend", "rewrite", "vendor", "integration", "geçiş", "altyapı", "veritabanı", "mimari", "tedarikçi", "entegrasyon"},
         review_lens=[
-            "Find constraints and prior decisions that bound the migration path.",
-            "Review commitments that depend on the current platform.",
-            "Separate evidence-backed impact from unsupported delivery forecasts.",
+            "Geçiş yolunu sınırlayan kısıtları ve önceki kararları bulun.",
+            "Mevcut platforma bağlı taahhütleri gözden geçirin.",
+            "Kanıtlı etkiyi desteksiz teslimat tahminlerinden ayırın.",
         ],
         example_prompts=[
             "Which existing constraints or decisions should be reviewed before migrating the memory store to a managed database?",
@@ -94,12 +95,12 @@ SCENARIO_TEMPLATES = [
     ),
     ScenarioTemplate(
         template_key="compliance_or_security",
-        title="Compliance, security, or audit requirement",
-        keywords={"compliance", "security", "audit", "privacy", "legal", "regulator", "risk", "soc2", "gdpr", "approval"},
+        title="Uyumluluk, güvenlik veya denetim gereksinimi",
+        keywords={"compliance", "security", "audit", "privacy", "legal", "regulator", "risk", "soc2", "gdpr", "approval", "uyumluluk", "güvenlik", "denetim", "gizlilik", "hukuk", "risk", "onay"},
         review_lens=[
-            "Surface constraints, approvals, and review obligations.",
-            "Identify assumptions that require fresh security or legal evidence.",
-            "Avoid treating missing approval as a forecastable outcome.",
+            "Kısıtları, onayları ve inceleme yükümlülüklerini gösterin.",
+            "Güncel güvenlik veya hukuk kanıtı gerektiren varsayımları belirleyin.",
+            "Eksik onayı tahmin edilebilir bir sonuç gibi ele almayın.",
         ],
         example_prompts=[
             "What memory is affected if security approval is required before launch?",
@@ -108,12 +109,12 @@ SCENARIO_TEMPLATES = [
     ),
     ScenarioTemplate(
         template_key="org_change",
-        title="Org, ownership, or staffing change",
-        keywords={"hiring", "team", "org", "organization", "reorg", "owner", "ownership", "process", "support", "staffing", "handoff"},
+        title="Organizasyon, sorumluluk veya kadro değişikliği",
+        keywords={"hiring", "team", "org", "organization", "reorg", "owner", "ownership", "process", "support", "staffing", "handoff", "işe alım", "ekip", "organizasyon", "sorumlu", "sorumluluk", "süreç", "destek", "kadro", "devir"},
         review_lens=[
-            "Review commitments whose owner or due date may change.",
-            "Find prior decisions that explain the current operating model.",
-            "Ask for source artifacts before assuming capacity changes.",
+            "Sorumlusu veya son tarihi değişebilecek taahhütleri gözden geçirin.",
+            "Mevcut çalışma biçimini açıklayan önceki kararları bulun.",
+            "Kapasite değişikliği varsaymadan önce kaynak belge isteyin.",
         ],
         example_prompts=[
             "Which commitments are affected if ownership moves to growth?",
@@ -125,12 +126,12 @@ SCENARIO_TEMPLATES = [
 
 GENERAL_TEMPLATE = ScenarioTemplate(
     template_key="general_memory_review",
-    title="General bounded memory review",
+    title="Genel kurumsal hafıza incelemesi",
     keywords=set(),
     review_lens=[
-        "Identify overlapping evidence-backed memory.",
-        "Ask which assumptions, commitments, or constraints need a fresh artifact.",
-        "Do not forecast without direct source evidence.",
+        "Örtüşen kanıtlı şirket kayıtlarını belirleyin.",
+        "Hangi varsayım, taahhüt veya kısıt için yeni kaynak gerektiğini sorun.",
+        "Doğrudan kaynak kanıtı olmadan tahmin yapmayın.",
     ],
     example_prompts=[
         "Which existing decisions or assumptions are affected by this change?",
@@ -140,7 +141,7 @@ GENERAL_TEMPLATE = ScenarioTemplate(
 
 
 def _tokens(value: str) -> set[str]:
-    return {token for token in re.findall(r"[a-z0-9]+", value.lower()) if len(token) > 2 and token not in STOPWORDS}
+    return {token for token in matching_tokens(value) if len(token) > 2 and token not in STOPWORDS}
 
 
 def _hash_payload(payload: Any) -> str:
@@ -190,15 +191,15 @@ def _classify_template(scenario_tokens: set[str]) -> tuple[ScenarioTemplate, lis
 
 
 def _impact_reason(memory_type: str, overlap: set[str], template: ScenarioTemplate) -> str:
-    shared = ", ".join(sorted(overlap)[:6]) or "the scenario topic"
-    lens = template.review_lens[0] if template.review_lens else "Review this memory before action."
+    shared = ", ".join(sorted(overlap)[:6]) or "senaryo konusu"
+    lens = template.review_lens[0] if template.review_lens else "Harekete geçmeden önce bu kaydı gözden geçirin."
     if memory_type == "assumption":
-        return f"This assumption should be rechecked for the {template.title.lower()} scenario because it shares evidence terms: {shared}. {lens}"
+        return f"Bu varsayım {template.title.lower()} senaryosuyla şu kanıt terimlerini paylaşıyor ve yeniden kontrol edilmeli: {shared}. {lens}"
     if memory_type == "commitment":
-        return f"This commitment may need owner/date review for the {template.title.lower()} scenario because it touches: {shared}."
+        return f"Bu taahhüt {template.title.lower()} senaryosunda şu konulara değindiği için sorumlu/tarih incelemesi gerektirebilir: {shared}."
     if memory_type == "constraint":
-        return f"This constraint may limit the {template.title.lower()} scenario because it overlaps with: {shared}."
-    return f"This remembered item is relevant context for the {template.title.lower()} scenario because it overlaps with: {shared}."
+        return f"Bu kısıt {template.title.lower()} senaryosunu sınırlayabilir; örtüşen konular: {shared}."
+    return f"Bu şirket kaydı {template.title.lower()} senaryosu için ilgili bağlamdır; örtüşen konular: {shared}."
 
 
 def _scenario_template_payload(template: ScenarioTemplate, matched_terms: list[str], confidence_score: float) -> dict[str, Any]:
@@ -393,7 +394,7 @@ def build_scenario_impact(db: Session, user: User, *, scenario_text: str, limit:
                     "impact_reason": _impact_reason(memory_type, overlap, template),
                     "matched_terms": sorted(overlap)[:8],
                     "source_artifact_id": row.source_artifact_id,
-                    "source_artifact_title": artifact.title if artifact else "Unknown artifact",
+                    "source_artifact_title": artifact.title if artifact else "Bilinmeyen belge",
                     "source_artifact_review_status": artifact.review_status if artifact else "unknown",
                     "source_chunk_id": source_chunk_id,
                     "confidence_score": confidence_score,
@@ -421,15 +422,15 @@ def build_scenario_impact(db: Session, user: User, *, scenario_text: str, limit:
     impacted = impacted[:limit]
     uncertainty_notes = []
     if not impacted:
-        uncertainty_notes.append("No permitted evidence-backed memory objects overlapped with this scenario; Izge should ask for more source artifacts before forecasting.")
+        uncertainty_notes.append("Bu senaryoyla örtüşen, erişilebilir ve kanıtlı bir şirket kaydı bulunamadı; tahmin yapmadan önce yeni kaynak eklenmeli.")
     else:
-        uncertainty_notes.append("This is bounded scenario support: it identifies known memory likely to be affected, not an unsupported forecast.")
+        uncertainty_notes.append("Bu inceleme etkilenebilecek bilinen kayıtları gösterir; kanıtsız bir tahmin değildir.")
     if template.template_key == "general_memory_review":
-        uncertainty_notes.append("No specific scenario template dominated; the response uses a general memory-review lens.")
+        uncertainty_notes.append("Belirli bir senaryo türü baskın çıkmadı; genel kurumsal hafıza incelemesi kullanıldı.")
     candidate_templates = _scenario_template_candidates_payload(scenario_tokens)
     if len(candidate_templates) > 1:
         secondary_titles = ", ".join(item["title"] for item in candidate_templates[1:3])
-        uncertainty_notes.append(f"Multiple scenario lenses matched; secondary review lenses include {secondary_titles}.")
+        uncertainty_notes.append(f"Birden fazla senaryo türü eşleşti; ikincil incelemeler: {secondary_titles}.")
     scenario_template = _scenario_template_payload(template, matched_template_terms, template_confidence)
     result = {
         "scenario_text": scenario_text,
@@ -447,14 +448,14 @@ def build_scenario_impact(db: Session, user: User, *, scenario_text: str, limit:
             impacted_candidate_count=impacted_candidate_count,
         ),
         "answer_text": (
-            f"Using the {template.title.lower()} lens, found {len(impacted)} evidence-backed memory object(s) that should be reviewed before acting on this scenario."
+            f"{template.title} kapsamında, harekete geçmeden önce gözden geçirilmesi gereken {len(impacted)} kanıtlı şirket kaydı bulundu."
             if impacted
-            else "No evidence-backed impact path could be reconstructed from the current memory."
+            else "Mevcut kurumsal hafızadan kanıta dayalı bir etki yolu oluşturulamadı."
         ),
         "impacted_memory": impacted,
         "recommended_questions": [
             *template.review_lens,
-            "Which of these memory objects needs a fresh artifact before the company acts?",
+            "Şirket harekete geçmeden önce bu kayıtlardan hangisi için yeni bir kaynak gerekiyor?",
         ],
         "uncertainty_notes": uncertainty_notes,
     }

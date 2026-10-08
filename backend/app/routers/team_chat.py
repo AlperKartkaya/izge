@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import get_current_user
-from app.models import CompanyChatMessage, User
+from app.models import Artifact, CompanyChatMessage, User
 from app.schemas.api import TeamChatMessageCreate, TeamChatMessageRead, TeamChatThreadRead, TeamChatTypingCreate, TeamChatTypingRead, TeamChatTypingUserRead
 from app.services.audit import log_event
+from app.services.permissions import artifact_is_visible_to_user
 
 router = APIRouter(prefix="/team-chat", tags=["team-chat"])
 _TYPING_TTL_SECONDS = 5
@@ -57,16 +58,26 @@ def _participant_handles_from_metadata(metadata: dict[str, object]) -> set[str]:
     }
 
 
+def _participant_user_ids_from_metadata(metadata: dict[str, object]) -> set[str]:
+    raw_participants = metadata.get("participant_user_ids")
+    if not isinstance(raw_participants, list):
+        return set()
+    return {str(participant).strip() for participant in raw_participants if str(participant).strip()}
+
+
 def _message_is_visible_to_user(message: CompanyChatMessage, current_user: User) -> bool:
     if current_user.role == "Admin":
         return True
     metadata = message.message_metadata or {}
     thread_id = str(metadata.get("thread_id") or metadata.get("channel") or "company-general")
     thread_kind = str(metadata.get("thread_kind") or ("direct" if thread_id.startswith("direct:") else "channel"))
+    participant_user_ids = _participant_user_ids_from_metadata(metadata)
+    if participant_user_ids:
+        return current_user.user_id in participant_user_ids
     current_handle = _employee_handle_for_user(current_user)
     if thread_kind == "group":
         participant_handles = _participant_handles_from_metadata(metadata)
-        return not participant_handles or (current_handle in participant_handles if current_handle else False)
+        return bool(participant_handles) and bool(current_handle) and current_handle in participant_handles
     if thread_kind != "direct":
         return True
     if not current_handle:
@@ -75,32 +86,57 @@ def _message_is_visible_to_user(message: CompanyChatMessage, current_user: User)
     return current_handle in participants
 
 
-def _thread_is_visible_to_user(thread_id: str, thread_kind: str, current_user: User) -> bool:
+def _thread_is_visible_to_user(thread_id: str, thread_kind: str, current_user: User, db: Session) -> bool:
     if current_user.role == "Admin" or thread_kind not in {"direct", "group"}:
         return True
+    if thread_id == "izge-colleague" or thread_id.startswith("assistant-cowork:"):
+        return True
+    if current_user.user_id in thread_id.replace("direct:", "", 1).split(":"):
+        return True
+    existing_messages = db.scalars(
+        select(CompanyChatMessage)
+        .where(CompanyChatMessage.workspace_id == current_user.workspace_id)
+        .order_by(CompanyChatMessage.created_at.desc())
+        .limit(500)
+    ).all()
+    if any(
+        str((message.message_metadata or {}).get("thread_id") or (message.message_metadata or {}).get("channel")) == thread_id
+        and _message_is_visible_to_user(message, current_user)
+        for message in existing_messages
+    ):
+        return True
     if thread_kind == "group":
-        return True
-    if thread_id.startswith("assistant-cowork:"):
-        return True
+        return False
     current_handle = _employee_handle_for_user(current_user)
     if not current_handle:
         return False
     return current_handle in thread_id.replace("direct:", "", 1).split("-")
 
 
-def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, User]) -> TeamChatMessageRead:
+def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, User], db: Session, reader: User) -> TeamChatMessageRead:
     author = author_by_id.get(message.author_user_id)
     author_role: Literal["Admin", "Member"] = "Member"
     if author and author.role == "Admin":
         author_role = "Admin"
+    metadata = dict(message.message_metadata or {})
+    body = message.body
+    source_refs = metadata.get("source_refs")
+    if isinstance(source_refs, list) and source_refs:
+        source_ids = {str(source.get("artifact_id")) for source in source_refs if isinstance(source, dict) and source.get("artifact_id")}
+        artifacts = db.scalars(select(Artifact).where(Artifact.workspace_id == reader.workspace_id, Artifact.artifact_id.in_(source_ids))).all() if source_ids else []
+        visible_ids = {artifact.artifact_id for artifact in artifacts if artifact_is_visible_to_user(db, artifact, reader)}
+        if visible_ids != source_ids:
+            body = "Bu yanıtın dayandığı kaynaklara erişiminiz değiştiği için içerik gizlendi."
+            metadata["source_refs"] = []
+            metadata["source_access_changed"] = True
     return TeamChatMessageRead(
         message_id=message.message_id,
         workspace_id=message.workspace_id,
         author_user_id=message.author_user_id,
         author_display_name=author.display_name if author else "Unknown user",
         author_role=author_role,
-        body=message.body,
-        message_metadata=message.message_metadata or {},
+        body=body,
+        message_metadata=metadata,
         created_at=message.created_at,
     )
 
@@ -112,17 +148,12 @@ def list_team_chat_messages(
     db: Session = Depends(get_db),
 ) -> TeamChatThreadRead:
     bounded_limit = max(1, min(limit, 200))
-    fetched_messages = list(
-        reversed(
-            db.scalars(
-                select(CompanyChatMessage)
-                .where(CompanyChatMessage.workspace_id == current_user.workspace_id)
-                .order_by(CompanyChatMessage.created_at.desc())
-                .limit(bounded_limit)
-            ).all()
-        )
-    )
-    messages = [message for message in fetched_messages if _message_is_visible_to_user(message, current_user)]
+    fetched_messages = db.scalars(
+        select(CompanyChatMessage)
+        .where(CompanyChatMessage.workspace_id == current_user.workspace_id)
+        .order_by(CompanyChatMessage.created_at.desc())
+    ).all()
+    messages = list(reversed([message for message in fetched_messages if _message_is_visible_to_user(message, current_user)][:bounded_limit]))
     author_ids = {message.author_user_id for message in messages}
     authors = (
         db.scalars(
@@ -138,7 +169,7 @@ def list_team_chat_messages(
     return TeamChatThreadRead(
         workspace_id=current_user.workspace_id,
         generated_at=datetime.now(UTC),
-        messages=[_message_read_model(message, author_by_id) for message in messages],
+        messages=[_message_read_model(message, author_by_id, db, current_user) for message in messages],
     )
 
 
@@ -150,7 +181,7 @@ def list_typing_users(
     db: Session = Depends(get_db),
 ) -> TeamChatTypingRead:
     cleaned_thread_id = _clean_thread_id(thread_id)
-    if not _thread_is_visible_to_user(cleaned_thread_id, thread_kind, current_user):
+    if not _thread_is_visible_to_user(cleaned_thread_id, thread_kind, current_user, db):
         return TeamChatTypingRead(workspace_id=current_user.workspace_id, generated_at=datetime.now(UTC), typing=[])
 
     now = datetime.now(UTC)
@@ -190,7 +221,7 @@ def mark_typing(
     db: Session = Depends(get_db),
 ) -> TeamChatTypingRead:
     cleaned_thread_id = _clean_thread_id(payload.thread_id)
-    if not _thread_is_visible_to_user(cleaned_thread_id, payload.thread_kind, current_user):
+    if not _thread_is_visible_to_user(cleaned_thread_id, payload.thread_kind, current_user, db):
         return TeamChatTypingRead(workspace_id=current_user.workspace_id, generated_at=datetime.now(UTC), typing=[])
     _typing_state[(current_user.workspace_id, cleaned_thread_id, current_user.user_id)] = datetime.now(UTC) + timedelta(seconds=_TYPING_TTL_SECONDS)
     return list_typing_users(cleaned_thread_id, payload.thread_kind, current_user, db)
@@ -207,6 +238,24 @@ def create_team_chat_message(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Message body is required.")
     thread_id = _clean_thread_id(payload.thread_id)
     thread_title = _clean_thread_title(payload.thread_title, thread_id)
+    participant_user_ids = _participant_user_ids_from_metadata(payload.message_metadata)
+    if payload.thread_kind in {"direct", "group"} and not participant_user_ids:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Direct and group threads require participant_user_ids")
+    if participant_user_ids:
+        participant_user_ids.add(current_user.user_id)
+        valid_ids = set(
+            db.scalars(
+                select(User.user_id).where(
+                    User.workspace_id == current_user.workspace_id,
+                    User.user_id.in_(participant_user_ids),
+                    User.is_active.is_(True),
+                )
+            ).all()
+        )
+        if valid_ids != participant_user_ids:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown or inactive thread participant")
+        if payload.thread_kind in {"direct", "group"} and len(valid_ids) < 2:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Direct and group threads require another active participant")
     message = CompanyChatMessage(
         workspace_id=current_user.workspace_id,
         author_user_id=current_user.user_id,
@@ -217,6 +266,7 @@ def create_team_chat_message(
             "thread_id": thread_id,
             "thread_title": thread_title,
             "thread_kind": payload.thread_kind,
+            **({"participant_user_ids": sorted(participant_user_ids)} if participant_user_ids else {}),
             "source": "izge-product",
         },
     )
@@ -232,4 +282,4 @@ def create_team_chat_message(
         target_id=message.message_id,
         event_metadata={"channel": thread_id, "thread_id": thread_id, "thread_title": thread_title, "thread_kind": payload.thread_kind, "body_length": len(body)},
     )
-    return _message_read_model(message, {current_user.user_id: current_user})
+    return _message_read_model(message, {current_user.user_id: current_user}, db, current_user)

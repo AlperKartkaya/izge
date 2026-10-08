@@ -134,6 +134,7 @@ def main() -> None:
             "IZGE_STORAGE_ROOT": str(temp_path / "storage"),
             "IZGE_PASTED_TEXT_ROOT": str(temp_path / "pasted"),
             "IZGE_BOOTSTRAP_ADMIN_CREDENTIALS_PATH": str(temp_path / "bootstrap_admin_credentials.json"),
+            "IZGE_DEMO_SEED_ENABLED": "true",
             "IZGE_DEFAULT_ADMIN_PASSWORD": "change-me-admin",
             "IZGE_SYNC_DEFAULT_ADMIN_PASSWORD": "true",
         }

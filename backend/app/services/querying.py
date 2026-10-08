@@ -46,7 +46,7 @@ from app.services.llm_reasoning import (
     explain_signal_with_local_llm,
     synthesize_query_answer_with_local_llm,
 )
-from app.services.permissions import artifact_is_visible_to_user
+from app.services.permissions import artifact_is_visible_to_user, signal_is_visible_to_artifact_ids
 from app.services.orchestration_runtime import run_bounded_parallel_stage_packets
 from app.services.query_context import (
     build_bounded_orchestration_payload,
@@ -54,6 +54,7 @@ from app.services.query_context import (
     build_provenance_verifier_result,
     stable_payload_size_bytes,
 )
+from app.services.turkish_text import matching_tokens, normalize_for_match, status_label
 
 STOPWORDS = {
     "a",
@@ -86,6 +87,26 @@ STOPWORDS = {
     "which",
     "why",
     "with",
+    "acaba",
+    "artık",
+    "bir",
+    "bu",
+    "da",
+    "de",
+    "daha",
+    "hangi",
+    "için",
+    "ile",
+    "mi",
+    "mı",
+    "mu",
+    "mü",
+    "nasıl",
+    "ne",
+    "neden",
+    "sonra",
+    "şu",
+    "ve",
 }
 
 CONTRADICTION_ACTION_TERMS = {
@@ -123,6 +144,15 @@ CONTRADICTION_ACTION_TERMS = {
     "2025",
     "2026",
     "2027",
+    "alındı",
+    "almak",
+    "devam",
+    "etmek",
+    "karar",
+    "kararı",
+    "plan",
+    "planı",
+    "yapmak",
 }
 
 
@@ -164,7 +194,7 @@ class QueryRouteDecision:
 
 
 def _query_terms(value: str) -> set[str]:
-    return {token for token in re.findall(r"[a-z0-9]+", value.lower()) if token not in STOPWORDS and len(token) > 2}
+    return {token for token in matching_tokens(value) if token not in STOPWORDS and len(token) > 1}
 
 
 def _text_overlap(left: str, right: str) -> int:
@@ -195,7 +225,7 @@ def _is_contradiction_comparable_pair(from_memory: MemoryRecord, to_memory: Memo
 
 
 def _classify_query_with_keywords(query_text: str) -> QueryRouteDecision:
-    lowered = query_text.lower()
+    lowered = normalize_for_match(query_text)
     scores = {
         "Decision lineage": 0,
         "Contradiction analysis": 0,
@@ -203,19 +233,19 @@ def _classify_query_with_keywords(query_text: str) -> QueryRouteDecision:
         "Next-action guidance": 0,
     }
     matched_terms: dict[str, list[str]] = {label: [] for label in scores}
-    for term in ("contradict", "conflict", "tension", "oppose", "inconsistent"):
+    for term in ("contradict", "conflict", "tension", "oppose", "inconsistent", "çeliş", "çatış", "tutarsız", "uyuşmuyor"):
         if term in lowered:
             scores["Contradiction analysis"] += 2
             matched_terms["Contradiction analysis"].append(term)
-    for term in ("assumption", "stale", "drift", "outdated", "still valid"):
+    for term in ("assumption", "stale", "drift", "outdated", "still valid", "varsayım", "geçerli değil", "eskidi", "değişti", "sapma"):
         if term in lowered:
             scores["Assumption drift"] += 2
             matched_terms["Assumption drift"].append(term)
-    for term in ("next", "should", "recommend", "action", "now", "do next"):
+    for term in ("next", "should", "recommend", "action", "now", "do next", "ne yap", "yapmalı", "öner", "aksiyon", "sonraki adım"):
         if term in lowered:
             scores["Next-action guidance"] += 2
             matched_terms["Next-action guidance"].append(term)
-    for term in ("decide", "decision", "why", "when", "lineage", "history"):
+    for term in ("decide", "decision", "why", "when", "lineage", "history", "karar", "neden", "niçin", "geçmiş", "nasıl alındı", "ne zaman"):
         if term in lowered:
             scores["Decision lineage"] += 1
             matched_terms["Decision lineage"].append(term)
@@ -227,7 +257,7 @@ def _classify_query_with_keywords(query_text: str) -> QueryRouteDecision:
         return QueryRouteDecision(
             query_class="Decision lineage",
             route_confidence=0.3,
-            route_rationale="No explicit mode keywords matched, so the query fell back to the baseline historical-lineage route.",
+            route_rationale="Açık bir sorgu modu bulunamadığı için karar geçmişi rotası kullanıldı.",
             secondary_signals=[],
             topic_terms=sorted(_query_terms(query_text))[:8],
         )
@@ -235,7 +265,7 @@ def _classify_query_with_keywords(query_text: str) -> QueryRouteDecision:
     return QueryRouteDecision(
         query_class=best_class,
         route_confidence=round(confidence, 2),
-        route_rationale=f"Matched route terms: {', '.join(matched_terms[best_class])}.",
+        route_rationale=f"Eşleşen yönlendirme terimleri: {', '.join(matched_terms[best_class])}.",
         secondary_signals=[label for label, score in ranked[1:] if score > 0][:2],
         topic_terms=sorted(_query_terms(query_text))[:8],
     )
@@ -533,7 +563,7 @@ def _artifact_title_map(db: Session, artifact_ids: set[str]) -> dict[str, str]:
 
 def _artifact_title_for_id(titles: dict[str, str], artifact_id: str | None) -> str:
     if artifact_id is None:
-        return "Unknown artifact"
+        return "Bilinmeyen belge"
     return titles.get(artifact_id, artifact_id)
 
 
@@ -571,29 +601,29 @@ def _contradiction_provenance(
 ) -> tuple[str, str | None]:
     if chunk_id:
         return (
-            f"Direct contradiction excerpt from {artifact_title} supporting the later-vs-earlier conflict between '{from_title}' and '{to_title}'.",
+            f"{artifact_title} belgesindeki doğrudan alıntı, yeni '{from_title}' kaydı ile önceki '{to_title}' kaydı arasındaki çelişkiyi destekliyor.",
             None,
         )
     return (
-        f"Graph contradiction link tied to {artifact_title}, but no direct quoted chunk was preserved for the conflict between '{from_title}' and '{to_title}'.",
-        "No direct excerpt is attached to this contradiction edge.",
+        f"{artifact_title} belgesi '{from_title}' ile '{to_title}' arasındaki çelişkiye bağlı, ancak doğrudan alıntı korunmamış.",
+        "Bu çelişki kaydına doğrudan bir alıntı bağlı değil.",
     )
 
 
 def _drift_provenance(*, artifact_title: str, chunk_id: str | None, assumption_title: str, signal_title: str | None) -> tuple[str, str | None]:
     if signal_title and chunk_id:
         return (
-            f"Direct later-signal excerpt from {artifact_title} showing why '{assumption_title}' no longer holds against '{signal_title}'.",
+            f"{artifact_title} belgesindeki daha yeni alıntı, '{assumption_title}' varsayımının '{signal_title}' karşısında neden artık geçerli olmadığını gösteriyor.",
             None,
         )
     if signal_title:
         return (
-            f"Later signal from {artifact_title} was linked to '{assumption_title}', but no direct quoted chunk was preserved for '{signal_title}'.",
-            "No direct later signal excerpt could be surfaced for this drift item.",
+            f"{artifact_title} belgesindeki daha yeni kayıt '{assumption_title}' varsayımına bağlandı, ancak '{signal_title}' için doğrudan alıntı korunmamış.",
+            "Bu varsayım değişikliği için doğrudan yeni kanıt alıntısı gösterilemedi.",
         )
     return (
-        f"Persisted assumption status from {artifact_title} without a directly linked later signal.",
-        "No direct later signal could be linked for this drift item.",
+        f"{artifact_title} belgesindeki varsayım durumu kayıtlı, ancak doğrudan bağlantılı daha yeni bir sinyal yok.",
+        "Bu varsayım değişikliğine doğrudan daha yeni bir sinyal bağlanamadı.",
     )
 
 
@@ -674,10 +704,10 @@ def _safe_next_actions_from_payload(
     actions: list[str] = []
     if contradictions:
         top = contradictions[0]
-        actions.append(f"Resolve the conflict between {top['from_title']} and {top['to_title']} before committing to the current roadmap path.")
+        actions.append(f"Mevcut yol haritasına devam etmeden önce {top['from_title']} ile {top['to_title']} arasındaki çelişkiyi çözün.")
     if stale_assumptions:
         top = stale_assumptions[0]
-        actions.append(f"Revalidate the assumption '{top['title_or_label']}' because later evidence now marks it {top['status']}.")
+        actions.append(f"Sonraki kanıtlar durumunu {status_label(top['status'])} olarak değiştirdiği için '{top['title_or_label']}' varsayımını yeniden doğrulayın.")
     commitment_nodes = [node for node in supporting_nodes if node.get("memory_type") == "commitment"]
     if commitment_nodes:
         commitment = sorted(
@@ -690,13 +720,13 @@ def _safe_next_actions_from_payload(
         due_date = commitment.get("due_date")
         owner_label = commitment.get("owner_label")
         if isinstance(due_date, str) and due_date:
-            owner_text = f" for {owner_label}" if isinstance(owner_label, str) and owner_label else ""
+            owner_text = f" ({owner_label})" if isinstance(owner_label, str) and owner_label else ""
             actions.append(
-                f"Review the open commitment{owner_text} due on {due_date[:10]}: '{commitment['title_or_label']}'."
+                f"Son tarihi {due_date[:10]} olan açık taahhüdü{owner_text} gözden geçirin: '{commitment['title_or_label']}'."
             )
         else:
             actions.append(
-                f"Review the open commitment '{commitment['title_or_label']}' and confirm whether its due path is still realistic."
+                f"Açık taahhüdü gözden geçirip takvimin hâlâ gerçekçi olduğunu doğrulayın: '{commitment['title_or_label']}'."
             )
     return actions[:3]
 
@@ -715,39 +745,39 @@ def _redacted_query_text(
     supporting_nodes: list[dict[str, Any]],
 ) -> tuple[str, str, list[str]]:
     recommended_next_actions = _safe_next_actions_from_payload(contradictions, stale_assumptions, supporting_nodes)
-    why_this_answer = "Some previously cached support is no longer visible or trusted, so this result was reduced to the currently permitted and review-accepted evidence only."
+    why_this_answer = "Önceden kullanılan bazı kaynaklar artık görünür veya güvenilir değil; sonuç yalnızca erişebildiğiniz ve incelemesi kabul edilmiş kanıtlara indirildi."
 
     if query_class == "Contradiction analysis":
         if contradictions:
             top = contradictions[0]
-            answer_text = f"The clearest contradiction still visible is between {top['from_title']} and {top['to_title']}."
+            answer_text = f"Görünür kalan en açık çelişki {top['from_title']} ile {top['to_title']} arasında."
         else:
-            answer_text = "No contradiction can be shown from the currently permitted and review-accepted evidence."
+            answer_text = "Erişebildiğiniz ve incelemesi kabul edilmiş kanıtlardan bir çelişki gösterilemiyor."
             recommended_next_actions = []
         return answer_text, why_this_answer, recommended_next_actions
 
     if query_class == "Assumption drift":
         if stale_assumptions:
             top = stale_assumptions[0]
-            answer_text = f"The strongest drift signal still visible is {top['title_or_label']} with status {top['status']}."
+            answer_text = f"Görünür kalan en güçlü varsayım değişikliği '{top['title_or_label']}'; mevcut durum: {status_label(top['status'])}."
         else:
-            answer_text = "No stale-assumption signal can be shown from the currently permitted and review-accepted evidence."
+            answer_text = "Erişebildiğiniz ve incelemesi kabul edilmiş kanıtlardan geçersizleşen bir varsayım gösterilemiyor."
             recommended_next_actions = []
         return answer_text, why_this_answer, recommended_next_actions
 
     if query_class == "Next-action guidance":
-        answer_text = recommended_next_actions[0] if recommended_next_actions else "No high-confidence next action can be shown from the currently permitted and review-accepted evidence."
+        answer_text = recommended_next_actions[0] if recommended_next_actions else "Erişebildiğiniz ve incelemesi kabul edilmiş kanıtlardan yüksek güvenli bir sonraki adım çıkarılamıyor."
         return answer_text, why_this_answer, recommended_next_actions
 
     visible_decisions = [node for node in supporting_nodes if node.get("memory_type") == "decision"]
     if len(visible_decisions) >= 2:
         answer_text = (
-            f"The visible lineage starts with '{visible_decisions[-1]['title_or_label']}' and later shifts to '{visible_decisions[0]['title_or_label']}'."
+            f"Görünür karar geçmişi '{visible_decisions[-1]['title_or_label']}' kaydıyla başlıyor ve sonra '{visible_decisions[0]['title_or_label']}' kararına dönüşüyor."
         )
     elif visible_decisions:
-        answer_text = f"The clearest visible decision lineage is '{visible_decisions[0]['title_or_label']}'."
+        answer_text = f"Görünür en açık karar kaydı '{visible_decisions[0]['title_or_label']}'."
     else:
-        answer_text = "No decision lineage can be shown from the currently permitted and review-accepted evidence."
+        answer_text = "Erişebildiğiniz ve incelemesi kabul edilmiş kanıtlardan bir karar geçmişi gösterilemiyor."
         recommended_next_actions = []
     return answer_text, why_this_answer, recommended_next_actions
 
@@ -854,14 +884,14 @@ def _lineage_result(db: Session, user: User, query_text: str) -> dict:
     selected = decisions[:2]
     if not selected:
         return {
-            "answer_text": "No decision lineage could be reconstructed from the currently permitted artifacts.",
-            "why_this_answer": "No visible decision objects matched the submitted question closely enough to assemble a lineage path.",
+            "answer_text": "Erişebildiğiniz belgelerden bu konuya ait bir karar geçmişi oluşturulamadı.",
+            "why_this_answer": "Görünür karar kayıtları soruyla karar geçmişi oluşturacak kadar yakından eşleşmedi.",
             "supporting_nodes": [],
             "supporting_evidence": _fts_evidence(db, user, query_text),
             "contradictions": [],
             "stale_assumptions": [],
             "recommended_next_actions": [],
-            "uncertainty_notes": ["No visible decision records matched the requested topic."],
+            "uncertainty_notes": ["İstenen konuyla eşleşen görünür bir karar kaydı bulunamadı."],
         }
     selected_topic_keys = {decision.topic_key for decision in selected if decision.topic_key != "general"}
     related: list[MemoryRecord] = []
@@ -870,13 +900,13 @@ def _lineage_result(db: Session, user: User, query_text: str) -> dict:
     supporting = selected + [memory for memory in related if not selected_topic_keys or memory.topic_key in selected_topic_keys]
     supporting = _dedupe_memories(supporting)[:8]
     if len(selected) == 1:
-        answer_text = f"The clearest decision lineage in scope is '{selected[0].title_or_label}', recorded on {selected[0].event_timestamp.strftime('%Y-%m-%d')}."
+        answer_text = f"Kapsamdaki en açık karar kaydı '{selected[0].title_or_label}'; kayıt tarihi {selected[0].event_timestamp.strftime('%d.%m.%Y')}."
     else:
         answer_text = (
-            f"The lineage starts with '{selected[-1].title_or_label}' on {selected[-1].event_timestamp.strftime('%Y-%m-%d')} "
-            f"and later shifts to '{selected[0].title_or_label}' on {selected[0].event_timestamp.strftime('%Y-%m-%d')}."
+            f"Karar geçmişi {selected[-1].event_timestamp.strftime('%d.%m.%Y')} tarihli '{selected[-1].title_or_label}' kaydıyla başlıyor "
+            f"ve {selected[0].event_timestamp.strftime('%d.%m.%Y')} tarihinde '{selected[0].title_or_label}' kararına dönüşüyor."
         )
-    why_this_answer = "Lineage was assembled from the highest-ranked decision records on the same topic and then tightened to directly linked evidence-bearing objects only."
+    why_this_answer = "Yanıt, aynı konudaki en ilgili karar kayıtlarından ve bunlara doğrudan bağlı kanıtlardan oluşturuldu."
     contradictions = _contradiction_dicts(db, user, query_text, supporting)
     stale_assumptions = _stale_assumption_dicts(db, user, query_text, supporting)
     recommended_next_actions = _next_actions_from_support(supporting, contradictions, stale_assumptions)
@@ -900,11 +930,11 @@ def _contradiction_result(db: Session, user: User, query_text: str) -> dict:
     supporting = _memories_for_contradictions(db, user, contradiction_items)
     if contradiction_items:
         top = contradiction_items[0]
-        answer_text = f"The clearest contradiction is between {top['from_title']} and {top['to_title']}."
-        why_this_answer = "Contradiction analysis ranked explicit conflict pairs by memory-type importance, shared topic, timeline direction, and direct graph evidence before using query overlap as a tie-breaker."
+        answer_text = f"En açık çelişki {top['from_title']} ile {top['to_title']} arasında."
+        why_this_answer = "Çelişki, iki iddianın ortak konusu, zaman sırası ve doğrudan kanıtları birlikte değerlendirilerek belirlendi."
     else:
-        answer_text = "No explicit contradiction pair was found in the currently permitted scope for this topic."
-        why_this_answer = "Contradiction analysis only returns explicit conflict pairs with evidence on both sides; none matched strongly enough."
+        answer_text = "Bu konu için erişebildiğiniz kapsamda açık bir çelişki bulunamadı."
+        why_this_answer = "Yalnızca iki tarafı da kanıtlı çelişkiler gösterilir; yeterince güçlü bir eşleşme bulunamadı."
     graph_evidence = _merge_evidence(_evidence_from_memories(db, _primary_graph_evidence(supporting)), [])
     fallback_evidence = [] if graph_evidence else _fts_evidence(db, user, query_text)
     supporting_evidence = _merge_evidence(graph_evidence, fallback_evidence)
@@ -925,11 +955,11 @@ def _assumption_drift_result(db: Session, user: User, query_text: str) -> dict:
     supporting = _memories_for_assumptions(db, user, stale_assumptions)
     if stale_assumptions:
         top = stale_assumptions[0]
-        answer_text = f"The strongest drift signal is {top['title_or_label']} with status {top['status']}."
-        why_this_answer = "Assumption drift prioritizes assumptions with persisted status changes, then narrows the explanation to later graph-linked signals on the same topic."
+        answer_text = f"En güçlü varsayım değişikliği '{top['title_or_label']}' kaydında; mevcut durum: {status_label(top['status'])}."
+        why_this_answer = "Yanıt, durumu değişen varsayımı ve aynı konudaki daha yeni kanıtları birlikte değerlendirir."
     else:
-        answer_text = "No stale-assumption signal was found for the requested topic in the currently permitted scope."
-        why_this_answer = "Assumption drift only surfaces assumptions whose status changed based on later evidence; none matched strongly enough."
+        answer_text = "İstenen konu için erişebildiğiniz kapsamda geçerliliğini yitirmiş bir varsayım bulunamadı."
+        why_this_answer = "Yalnızca sonraki kanıtlarla durumu değişen varsayımlar gösterilir; yeterince güçlü bir eşleşme bulunamadı."
     graph_evidence = _merge_evidence(_evidence_from_memories(db, _primary_graph_evidence(supporting)), [])
     fallback_evidence = [] if graph_evidence else _fts_evidence(db, user, query_text)
     supporting_evidence = _merge_evidence(graph_evidence, fallback_evidence)
@@ -966,8 +996,8 @@ def _next_action_result(db: Session, user: User, query_text: str) -> dict:
     if recommended_next_actions:
         answer_text = recommended_next_actions[0]
     else:
-        answer_text = "No high-confidence next action could be derived from the currently permitted contradictions, stale assumptions, and open commitments."
-    why_this_answer = "Next-action guidance starts from the highest-ranked contradiction or drift signal on the same topic and only then promotes directly connected open commitments into recommendations."
+        answer_text = "Erişebildiğiniz çelişkiler, değişen varsayımlar ve açık taahhütlerden yüksek güvenli bir sonraki adım çıkarılamadı."
+    why_this_answer = "Öneri, aynı konudaki en güçlü çelişki veya varsayım değişikliğinden ve doğrudan bağlantılı açık taahhütlerden oluşturuldu."
     graph_evidence = _merge_evidence(_evidence_from_memories(db, _primary_graph_evidence(supporting)), [])
     fallback_evidence = [] if graph_evidence else _fts_evidence(db, user, query_text)
     supporting_evidence = _merge_evidence(graph_evidence, fallback_evidence)
@@ -1267,11 +1297,11 @@ def _primary_graph_evidence(memories: list[MemoryRecord], limit: int = 6) -> lis
 def _compose_uncertainty(evidence: list[EvidenceReference], used_fallback: bool, insufficient_basis: bool) -> list[str]:
     notes: list[str] = []
     if insufficient_basis:
-        notes.append("The result is based on limited corroborating evidence in the current visible scope.")
+        notes.append("Sonuç, mevcut görünür kapsamdaki sınırlı destekleyici kanıta dayanıyor.")
     if used_fallback:
-        notes.append("Some support came from text search fallback rather than direct graph-linked evidence.")
+        notes.append("Bazı destekler doğrudan bağlantılı kanıt yerine metin aramasıyla bulundu.")
     if not evidence:
-        notes.append("No directly quoted evidence excerpt could be surfaced from the current visible artifacts.")
+        notes.append("Mevcut görünür belgelerden doğrudan bir kanıt alıntısı gösterilemedi.")
     return notes
 
 
@@ -1312,25 +1342,25 @@ def _rank_open_commitments(commitments: list[MemoryRecord], *, focus_text: str =
 
 
 def _commitment_action_text(commitment: MemoryRecord) -> str:
-    owner_text = f" for {commitment.owner_label}" if commitment.owner_label else ""
+    owner_text = f" ({commitment.owner_label})" if commitment.owner_label else ""
     if commitment.due_date:
         if commitment.due_date < datetime.utcnow():
             return (
-                f"Review the open commitment{owner_text} overdue since {commitment.due_date.strftime('%Y-%m-%d')}: "
+                f"{commitment.due_date.strftime('%d.%m.%Y')} tarihinden beri gecikmiş açık taahhüdü{owner_text} gözden geçirin: "
                 f"'{commitment.title_or_label}'."
             )
-        return f"Review the open commitment{owner_text} due on {commitment.due_date.strftime('%Y-%m-%d')}: '{commitment.title_or_label}'."
-    return f"Review the open commitment '{commitment.title_or_label}' and confirm whether its due path is still realistic."
+        return f"Son tarihi {commitment.due_date.strftime('%d.%m.%Y')} olan açık taahhüdü{owner_text} gözden geçirin: '{commitment.title_or_label}'."
+    return f"Açık taahhüdü gözden geçirip takvimin hâlâ gerçekçi olduğunu doğrulayın: '{commitment.title_or_label}'."
 
 
 def _next_actions_from_support(memories: list[MemoryRecord], contradictions: list[dict], stale_assumptions: list[dict]) -> list[str]:
     actions: list[str] = []
     if contradictions:
         top = contradictions[0]
-        actions.append(f"Resolve the conflict between {top['from_title']} and {top['to_title']} before committing to the current roadmap path.")
+        actions.append(f"Mevcut yol haritasına devam etmeden önce {top['from_title']} ile {top['to_title']} arasındaki çelişkiyi çözün.")
     if stale_assumptions:
         top = stale_assumptions[0]
-        actions.append(f"Revalidate the assumption '{top['title_or_label']}' because later evidence now marks it {top['status']}.")
+        actions.append(f"Sonraki kanıtlar durumunu {status_label(top['status'])} olarak değiştirdiği için '{top['title_or_label']}' varsayımını yeniden doğrulayın.")
     focus_text = " ".join(
         [
             *(f"{item['from_title']} {item['to_title']}" for item in contradictions[:2]),
@@ -1429,12 +1459,12 @@ def _prior_relevant_work_items(db: Session, user: User, artifact: Artifact, memo
                 "related_topic": related_topic or "general",
                 "overlap_score": overlap_score,
                 "continuity_reason": (
-                    f"This artifact overlaps with prior work in {prior_artifact_title}: new memory '{new_titles}' "
-                    f"matches earlier memory '{prior_titles}'."
+                    f"Bu belge {prior_artifact_title} içindeki önceki çalışmayla örtüşüyor: yeni '{new_titles}' kaydı, "
+                    f"önceki '{prior_titles}' kaydıyla eşleşiyor."
                 ),
                 "recommended_action": (
-                    f"Review '{prior_artifact_title}' before repeating the analysis; reuse or explicitly update the prior memory "
-                    f"on {related_topic or 'this topic'}."
+                    f"Analizi tekrarlamadan önce '{prior_artifact_title}' belgesini inceleyin; "
+                    f"{related_topic or 'bu konu'} için önceki kaydı kullanın veya açıkça güncelleyin."
                 ),
                 "introduced_memory_objects": _signal_memory_payload(introduced_support),
                 "prior_memory_objects": _signal_memory_payload(prior_support),
@@ -1517,13 +1547,13 @@ def _compact_signal_claim_title(value: str, *, max_length: int = 72) -> str:
 
 
 def _contradiction_next_action_title(item: dict[str, Any]) -> str:
-    from_title = _compact_signal_claim_title(str(item.get("from_title") or "new claim"))
-    to_title = _compact_signal_claim_title(str(item.get("to_title") or "prior claim"))
+    from_title = _compact_signal_claim_title(str(item.get("from_title") or "yeni kayıt"))
+    to_title = _compact_signal_claim_title(str(item.get("to_title") or "önceki kayıt"))
     if from_title == "launch gate stays open" and to_title == "move launch to Q3 2026":
-        return "Resolve launch timing: gate open ↔ Q3 2026"
+        return "Yayın zamanlamasını netleştirin: kapı açık ↔ 2026 Q3"
     if from_title == "move launch to Q3 2026" and to_title == "launch gate stays open":
-        return "Resolve launch timing: Q3 2026 ↔ gate open"
-    return f"Resolve contradiction: {from_title} ↔ {to_title}"
+        return "Yayın zamanlamasını netleştirin: 2026 Q3 ↔ kapı açık"
+    return f"Çelişkiyi çözün: {from_title} ↔ {to_title}"
 
 
 def _contradiction_next_action_signal(
@@ -1543,13 +1573,13 @@ def _contradiction_next_action_signal(
         db,
         signal_id=_stable_signal_id("sig_next", "contradiction", str(item.get("edge_id"))),
         title=_contradiction_next_action_title(item),
-        summary="A later roadmap claim now collides with an earlier decision or commitment in the reconstructed memory graph.",
+        summary="Daha yeni bir yol haritası kaydı, önceki bir karar veya taahhütle çelişiyor.",
         related_topic=str(item.get("topic_key") or item.get("claim_family_key") or "general"),
         urgency_score=0.92 if has_commitment else 0.84,
         recommended_action=actions[0],
         grounded_reasoning=(
-            f"The graph contains a CONTRADICTS edge between the later claim '{item['from_title']}' and the earlier record "
-            f"'{item['to_title']}'. The paired evidence spans identify both sides before recommending a resolution step."
+            f"Daha yeni '{item['from_title']}' kaydı ile önceki '{item['to_title']}' kaydı arasında kanıtlı bir çelişki var. "
+            "Öneri, iki tarafın kaynakları birlikte değerlendirilerek oluşturuldu."
         ),
         supporting_memories=supporting,
         source_signal_types=["contradiction"] + (["open_commitment"] if has_commitment else []),
@@ -1573,14 +1603,14 @@ def _drift_next_action_signal(
     return _next_action_signal_payload(
         db,
         signal_id=_stable_signal_id("sig_next", "drift", str(item.get("assumption_id")), str(item.get("supporting_signal_memory_id"))),
-        title=f"Revalidate drifted assumption: {item['title_or_label']}",
-        summary="A previously active assumption is now marked stale, weakening, or reversed by later evidence.",
+        title=f"Değişen varsayımı yeniden doğrulayın: {item['title_or_label']}",
+        summary="Daha yeni kanıtlar, daha önce geçerli olan bir varsayımı zayıflattı veya geçersiz kıldı.",
         related_topic=str(item.get("topic_key") or "general"),
         urgency_score=0.86 if item.get("status") == "reversed" else 0.78,
         recommended_action=actions[0],
         grounded_reasoning=(
-            f"The assumption '{item['title_or_label']}' is currently {item.get('status')} and is linked to later evidence "
-            f"'{item.get('supporting_signal_title') or 'in the graph'}', so the next action is to revalidate the operating basis."
+            f"'{item['title_or_label']}' varsayımının mevcut durumu {status_label(str(item.get('status') or 'stale'))}; bunu değiştiren daha yeni kayıt "
+            f"'{item.get('supporting_signal_title') or 'şirket hafızasındaki sonraki kanıt'}'. Bu nedenle çalışma dayanağı yeniden doğrulanmalı."
         ),
         supporting_memories=supporting,
         source_signal_types=["assumption_drift"] + (["open_commitment"] if has_commitment else []),
@@ -1593,14 +1623,14 @@ def _commitment_next_action_signal(db: Session, *, commitment: MemoryRecord) -> 
     return _next_action_signal_payload(
         db,
         signal_id=_stable_signal_id("sig_next", "commitment", commitment.memory_id),
-        title=f"Review open commitment: {commitment.title_or_label}",
-        summary="An open commitment remains in the reconstructed memory and should be checked before the team moves.",
+        title=f"Açık taahhüdü gözden geçirin: {commitment.title_or_label}",
+        summary="Şirket hafızasında açık bir taahhüt var; ekip ilerlemeden önce kontrol edilmeli.",
         related_topic=commitment.topic_key,
         urgency_score=0.74 if overdue else 0.62,
         recommended_action=_commitment_action_text(commitment),
         grounded_reasoning=(
-            "The commitment is still open in the memory graph"
-            + (f" and its due date was {commitment.due_date.strftime('%Y-%m-%d')}." if commitment.due_date else ".")
+            "Taahhüt şirket hafızasında hâlâ açık"
+            + (f" ve son tarihi {commitment.due_date.strftime('%d.%m.%Y')}." if commitment.due_date else ".")
         ),
         supporting_memories=[commitment],
         source_signal_types=["open_commitment"],
@@ -1685,7 +1715,7 @@ def artifact_proactive_signals(db: Session, user: User, artifact: Artifact, *, i
             "artifact_id": artifact.artifact_id,
             "artifact_title": artifact.title,
             "ingestion_status": artifact.ingestion_status,
-            "summary": "This artifact is marked rejected by admin review, so it is excluded from trusted proactive intelligence.",
+            "summary": "Bu belge yönetici incelemesinde reddedildiği için güvenilir öneri ve sinyallerden çıkarıldı.",
             "signal_counts": signal_counts,
             "introduced_contradictions": [],
             "revealed_assumption_drift": [],
@@ -1721,17 +1751,17 @@ def artifact_proactive_signals(db: Session, user: User, artifact: Artifact, *, i
     }
     total_signal_count = sum(signal_counts.values())
     if artifact.ingestion_status != "completed":
-        summary = "This artifact has not completed ingestion, so proactive memory effects are not available yet."
+        summary = "Belgenin işlenmesi henüz tamamlanmadı; kurumsal hafıza etkileri henüz hazır değil."
     elif total_signal_count:
         summary = (
-            f"This artifact produced {signal_counts['contradictions']} contradiction signal(s), "
-            f"{signal_counts['assumption_drift']} assumption-drift signal(s), "
-            f"{signal_counts['supersessions']} supersession/reopening link(s), and "
-            f"{signal_counts['prior_relevant_work']} prior-work continuity signal(s), plus "
-            f"{signal_counts['next_actions']} grounded next-action recommendation(s)."
+            f"Bu belge {signal_counts['contradictions']} çelişki, "
+            f"{signal_counts['assumption_drift']} varsayım değişikliği, "
+            f"{signal_counts['supersessions']} güncelleme/yeniden açma bağlantısı, "
+            f"{signal_counts['prior_relevant_work']} önceki iş bağlantısı ve "
+            f"{signal_counts['next_actions']} kanıtlı sonraki adım önerisi üretti."
         )
     else:
-        summary = "No contradiction, drift, supersession, continuity, or next-action signal could be grounded from this artifact in the current visible memory."
+        summary = "Bu belgeden mevcut görünür hafıza içinde kanıtlı bir çelişki, varsayım değişikliği, güncelleme, önceki iş bağlantısı veya sonraki adım çıkarılamadı."
     return {
         "artifact_id": artifact.artifact_id,
         "artifact_title": artifact.title,
@@ -1835,12 +1865,12 @@ def persist_artifact_proactive_signals(db: Session, user: User, artifact: Artifa
             workspace_id=artifact.workspace_id,
             source_artifact_id=artifact.artifact_id,
             signal_type="contradiction",
-            title=f"Contradiction: {item['from_title']} ↔ {item['to_title']}",
-            summary="A newly ingested artifact introduced a contradiction against prior memory.",
+            title=f"Çelişki: {item['from_title']} ↔ {item['to_title']}",
+            summary="Yeni işlenen belge, önceki şirket hafızasıyla bir çelişki oluşturdu.",
             related_topic=str(item.get("topic_key") or "general"),
             urgency_score=0.9,
             uncertainty_score=1 - confidence_score,
-            grounded_reasoning=str(item.get("evidence_provenance") or item.get("evidence_span") or "Graph contradiction edge with linked evidence."),
+            grounded_reasoning=str(item.get("evidence_provenance") or item.get("evidence_span") or "Çelişki, bağlantılı kaynak kanıtıyla destekleniyor."),
             recommended_action=None,
             payload_json=item,
         )
@@ -1854,12 +1884,12 @@ def persist_artifact_proactive_signals(db: Session, user: User, artifact: Artifa
             workspace_id=artifact.workspace_id,
             source_artifact_id=artifact.artifact_id,
             signal_type="assumption_drift",
-            title=f"Assumption drift: {item['title_or_label']}",
-            summary=f"A newly ingested artifact marked this assumption {status}.",
+            title=f"Varsayım değişikliği: {item['title_or_label']}",
+            summary=f"Yeni kanıtlara göre varsayımın durumu: {status_label(status)}.",
             related_topic=str(item.get("topic_key") or "general"),
             urgency_score=0.84 if status == "reversed" else 0.76,
             uncertainty_score=1 - confidence_score,
-            grounded_reasoning=str(item.get("evidence_provenance") or item.get("validity_notes") or "Later evidence changed the assumption status."),
+            grounded_reasoning=str(item.get("evidence_provenance") or item.get("validity_notes") or "Daha yeni kanıt varsayımın durumunu değiştirdi."),
             recommended_action=None,
             payload_json=item,
         )
@@ -1872,12 +1902,12 @@ def persist_artifact_proactive_signals(db: Session, user: User, artifact: Artifa
             workspace_id=artifact.workspace_id,
             source_artifact_id=artifact.artifact_id,
             signal_type="supersession",
-            title=f"Supersession: {item['from_title']} supersedes {item['to_title']}",
-            summary="A newly ingested artifact reopened or superseded earlier memory.",
+            title=f"Güncellenen kayıt: {item['from_title']} → {item['to_title']}",
+            summary="Yeni işlenen belge, önceki bir şirket kaydını yeniden açtı veya güncelledi.",
             related_topic=str(item.get("topic_key") or "general"),
             urgency_score=0.72,
             uncertainty_score=1 - confidence_score,
-            grounded_reasoning=str(item.get("evidence_provenance") or item.get("evidence_span") or "Graph supersession edge with linked evidence."),
+            grounded_reasoning=str(item.get("evidence_provenance") or item.get("evidence_span") or "Güncelleme bağlantılı kaynak kanıtıyla destekleniyor."),
             recommended_action=None,
             payload_json=item,
         )
@@ -1890,12 +1920,12 @@ def persist_artifact_proactive_signals(db: Session, user: User, artifact: Artifa
             workspace_id=artifact.workspace_id,
             source_artifact_id=artifact.artifact_id,
             signal_type="continuity_overlap",
-            title=f"Prior relevant work: {item['prior_artifact_title']}",
-            summary="A newly ingested artifact substantially overlaps with prior organizational work.",
+            title=f"İlgili önceki çalışma: {item['prior_artifact_title']}",
+            summary="Yeni işlenen belge, önceki şirket çalışmasıyla önemli ölçüde örtüşüyor.",
             related_topic=str(item.get("related_topic") or "general"),
             urgency_score=0.64,
             uncertainty_score=1 - overlap_score,
-            grounded_reasoning=str(item.get("continuity_reason") or "Prior related memory objects overlap with this artifact."),
+            grounded_reasoning=str(item.get("continuity_reason") or "İlgili önceki şirket kayıtları bu belgeyle örtüşüyor."),
             recommended_action=str(item.get("recommended_action") or ""),
             payload_json=item,
         )
@@ -1945,7 +1975,7 @@ def _signal_visible_rows(db: Session, user: User, *, limit: int = 50) -> list[Si
     trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
     if not trusted_artifact_ids:
         return []
-    return list(
+    candidates = list(
         db.scalars(
             select(Signal)
             .where(
@@ -1954,9 +1984,9 @@ def _signal_visible_rows(db: Session, user: User, *, limit: int = 50) -> list[Si
                 Signal.source_artifact_id.in_(trusted_artifact_ids),
             )
             .order_by(Signal.urgency_score.desc(), Signal.created_at.desc())
-            .limit(limit)
         ).all()
     )
+    return [signal for signal in candidates if signal_is_visible_to_artifact_ids(signal, trusted_artifact_ids)][:limit]
 
 
 def list_persisted_signals(db: Session, user: User, *, limit: int = 50) -> list[SignalRead]:
@@ -1966,7 +1996,8 @@ def list_persisted_signals(db: Session, user: User, *, limit: int = 50) -> list[
 
 
 def _persisted_signals_for_artifact(db: Session, user: User, artifact_id: str, *, limit: int = 12) -> list[SignalRead]:
-    if artifact_id not in _trusted_visible_artifact_ids(db, user):
+    trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
+    if artifact_id not in trusted_artifact_ids:
         return []
     signals = db.scalars(
         select(Signal)
@@ -1979,7 +2010,7 @@ def _persisted_signals_for_artifact(db: Session, user: User, artifact_id: str, *
         .limit(limit)
     ).all()
     artifact_titles = _artifact_title_map(db, {artifact_id})
-    return [_signal_read_model(signal, artifact_titles) for signal in signals]
+    return [_signal_read_model(signal, artifact_titles) for signal in signals if signal_is_visible_to_artifact_ids(signal, trusted_artifact_ids)]
 
 
 def _value_from_item(item: Any, key: str) -> Any:
@@ -2247,7 +2278,7 @@ def _evidence_refs_for_signal_payload(
                 artifact_title=_artifact_title_for_id(artifact_titles, artifact_id),
                 artifact_review_status=_artifact_review_status_for_id(artifact_review_statuses, artifact_id),
                 chunk_id=None,
-                excerpt=str(evidence_span or "Visible source artifact contributed to this persisted signal."),
+                excerpt=str(evidence_span or "Görünür kaynak belge bu kayıtlı sinyali destekledi."),
                 evidence_kind="graph",
             )
         )
@@ -2257,11 +2288,11 @@ def _evidence_refs_for_signal_payload(
 
 def _signal_type_label(signal_type: str) -> str:
     labels = {
-        "contradiction": "contradiction",
-        "assumption_drift": "assumption drift",
-        "supersession": "supersession",
-        "continuity_overlap": "prior-work continuity",
-        "next_action": "next-action guidance",
+        "contradiction": "çelişki",
+        "assumption_drift": "varsayım değişikliği",
+        "supersession": "kayıt güncellemesi",
+        "continuity_overlap": "önceki iş bağlantısı",
+        "next_action": "sonraki adım önerisi",
     }
     return labels.get(signal_type, signal_type.replace("_", " "))
 
@@ -2274,62 +2305,61 @@ def _signal_intelligence_path(
 ) -> list[SignalIntelligenceStep]:
     source_step_evidence = [item for item in supporting_evidence if item.artifact_id == signal.source_artifact_id][:2]
     source_description = (
-        "A visible artifact entered the workspace memory boundary. Extraction may use the central company-controlled "
-        "LLM adapter when configured, with deterministic heuristic fallback preserving local-first operation."
+        "Görünür bir belge şirket hafızasına alındı. Yapılandırılmışsa şirket kontrolündeki yerel model kullanılır; "
+        "model kullanılamadığında yerel sezgisel çıkarım devreye girer."
     )
     graph_description = (
-        "The backend normalized extracted claims into structured memory objects and graph edges, then filtered support "
-        "through the reader's artifact permissions and artifact review status. Rejected artifacts are not used as trusted support."
+        "Çıkarılan kayıtlar yapılandırıldı ve okuyucunun belge izinleri ile inceleme durumuna göre filtrelendi. "
+        "Reddedilen belgeler güvenilir destek olarak kullanılmaz."
     )
     classification_description = (
-        f"Deterministic graph analysis classified the persisted object as {_signal_type_label(signal.signal_type)} on topic "
-        f"{signal.related_topic}; urgency and uncertainty are stored with the signal instead of recomputed in the browser."
+        f"Kayıt '{signal.related_topic}' konusunda {_signal_type_label(signal.signal_type)} olarak sınıflandırıldı; "
+        "öncelik ve belirsizlik bilgisi sinyalle birlikte saklandı."
     )
     payload = signal.payload_json if isinstance(signal.payload_json, dict) else {}
     llm_metadata_value = payload.get("llm_signal_explanation")
     llm_metadata = llm_metadata_value if isinstance(llm_metadata_value, dict) else {}
     if llm_metadata.get("status") == "applied":
         guidance_description = (
-            "A central company-controlled local LLM assisted only the wording of the persisted explanation and action; "
-            "the signal type, source evidence, urgency, and persistence boundary remained deterministic. "
-            f"{signal.recommended_action or 'No automatic task was promoted.'}"
+            "Şirket kontrolündeki yerel model yalnızca açıklama ve önerinin yazımına yardım etti; sinyal türü, kaynak kanıtı "
+            "ve öncelik kayıtlı kurallarla belirlendi. "
+            f"{signal.recommended_action or 'Otomatik bir görev oluşturulmadı.'}"
         )
     elif llm_metadata.get("status") == "fallback":
         guidance_description = (
-            "LLM-assisted wording was attempted but the backend kept the deterministic explanation because the local "
-            "inference gateway failed or returned invalid structure. "
-            f"{signal.recommended_action or 'No automatic task was promoted.'}"
+            "Yerel modelle anlatım denendi ancak model geçersiz sonuç döndürdüğü için mevcut açıklama korundu. "
+            f"{signal.recommended_action or 'Otomatik bir görev oluşturulmadı.'}"
         )
     else:
         guidance_description = (
             signal.recommended_action
-            or "No automatic task was promoted; the signal remains inspectable so an operator can resolve the memory tension before acting."
+            or "Otomatik bir görev oluşturulmadı; ekip harekete geçmeden önce sinyali inceleyebilir."
         )
     return [
         SignalIntelligenceStep(
             step_kind="source_artifact",
-            title="Source artifact entered memory",
+            title="Kaynak belge hafızaya alındı",
             description=source_description,
             supporting_evidence=source_step_evidence,
             supporting_memory_objects=[],
         ),
         SignalIntelligenceStep(
             step_kind="memory_reconstruction",
-            title="Structured memory was reconstructed",
+            title="Yapılandırılmış hafıza oluşturuldu",
             description=graph_description,
             supporting_evidence=supporting_evidence[:3],
             supporting_memory_objects=supporting_memory_objects[:4],
         ),
         SignalIntelligenceStep(
             step_kind="signal_classification",
-            title="Signal was classified and persisted",
+            title="Sinyal sınıflandırıldı ve kaydedildi",
             description=classification_description,
             supporting_evidence=supporting_evidence[:3],
             supporting_memory_objects=supporting_memory_objects[:4],
         ),
         SignalIntelligenceStep(
             step_kind="guidance_composition",
-            title="Guidance boundary was made explicit",
+            title="Öneri ve kanıt sınırı belirlendi",
             description=guidance_description,
             supporting_evidence=supporting_evidence[:2],
             supporting_memory_objects=supporting_memory_objects[:3],
@@ -2343,7 +2373,7 @@ def get_persisted_signal_detail(db: Session, user: User, signal_id: str) -> Sign
         return None
 
     trusted_artifact_ids = _trusted_visible_artifact_ids(db, user)
-    if signal.source_artifact_id not in trusted_artifact_ids:
+    if not signal_is_visible_to_artifact_ids(signal, trusted_artifact_ids):
         return None
 
     artifact_titles = _artifact_title_map(db, {artifact_id for artifact_id in trusted_artifact_ids if artifact_id})
@@ -2694,8 +2724,8 @@ def execute_query(db: Session, *, query_text: str, actor: User, conversation_con
         result_data = _next_action_result(db, actor, employee_question)
     else:
         result_data = _lineage_result(db, actor, employee_question)
-    if rejected_artifact_count and "Some visible evidence was excluded because an admin marked its source artifact rejected." not in result_data["uncertainty_notes"]:
-        result_data["uncertainty_notes"].append("Some visible evidence was excluded because an admin marked its source artifact rejected.")
+    if rejected_artifact_count and "Yöneticinin reddettiği bazı görünür kaynaklar yanıta dahil edilmedi." not in result_data["uncertainty_notes"]:
+        result_data["uncertainty_notes"].append("Yöneticinin reddettiği bazı görünür kaynaklar yanıta dahil edilmedi.")
     context_assembly_ms = max(0, round((perf_counter() - context_assembly_started_at) * 1000))
     result_data = _apply_optional_llm_answer_synthesis(
         query_text=employee_question,
@@ -2816,7 +2846,7 @@ def build_query_result_for_reader(db: Session, query_run: QueryRun, reader: User
     permissions_limited = payload.get("permissions_limited", False) or len(visible_artifact_ids) < db.query(Artifact).filter(Artifact.workspace_id == reader.workspace_id).count()
     uncertainty_notes = list(payload.get("uncertainty_notes", []))
     answer_text = query_run.answer_text
-    why_this_answer = payload.get("why_this_answer", "This answer was composed from the available memory objects and evidence references.")
+    why_this_answer = payload.get("why_this_answer", "Bu yanıt erişilebilen şirket kayıtları ve kanıt kaynaklarından oluşturuldu.")
     recommended_next_actions = payload.get("recommended_next_actions", [])
 
     redacted_payload = any(
@@ -2834,12 +2864,12 @@ def build_query_result_for_reader(db: Session, query_run: QueryRun, reader: User
             stale_assumptions=stale_assumptions,
             supporting_nodes=supporting_node_dicts,
         )
-    if permissions_limited and "Some relevant evidence may be unavailable due to artifact permissions." not in uncertainty_notes:
-        uncertainty_notes.append("Some relevant evidence may be unavailable due to artifact permissions.")
-    if len(trusted_artifact_ids) < len(visible_artifact_ids) and "Some visible evidence was excluded because an admin marked its source artifact rejected." not in uncertainty_notes:
-        uncertainty_notes.append("Some visible evidence was excluded because an admin marked its source artifact rejected.")
-    if redacted_payload and "This cached result was reduced to remove details from artifacts you can no longer access." not in uncertainty_notes:
-        uncertainty_notes.append("This cached result was reduced to remove details from artifacts you can no longer access or that are no longer review-accepted.")
+    if permissions_limited and "Belge izinleri nedeniyle ilgili bazı kanıtlara erişilemiyor olabilir." not in uncertainty_notes:
+        uncertainty_notes.append("Belge izinleri nedeniyle ilgili bazı kanıtlara erişilemiyor olabilir.")
+    if len(trusted_artifact_ids) < len(visible_artifact_ids) and "Yöneticinin reddettiği bazı görünür kaynaklar yanıta dahil edilmedi." not in uncertainty_notes:
+        uncertainty_notes.append("Yöneticinin reddettiği bazı görünür kaynaklar yanıta dahil edilmedi.")
+    if redacted_payload and "Bu kayıtlı sonuç, artık erişemediğiniz belgelerin ayrıntılarını kaldırmak için daraltıldı." not in uncertainty_notes:
+        uncertainty_notes.append("Bu kayıtlı sonuç, artık erişemediğiniz veya incelemesi kabul edilmeyen belgelerin ayrıntılarını kaldırmak için daraltıldı.")
     return QueryResult(
         query_run_id=query_run.query_run_id,
         query_text=query_run.query_text,

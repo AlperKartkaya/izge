@@ -248,11 +248,8 @@ def _seed_default_users(db: Session, workspace: Workspace) -> dict[str, User]:
                 event_metadata={"role": user.role, "email": user.email, "seeded_employee": True},
             )
         else:
-            user.role = spec["role"]
-            user.display_name = spec["display_name"]
-            user.is_active = True
-            user.password_hash = hash_password(spec["password"])
-            db.commit()
+            # Existing accounts belong to the customer; bootstrap must never reset them.
+            pass
         users_by_email[user.email] = user
     return users_by_email
 
@@ -261,7 +258,6 @@ def _seed_default_artifacts(db: Session, *, workspace: Workspace, admin: User) -
     from app.services.ingestion import run_ingestion
     from app.services.storage import persist_upload_bytes
 
-    settings = get_settings()
     for spec in DEFAULT_ARTIFACT_SPECS:
         existing = db.scalar(select(Artifact).where(Artifact.workspace_id == workspace.workspace_id, Artifact.title == spec["title"]))
         if existing is not None:
@@ -292,12 +288,14 @@ def _seed_default_artifacts(db: Session, *, workspace: Workspace, admin: User) -
         artifact.source_path = source_path
         artifact.checksum_sha256 = checksum
         db.commit()
-        previous_local_llm_enabled = settings.local_llm_enabled
-        previous_signal_explanation_enabled = settings.llm_signal_explanation_enabled
-        settings.local_llm_enabled = False
-        settings.llm_signal_explanation_enabled = False
         try:
-            run_ingestion(db, artifact=artifact, actor=admin)
+            run_ingestion(
+                db,
+                artifact=artifact,
+                actor=admin,
+                use_local_llm=False,
+                use_signal_explanations=False,
+            )
             artifact.review_status = "reviewed"
             artifact.reviewed_by = admin.user_id
             artifact.reviewed_at = datetime.utcnow()
@@ -307,9 +305,6 @@ def _seed_default_artifacts(db: Session, *, workspace: Workspace, admin: User) -
             artifact.review_status = "needs_review"
             artifact.review_notes = f"Seeded artifact needs manual review because ingestion failed: {exc}"
             db.commit()
-        finally:
-            settings.local_llm_enabled = previous_local_llm_enabled
-            settings.llm_signal_explanation_enabled = previous_signal_explanation_enabled
 
 
 def _seed_payroll_export_assistant_snapshot() -> dict[str, object]:
@@ -725,23 +720,7 @@ def seed_defaults(db: Session) -> None:
             target_id=admin.user_id,
             event_metadata={"role": admin.role, "email": admin.email},
         )
-    elif settings.sync_default_admin_password and settings.default_admin_password:
-        admin.password_hash = hash_password(settings.default_admin_password)
-        admin.display_name = settings.default_admin_display_name
-        admin.is_active = True
-        admin.role = "Admin"
-        db.commit()
-        log_event(
-            db,
-            workspace_id=workspace.workspace_id,
-            actor_user_id=admin.user_id,
-            event_type="USER_SEEDED_PASSWORD_SYNCED",
-            target_type="user",
-            target_id=admin.user_id,
-            event_metadata={"role": admin.role, "email": admin.email, "bootstrap_sync": True},
-        )
-
-
-    default_users = _seed_default_users(db, workspace)
-    _seed_default_artifacts(db, workspace=workspace, admin=admin)
-    _seed_default_team_chat(db, workspace=workspace, users_by_email=default_users, admin=admin)
+    if settings.demo_seed_enabled:
+        default_users = _seed_default_users(db, workspace)
+        _seed_default_artifacts(db, workspace=workspace, admin=admin)
+        _seed_default_team_chat(db, workspace=workspace, users_by_email=default_users, admin=admin)

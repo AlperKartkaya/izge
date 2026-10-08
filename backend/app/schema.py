@@ -8,6 +8,9 @@ from app.db import Base, engine as default_engine
 
 
 REQUIRED_SCHEMA_COLUMNS: dict[str, set[str]] = {
+    "work_tasks": {"task_id", "workspace_id", "created_by", "assignee_user_id", "status", "remind_at", "source_artifact_ids", "source_snapshot"},
+    "colleague_runs": {"run_id", "workspace_id", "created_by", "status", "participant_user_ids", "lease_expires_at", "sources"},
+    "colleague_run_events": {"event_id", "run_id", "sequence", "event_type", "payload"},
     "artifacts": {"artifact_id", "workspace_id", "title", "review_status", "reviewed_by", "reviewed_at", "review_notes"},
     "artifact_chunks": {"chunk_id", "artifact_id", "workspace_id", "sequence_number", "text", "chunk_metadata"},
     "query_runs": {"query_run_id", "workspace_id", "query_class", "route_confidence", "answer_payload", "permissions_limited"},

@@ -4,12 +4,33 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models import Artifact, ArtifactPermission, User
+from app.models import Artifact, ArtifactPermission, Signal, User
+
+
+def signal_is_visible_to_artifact_ids(signal: Signal, allowed_artifact_ids: set[str]) -> bool:
+    # Derived titles and summaries can quote a different document than their primary source.
+    referenced_ids = {signal.source_artifact_id} if signal.source_artifact_id else set()
+
+    def collect(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if str(key).endswith("artifact_id") and isinstance(item, str) and item:
+                    referenced_ids.add(item)
+                elif str(key).endswith("artifact_ids") and isinstance(item, list):
+                    referenced_ids.update(item_id for item_id in item if isinstance(item_id, str) and item_id)
+                else:
+                    collect(item)
+        elif isinstance(value, list):
+            for item in value:
+                collect(item)
+
+    collect(signal.payload_json)
+    return bool(referenced_ids) and referenced_ids.issubset(allowed_artifact_ids)
 
 
 def require_admin(user: User) -> None:
     if user.role != "Admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu işlem için yönetici yetkisi gerekiyor.")
 
 
 def artifact_is_visible_to_user(db: Session, artifact: Artifact, user: User) -> bool:
@@ -28,7 +49,7 @@ def artifact_is_visible_to_user(db: Session, artifact: Artifact, user: User) -> 
 
 def require_artifact_access(db: Session, artifact: Artifact, user: User) -> None:
     if not artifact_is_visible_to_user(db, artifact, user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Artifact access denied")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu kaynağa erişim izniniz yok.")
 
 
 def set_artifact_permissions(
@@ -49,7 +70,7 @@ def set_artifact_permissions(
         if invalid_ids:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown or out-of-workspace permitted users: {', '.join(invalid_ids)}",
+                detail=f"Şirkette bulunmayan kullanıcılar: {', '.join(invalid_ids)}",
             )
         unique_ids = sorted(valid_ids)
         for user_id in unique_ids:
