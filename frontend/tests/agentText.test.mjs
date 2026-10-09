@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { insertIzgeMention, tokenizeAgentText } from '../src/lib/agentText.ts'
+import { buildIzgeFollowUp, insertIzgeMention, insertIzgeMentionAtCaret, tokenizeAgentText } from '../src/lib/agentText.ts'
 
 test('agent text identifies bold, citations and İzge mentions without HTML parsing', () => {
   assert.deepEqual(tokenizeAgentText('**Risk:** @izge kontrol et [2]'), [
@@ -21,6 +21,22 @@ test('bold content remains available for nested citation and mention rendering',
 test('mention selection replaces only the active @ token', () => {
   assert.equal(insertIzgeMention('Lütfen @iz'), 'Lütfen @izge ')
   assert.equal(insertIzgeMention('Kontrol et'), 'Kontrol et @izge ')
+})
+
+test('mention selection replaces the token around the caret and returns the committed caret position', () => {
+  assert.deepEqual(insertIzgeMentionAtCaret('Önce @izge sonra', 8), {
+    value: 'Önce @izge sonra',
+    caret: 11,
+  })
+  assert.deepEqual(insertIzgeMentionAtCaret('Önce @iz sonra', 8), {
+    value: 'Önce @izge sonra',
+    caret: 11,
+  })
+})
+
+test('follow-up drafts end with a space so the caret can stay after the question', () => {
+  assert.equal(buildIzgeFollowUp('Bunu kim takip ediyor?'), '@izge Bunu kim takip ediyor? ')
+  assert.equal(buildIzgeFollowUp('  Son tarih nedir?  '), '@izge Son tarih nedir? ')
 })
 
 test('human references and unknown citations remain visible while valid citations become chips', () => {

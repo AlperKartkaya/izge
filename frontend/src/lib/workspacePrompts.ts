@@ -1,3 +1,5 @@
+import { translate } from './language'
+
 export const canonicalWorkspacePrompt =
   'Şirket kayıtlarında gelir, müşteri veya teslimat açısından dikkat etmemiz gereken ne var?'
 
@@ -10,3 +12,7 @@ export const workspaceStarterPrompts = [
   'Her ay tekrar eden teknik sorunların çözülmemiş kök nedeni ne?',
   'Başka bir ekibin onayını bekleyen ve karşı tarafa aktarılmamış işler hangileri?',
 ]
+
+export function getCanonicalWorkspacePrompt(): string {
+  return translate('What should we pay attention to in company records regarding revenue, customers or delivery?', canonicalWorkspacePrompt)
+}

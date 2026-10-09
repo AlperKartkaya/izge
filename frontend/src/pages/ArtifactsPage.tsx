@@ -1,3 +1,4 @@
+import { translate } from '../lib/language'
 import { SourcePreviewButton } from '../components/SourcePreviewButton'
 import { useEffect, useMemo, useState, type FormEventHandler } from "react";
 import { Link } from "react-router-dom";
@@ -5,6 +6,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Callout, EmptyState, Panel, StatusBadge } from "../components/ui";
 import { api, ApiError } from "../lib/api";
 import { formatDateTime, formatLabel } from "../lib/format";
+import { useLanguage } from '../lib/i18n'
 import type {
   ArtifactDetail,
   ArtifactProactiveSignals,
@@ -49,6 +51,7 @@ function signalCount(signals: ArtifactProactiveSignals | null, key: string) {
 }
 
 export function ArtifactsPage() {
+  const { t } = useLanguage()
   const { session } = useAuth();
   const [artifacts, setArtifacts] = useState<ArtifactRead[]>([]);
   const [users, setUsers] = useState<UserRead[]>([]);
@@ -137,7 +140,7 @@ export function ArtifactsPage() {
           setError(
             caughtError instanceof ApiError
               ? caughtError.message
-              : "Unable to load memory.",
+              : translate("Unable to load memory.", "Hafıza yüklenemedi."),
           );
         }
       }
@@ -197,7 +200,7 @@ export function ArtifactsPage() {
   const memoryVitals = useMemo(
     () => [
       { label: "sources", value: memoryStats.sourceCount },
-      { label: "objects", value: memoryStats.memoryObjectCount },
+      { label: translate("objects", "nesne"), value: memoryStats.memoryObjectCount },
       { label: "signals", value: memoryStats.signalTotal },
       { label: "review", value: memoryStats.needsReview },
     ],
@@ -219,7 +222,7 @@ export function ArtifactsPage() {
   const handleUpload: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault();
     if (!session?.token || !uploadFile) {
-      setError("Choose a supported file before feeding memory.");
+      setError(translate("Choose a supported file before feeding memory.", "Hafızaya eklemeden önce desteklenen bir dosya seçin."));
       return;
     }
 
@@ -236,13 +239,13 @@ export function ArtifactsPage() {
       setUploadFile(null);
       await loadMemorySurface(artifact.artifact_id);
       setSuccess(
-        "File added. Memory indexing started and the source is ready for preview/download.",
+        translate("File added. Memory indexing started and the source is ready for preview/download.", "Dosya eklendi. Hafıza işleme başladı; kaynak önizlemeye ve indirmeye hazır."),
       );
     } catch (caughtError) {
       setError(
         caughtError instanceof ApiError
           ? caughtError.message
-          : "Unable to upload source file.",
+          : translate("Unable to upload source file.", "Kaynak dosyası yüklenemedi."),
       );
     } finally {
       setIsBusy(false);
@@ -263,12 +266,12 @@ export function ArtifactsPage() {
       const artifact = await api.createPastedText(session.token, pasteState);
       setPasteState(defaultPasteState);
       await loadMemorySurface(artifact.artifact_id);
-      setSuccess("Text note added. Memory indexing started.");
+      setSuccess(translate("Text note added. Memory indexing started.", "Metin notu eklendi. Hafıza işleme başladı."));
     } catch (caughtError) {
       setError(
         caughtError instanceof ApiError
           ? caughtError.message
-          : "Unable to submit text note.",
+          : translate("Unable to submit text note.", "Metin notu kaydedilemedi."),
       );
     } finally {
       setIsBusy(false);
@@ -296,7 +299,7 @@ export function ArtifactsPage() {
       setError(
         caughtError instanceof ApiError
           ? caughtError.message
-          : "Unable to load source detail.",
+          : translate("Unable to load source detail.", "Kaynak ayrıntıları yüklenemedi."),
       );
     }
   }
@@ -317,12 +320,12 @@ export function ArtifactsPage() {
       );
       setLastIngestionJob(job);
       await loadMemorySurface(selectedArtifact.artifact_id);
-      setSuccess("Memory processing completed for the selected source.");
+      setSuccess(translate("Memory processing completed for the selected source.", "Seçilen kaynak hafızaya işlendi."));
     } catch (caughtError) {
       setError(
         caughtError instanceof ApiError
           ? caughtError.message
-          : "Unable to process source memory.",
+          : translate("Unable to process source memory.", "Kaynak hafızaya işlenemedi."),
       );
     } finally {
       setIsBusy(false);
@@ -368,12 +371,12 @@ export function ArtifactsPage() {
         ),
       );
       await loadMemorySurface(detail.artifact_id);
-      setSuccess("Trust state updated.");
+      setSuccess(translate("Trust state updated.", "Güven durumu güncellendi."));
     } catch (caughtError) {
       setError(
         caughtError instanceof ApiError
           ? caughtError.message
-          : "Unable to update trust state.",
+          : translate("Unable to update trust state.", "Güven durumu güncellenemedi."),
       );
     } finally {
       setIsBusy(false);
@@ -382,7 +385,7 @@ export function ArtifactsPage() {
 
   return (
     <div className="stack-xl memory-page">
-      <section className="memory-live-hero" aria-label="Living company memory">
+      <section className="memory-live-hero" aria-label={t('Living company memory', 'Canlı şirket hafızası')}>
         <div className="memory-heart-card">
           <div className="memory-heart-orb" aria-hidden="true">
             <span />
@@ -390,12 +393,12 @@ export function ArtifactsPage() {
             <span />
           </div>
           <div className="memory-heart-copy">
-            <p className="eyebrow">Memory</p>
-            <h2>Living workspace memory</h2>
+            <p className="eyebrow">{t('Memory', 'Hafıza')}</p>
+            <h2>{t('Living workspace memory', 'Canlı çalışma alanı hafızası')}</h2>
           </div>
         </div>
 
-        <div className="memory-vitals-grid" aria-label="Memory vitals">
+        <div className="memory-vitals-grid" aria-label={t('Memory vitals', 'Hafıza göstergeleri')}>
           {memoryVitals.map((vital) => (
             <article key={vital.label} className="memory-vital-card">
               <span>{vital.label}</span>
@@ -408,11 +411,11 @@ export function ArtifactsPage() {
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {success ? <Callout>{success}</Callout> : null}
 
-      <section className="memory-feed-station panel" aria-label="Feed memory">
+      <section className="memory-feed-station panel" aria-label={t('Feed memory', 'Hafızayı besle')}>
         <div className="memory-feed-head">
           <div>
-            <p className="eyebrow">Add source</p>
-            <h3>File or note</h3>
+            <p className="eyebrow">{t('Add source', 'Kaynak ekle')}</p>
+            <h3>{t('File or note', 'Dosya veya not')}</h3>
           </div>
           <span>{isBusy ? "processing" : "ready"}</span>
         </div>
@@ -421,11 +424,11 @@ export function ArtifactsPage() {
           <form className="memory-feed-card" onSubmit={handleUpload}>
             <div className="memory-feed-card-head">
               <span aria-hidden="true">⇧</span>
-              <strong>File</strong>
+              <strong>{t('File', 'Dosya')}</strong>
               <small>PDF · MD · TXT</small>
             </div>
             <label className="field memory-quiet-field">
-              <span className="field-label">Title</span>
+              <span className="field-label">{t('Title', 'Başlık')}</span>
               <input
                 value={uploadState.title}
                 onChange={(event) =>
@@ -434,7 +437,7 @@ export function ArtifactsPage() {
                     title: event.target.value,
                   }))
                 }
-                placeholder="e.g. April coverage note"
+                placeholder={t('e.g. April coverage note', 'Örn. Nisan kapsam notu')}
                 required
               />
             </label>
@@ -451,9 +454,9 @@ export function ArtifactsPage() {
                 </span>
                 <span className="file-drop-copy">
                   <strong>
-                    {uploadFile ? uploadFile.name : "Choose file"}
+                    {uploadFile ? uploadFile.name : translate("Choose file", "Dosya seç")}
                   </strong>
-                  <span>{uploadFile ? "Ready." : "Drag or click."}</span>
+                  <span>{uploadFile ? "Ready." : translate("Drag or click.", "Sürükleyin veya tıklayın.")}</span>
                 </span>
                 <input
                   className="file-input"
@@ -467,7 +470,7 @@ export function ArtifactsPage() {
               </span>
             </label>
             <label className="field memory-quiet-field">
-              <span className="field-label">Visibility</span>
+              <span className="field-label">{t('Visibility', 'Görünürlük')}</span>
               <select
                 value={uploadState.visibility_scope}
                 onChange={(event) =>
@@ -481,14 +484,14 @@ export function ArtifactsPage() {
                   }))
                 }
               >
-                <option value="workspace">Workspace</option>
-                <option value="restricted">Restricted</option>
+                <option value="workspace">{t('Workspace', 'Çalışma alanı')}</option>
+                <option value="restricted">{t('Restricted', 'Kısıtlı')}</option>
               </select>
             </label>
             {uploadState.visibility_scope === "restricted" &&
             selectableUsers.length > 0 ? (
               <fieldset className="choice-grid memory-people-grid">
-                <legend className="field-label">People</legend>
+                <legend className="field-label">{t('People', 'Kişiler')}</legend>
                 {selectableUsers.map((user) => (
                   <label key={user.user_id} className="checkbox-row">
                     <input
@@ -514,7 +517,7 @@ export function ArtifactsPage() {
               </fieldset>
             ) : null}
             <button type="submit" className="primary-button" disabled={isBusy}>
-              {isBusy ? "Feeding…" : "Feed file"}
+              {isBusy ? "Feeding…" : translate("Feed file", "Dosyayı ekle")}
             </button>
           </form>
 
@@ -524,11 +527,11 @@ export function ArtifactsPage() {
           >
             <div className="memory-feed-card-head">
               <span aria-hidden="true">✎</span>
-              <strong>Note</strong>
+              <strong>{t('Note', 'Not')}</strong>
               <small>meeting · handoff · decision</small>
             </div>
             <label className="field memory-quiet-field">
-              <span className="field-label">Title</span>
+              <span className="field-label">{t('Title', 'Başlık')}</span>
               <input
                 value={pasteState.title}
                 onChange={(event) =>
@@ -537,12 +540,12 @@ export function ArtifactsPage() {
                     title: event.target.value,
                   }))
                 }
-                placeholder="e.g. Customer call summary"
+                placeholder={t('e.g. Customer call summary', 'Örn. Müşteri görüşmesi özeti')}
                 required
               />
             </label>
             <label className="field field-block memory-quiet-field">
-              <span className="field-label">Text</span>
+              <span className="field-label">{t('Text', 'Metin')}</span>
               <textarea
                 value={pasteState.text}
                 onChange={(event) =>
@@ -552,12 +555,12 @@ export function ArtifactsPage() {
                   }))
                 }
                 rows={6}
-                placeholder="Paste the useful part. Izge will keep provenance and permissions attached."
+                placeholder={t('Paste the useful part. Izge will keep provenance and permissions attached.', 'Yararlı bölümü yapıştırın. İzge kaynak ve izin bilgilerini bağlı tutar.')}
                 required
               />
             </label>
             <label className="field memory-quiet-field">
-              <span className="field-label">Visibility</span>
+              <span className="field-label">{t('Visibility', 'Görünürlük')}</span>
               <select
                 value={pasteState.visibility_scope}
                 onChange={(event) =>
@@ -571,14 +574,14 @@ export function ArtifactsPage() {
                   }))
                 }
               >
-                <option value="workspace">Workspace</option>
-                <option value="restricted">Restricted</option>
+                <option value="workspace">{t('Workspace', 'Çalışma alanı')}</option>
+                <option value="restricted">{t('Restricted', 'Kısıtlı')}</option>
               </select>
             </label>
             {pasteState.visibility_scope === "restricted" &&
             selectableUsers.length > 0 ? (
               <fieldset className="choice-grid memory-people-grid">
-                <legend className="field-label">People</legend>
+                <legend className="field-label">{t('People', 'Kişiler')}</legend>
                 {selectableUsers.map((user) => (
                   <label key={user.user_id} className="checkbox-row">
                     <input
@@ -604,7 +607,7 @@ export function ArtifactsPage() {
               </fieldset>
             ) : null}
             <button type="submit" className="primary-button" disabled={isBusy}>
-              {isBusy ? "Feeding…" : "Feed note"}
+              {isBusy ? "Feeding…" : translate("Feed note", "Notu ekle")}
             </button>
           </form>
         </div>
@@ -612,13 +615,13 @@ export function ArtifactsPage() {
 
       <div className="two-column-layout wide-right-column memory-source-grid">
         <Panel
-          title="Sources"
-          description="Click a source for details, preview, or download."
+          title={t('Sources', 'Kaynaklar')}
+          description={t('Click a source for details, preview, or download.', 'Ayrıntı, önizleme veya indirme için bir kaynağa tıklayın.')}
         >
           {artifacts.length === 0 ? (
             <EmptyState
-              title="No sources available"
-              description="Feed memory with a file or note."
+              title={t('No sources available', 'Kullanılabilir kaynak yok')}
+              description={t('Feed memory with a file or note.', 'Hafızayı bir dosya veya notla besleyin.')}
             />
           ) : (
             <div className="memory-source-list">
@@ -642,25 +645,25 @@ export function ArtifactsPage() {
                     </span>
                     <span className="memory-source-summary-copy">
                       <strong>{artifact.title}</strong>
-                      <small>{artifact.original_filename ?? "Pasted text"}</small>
+                      <small>{artifact.original_filename ?? translate("Pasted text", "Yapıştırılan metin")}</small>
                     </span>
                     <span className="memory-source-badges">
-                      <StatusBadge value={formatLabel(artifact.ingestion_status)} />
-                      <StatusBadge value={formatLabel(artifact.review_status)} />
+                      <StatusBadge value={artifact.ingestion_status} />
+                      <StatusBadge value={artifact.review_status} />
                     </span>
                   </summary>
                   <div className="memory-source-details">
                     <dl className="meta-list compact-meta-list">
                       <div>
-                        <dt>Type</dt>
+                        <dt>{t('Type', 'Tür')}</dt>
                         <dd>{formatLabel(artifact.source_type)}</dd>
                       </div>
                       <div>
-                        <dt>Updated</dt>
+                        <dt>{t('Updated', 'Güncellendi')}</dt>
                         <dd>{formatDateTime(artifact.updated_at)}</dd>
                       </div>
                       <div>
-                        <dt>Visibility</dt>
+                        <dt>{t('Visibility', 'Görünürlük')}</dt>
                         <dd>{formatLabel(artifact.visibility_scope)}</dd>
                       </div>
                     </dl>
@@ -668,13 +671,11 @@ export function ArtifactsPage() {
                       className="table-action-group"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <SourcePreviewButton artifactId={artifact.artifact_id} title={artifact.title} className="table-action-link">Preview</SourcePreviewButton>
+                      <SourcePreviewButton artifactId={artifact.artifact_id} title={artifact.title} className="table-action-link">{t('Preview', 'Önizle')}</SourcePreviewButton>
                       <a
                         className="table-action-link"
                         href={api.artifactDownloadUrl(artifact.artifact_id)}
-                      >
-                        Download
-                      </a>
+                      >{t("Download", "İndir")}</a>
                     </div>
                   </div>
                 </details>
@@ -684,8 +685,8 @@ export function ArtifactsPage() {
         </Panel>
 
         <Panel
-          title="Selected source"
-          description="Storage, trust, extraction, and memory signals."
+          title={t('Selected source', 'Seçilen kaynak')}
+          description={t('Storage, trust, extraction, and memory signals.', 'Depolama, güven, çıkarım ve hafıza sinyalleri.')}
           aside={
             selectedArtifact && isAdmin ? (
               <button
@@ -694,15 +695,15 @@ export function ArtifactsPage() {
                 onClick={() => void handleRunIngestion()}
                 disabled={isBusy}
               >
-                {isBusy ? "Processing…" : "Process now"}
+                {isBusy ? "Processing…" : translate("Process now", "Şimdi işle")}
               </button>
             ) : null
           }
         >
           {!selectedArtifact ? (
             <EmptyState
-              title="Select a source"
-              description="Choose a file or note to inspect."
+              title={t('Select a source', 'Bir kaynak seçin')}
+              description={t('Choose a file or note to inspect.', 'İncelemek için bir dosya veya not seçin.')}
             />
           ) : (
             <div className="stack-lg">
@@ -710,34 +711,32 @@ export function ArtifactsPage() {
                 <div>
                   <p className="section-label">
                     {selectedFilesystemArtifact?.retrieval_state ??
-                      "Source record"}
+                      translate("Source record", "Kaynak kaydı")}
                   </p>
                   <h3 className="memory-selected-title">
                     {selectedArtifact.title}
                   </h3>
                 </div>
                 <div className="artifact-action-strip">
-                  <SourcePreviewButton artifactId={selectedArtifact.artifact_id} title={selectedArtifact.title} className="secondary-button">Preview</SourcePreviewButton>
+                  <SourcePreviewButton artifactId={selectedArtifact.artifact_id} title={selectedArtifact.title} className="secondary-button">{t('Preview', 'Önizle')}</SourcePreviewButton>
                   <a
                     className="secondary-button"
                     href={api.artifactDownloadUrl(selectedArtifact.artifact_id)}
-                  >
-                    Download
-                  </a>
+                  >{t("Download", "İndir")}</a>
                 </div>
               </div>
 
               <dl className="meta-list compact-memory-meta">
                 <div>
-                  <dt>Visibility</dt>
+                  <dt>{t('Visibility', 'Görünürlük')}</dt>
                   <dd>{formatLabel(selectedArtifact.visibility_scope)}</dd>
                 </div>
                 <div>
-                  <dt>Chunks</dt>
+                  <dt>{t('Chunks', 'Bölümler')}</dt>
                   <dd>{selectedArtifact.chunk_count}</dd>
                 </div>
                 <div>
-                  <dt>Memory objects</dt>
+                  <dt>{t('Memory objects', 'Hafıza nesneleri')}</dt>
                   <dd>
                     {selectedFilesystemArtifact
                       ? sumMemoryCounts(selectedFilesystemArtifact)
@@ -745,20 +744,20 @@ export function ArtifactsPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt>Signals</dt>
+                  <dt>{t('Signals', 'Sinyaller')}</dt>
                   <dd>{selectedFilesystemArtifact?.signal_count ?? 0}</dd>
                 </div>
                 <div>
-                  <dt>Review</dt>
+                  <dt>{t('Review', 'İnceleme')}</dt>
                   <dd>
                     <StatusBadge
-                      value={formatLabel(selectedArtifact.review_status)}
+                      value={selectedArtifact.review_status}
                     />
                   </dd>
                 </div>
                 <div>
-                  <dt>Stored as</dt>
-                  <dd>{selectedArtifact.original_filename ?? "Pasted text"}</dd>
+                  <dt>{t('Stored as', 'Saklama biçimi')}</dt>
+                  <dd>{selectedArtifact.original_filename ?? translate("Pasted text", "Yapıştırılan metin")}</dd>
                 </div>
               </dl>
 
@@ -766,7 +765,7 @@ export function ArtifactsPage() {
                 {(
                   selectedFilesystemArtifact?.organization_path ?? [
                     "workspace",
-                    "memory",
+                    'memory',
                     selectedArtifact.artifact_id,
                   ]
                 ).map((part, index) => (
@@ -776,19 +775,18 @@ export function ArtifactsPage() {
 
               {lastIngestionJob?.artifact_id ===
               selectedArtifact.artifact_id ? (
-                <Callout>
-                  Last job:{" "}
+                <Callout>{t("Last job:", "Son iş:")}{" "}
                   {formatLabel(lastIngestionJobStatus(lastIngestionJob))} ·{" "}
                   {lastIngestionJob.stage}
                 </Callout>
               ) : null}
 
               <div className="panel-subtle stack-sm">
-                <p className="section-label">Trust</p>
+                <p className="section-label">{t('Trust', 'Güven')}</p>
                 {isAdmin ? (
                   <>
                     <label className="field">
-                      <span className="field-label">Review status</span>
+                      <span className="field-label">{t('Review status', 'İnceleme durumu')}</span>
                       <select
                         value={reviewState.review_status}
                         onChange={(event) =>
@@ -798,14 +796,14 @@ export function ArtifactsPage() {
                           }))
                         }
                       >
-                        <option value="submitted">Submitted</option>
-                        <option value="needs_review">Needs review</option>
-                        <option value="reviewed">Reviewed</option>
-                        <option value="rejected">Rejected</option>
+                        <option value="submitted">{t('Submitted', 'Gönderildi')}</option>
+                        <option value="needs_review">{t('Needs review', 'İnceleme gerekli')}</option>
+                        <option value="reviewed">{t('Reviewed', 'İncelendi')}</option>
+                        <option value="rejected">{t('Rejected', 'Reddedildi')}</option>
                       </select>
                     </label>
                     <label className="field field-block">
-                      <span className="field-label">Notes</span>
+                      <span className="field-label">{t('Notes', 'Notlar')}</span>
                       <textarea
                         value={reviewState.review_notes}
                         onChange={(event) =>
@@ -815,7 +813,7 @@ export function ArtifactsPage() {
                           }))
                         }
                         rows={3}
-                        placeholder="Reason for trust, rejection, or review hold."
+                        placeholder={t('Reason for trust, rejection, or review hold.', 'Güven, ret veya inceleme bekletme nedeni.')}
                       />
                     </label>
                     <button
@@ -824,38 +822,36 @@ export function ArtifactsPage() {
                       onClick={() => void handleReviewUpdate()}
                       disabled={isBusy}
                     >
-                      {isBusy ? "Updating…" : "Save trust state"}
+                      {isBusy ? "Updating…" : translate("Save trust state", "Güven durumunu kaydet")}
                     </button>
                   </>
                 ) : (
                   <p className="muted-copy">
                     {selectedArtifact.review_status === "reviewed"
-                      ? "Reviewed source. Izge can cite it inside your permissions."
-                      : "Visible source. Trust review is still marked in answers."}
+                      ? translate("Reviewed source. Izge can cite it inside your permissions.", "İncelenen kaynak. İzge bu kaynağı izinleriniz kapsamında referans gösterebilir.")
+                      : translate("Visible source. Trust review is still marked in answers.", "Görünen kaynak. Güven incelemesi yanıtlarda belirtilmeye devam eder.")}
                   </p>
                 )}
               </div>
 
               <div className="panel-subtle stack-sm">
-                <p className="section-label">Memory signals</p>
+                <p className="section-label">{t('Memory signals', 'Hafıza sinyalleri')}</p>
                 {!selectedArtifactSignals ? (
-                  <p className="muted-copy">
-                    Signal summary is not loaded yet.
-                  </p>
+                  <p className="muted-copy">{t("Signal summary is not loaded yet.", "Sinyal özeti henüz yüklenmedi.")}</p>
                 ) : (
                   <>
                     <div className="memory-signal-grid">
                       <article>
-                        <span>Contradictions</span>
+                        <span>{t('Contradictions', 'Çelişkiler')}</span>
                         <strong>
                           {signalCount(
                             selectedArtifactSignals,
-                            "contradictions",
+                            translate("contradictions", "çelişki"),
                           )}
                         </strong>
                       </article>
                       <article>
-                        <span>Drift</span>
+                        <span>{t('Drift', 'Değişim')}</span>
                         <strong>
                           {signalCount(
                             selectedArtifactSignals,
@@ -864,16 +860,16 @@ export function ArtifactsPage() {
                         </strong>
                       </article>
                       <article>
-                        <span>Superseded</span>
+                        <span>{t('Superseded', 'Yerine geçti')}</span>
                         <strong>
                           {signalCount(
                             selectedArtifactSignals,
-                            "supersessions",
+                            translate("supersessions", "güncellenen karar"),
                           )}
                         </strong>
                       </article>
                       <article>
-                        <span>Next</span>
+                        <span>{t('Next', 'Sonraki')}</span>
                         <strong>
                           {signalCount(selectedArtifactSignals, "next_actions")}
                         </strong>
@@ -897,7 +893,7 @@ export function ArtifactsPage() {
                               {signal.related_topic}
                             </p>
                           </div>
-                          <span className="table-secondary">Open</span>
+                          <span className="table-secondary">{t('Open', 'Aç')}</span>
                         </Link>
                       ))}
                   </>
@@ -905,25 +901,24 @@ export function ArtifactsPage() {
               </div>
 
               <div className="panel-subtle">
-                <p className="section-label">Preview text</p>
+                <p className="section-label">{t('Preview text', 'Metin önizlemesi')}</p>
                 <p className="evidence-block">
                   {selectedArtifact.extracted_text_preview ||
-                    "No extracted text available yet."}
+                    translate("No extracted text available yet.", "Henüz çıkarılmış metin yok.")}
                 </p>
               </div>
 
               <div className="panel-subtle stack-sm">
-                <p className="section-label">Extraction path</p>
+                <p className="section-label">{t('Extraction path', 'Çıkarım yolu')}</p>
                 {selectedChunkProvenance.length === 0 ? (
-                  <p className="muted-copy">No chunk-level provenance yet.</p>
+                  <p className="muted-copy">{t('No chunk-level provenance yet.', 'Henüz bölüm düzeyinde kaynak bilgisi yok.')}</p>
                 ) : (
                   selectedChunkProvenance.slice(0, 4).map((chunk) => (
                     <article key={chunk.chunk_id} className="memory-chunk-row">
-                      <strong>Chunk {chunk.sequence_number}</strong>
+                      <strong>{t("Chunk ", "Parça ")}{chunk.sequence_number}</strong>
                       <span>
                         {chunk.extraction_method} · {chunk.extraction_status} ·{" "}
-                        {chunk.extracted_object_count} objects
-                      </span>
+                        {chunk.extracted_object_count}{t("objects", "nesne")}</span>
                       <small>{chunk.chunk_excerpt}</small>
                     </article>
                   ))
@@ -932,10 +927,10 @@ export function ArtifactsPage() {
 
               {selectedArtifact.visibility_scope === "restricted" ? (
                 <div className="panel-subtle">
-                  <p className="section-label">Permitted user IDs</p>
+                  <p className="section-label">{t('Permitted user IDs', 'İzinli kullanıcı kimlikleri')}</p>
                   <p className="muted-copy">
                     {selectedPermittedUserIds.join(", ") ||
-                      "No explicit users recorded."}
+                      translate("No explicit users recorded.", "Kayıtlı kullanıcı yok.")}
                   </p>
                 </div>
               ) : null}
@@ -946,8 +941,8 @@ export function ArtifactsPage() {
 
       {orchestrationJobs.length > 0 ? (
         <Panel
-          title="Delegated memory work"
-          description="Queue-backed packets the oracle path created for bounded follow-up."
+          title={t('Delegated memory work', 'Devredilen hafıza işi')}
+          description={t('Queue-backed packets created for bounded follow-up.', 'Sınırlı takip için oluşturulan kuyruk destekli paketler.')}
         >
           <div className="memory-job-list">
             {orchestrationJobs.slice(0, 5).map((job) => (

@@ -6,10 +6,11 @@ import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../component
 import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatLabel } from '../lib/format'
 import type { ArtifactStorageAdminRead, DatabaseOverviewRead } from '../lib/types'
+import { useLanguage } from '../lib/i18n'
 
-function formatBytes(value: number | null): string {
+function formatBytes(value: number | null, missing: string): string {
   if (value === null) {
-    return 'Missing'
+    return missing
   }
   if (value < 1024) {
     return `${value} B`
@@ -21,6 +22,7 @@ function formatBytes(value: number | null): string {
 }
 
 export function DataAdminPage() {
+  const { t } = useLanguage()
   const { session } = useAuth()
   const isAdmin = session?.user.role === 'Admin'
   const [overview, setOverview] = useState<DatabaseOverviewRead | null>(null)
@@ -61,7 +63,7 @@ export function DataAdminPage() {
         setTitleDraft(firstArtifact?.title ?? '')
       } catch (caughtError) {
         if (!cancelled) {
-          setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load database overview.')
+          setError(caughtError instanceof ApiError ? caughtError.message : t('Unable to load database overview.', 'Veritabanı özeti yüklenemedi.'))
         }
       }
     }
@@ -71,7 +73,7 @@ export function DataAdminPage() {
     return () => {
       cancelled = true
     }
-  }, [isAdmin, session?.token])
+  }, [isAdmin, session?.token, t])
 
   const selectedArtifact = useMemo<ArtifactStorageAdminRead | null>(
     () => overview?.artifacts.find((artifact) => artifact.artifact_id === selectedArtifactId) ?? null,
@@ -103,9 +105,9 @@ export function DataAdminPage() {
     try {
       await api.updateArtifactMetadata(session.token, selectedArtifact.artifact_id, { title: titleDraft.trim() })
       await loadOverview(selectedArtifact.artifact_id)
-      setSuccess('Artifact title updated. Source content remains unchanged.')
+      setSuccess(t('Artifact title updated. Source content remains unchanged.', 'Kaynak başlığı güncellendi. Kaynak içeriği değişmedi.'))
     } catch (caughtError) {
-      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to update artifact metadata.')
+      setError(caughtError instanceof ApiError ? caughtError.message : t('Unable to update artifact metadata.', 'Kaynak üst verisi güncellenemedi.'))
     } finally {
       setIsBusy(false)
     }
@@ -115,11 +117,11 @@ export function DataAdminPage() {
     return (
       <div className="stack-xl">
         <PageIntro
-          eyebrow="Admin data"
-          title="Database inspection requires an admin account"
-          description="Ask an admin to inspect stored artifacts, database row counts, and storage paths."
+          eyebrow={t('Admin data', 'Yönetici verileri')}
+          title={t('Database inspection requires an admin account', 'Veritabanı incelemesi için yönetici hesabı gerekir')}
+          description={t('Ask an admin to inspect stored artifacts, database row counts, and storage paths.', 'Kayıtlı kaynakları, veritabanı satır sayılarını ve depolama yollarını incelemek için bir yöneticiye başvurun.')}
         />
-        <Callout tone="warning">Your current role does not allow database administration.</Callout>
+        <Callout tone="warning">{t('Your current role does not allow database administration.', 'Mevcut rolünüz veritabanı yönetimine izin vermiyor.')}</Callout>
       </div>
     )
   }
@@ -127,17 +129,13 @@ export function DataAdminPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Data and storage"
-        title="Inspect the workspace database and artifact storage"
-        description="Use this page to see where uploaded documents are stored, which tables hold workspace state, and which artifact fields can be safely modified."
+        eyebrow={t('Data and storage', 'Veri ve depolama')}
+        title={t('Inspect the workspace database and artifact storage', 'Çalışma alanı veritabanını ve kaynak depolamasını inceleyin')}
+        description={t('Use this page to see where uploaded documents are stored, which tables hold workspace state, and which artifact fields can be safely modified.', 'Yüklenen belgelerin nerede saklandığını, hangi tabloların çalışma alanı durumunu tuttuğunu ve hangi kaynak alanlarının güvenle değiştirilebildiğini görün.')}
         actions={
           <div className="inline-actions">
-            <button type="button" className="secondary-button" onClick={() => void loadOverview(selectedArtifactId)} disabled={isBusy || !session?.token}>
-              Refresh
-            </button>
-            <Link className="primary-button" to="/artifacts">
-              Add artifact
-            </Link>
+            <button type="button" className="secondary-button" onClick={() => void loadOverview(selectedArtifactId)} disabled={isBusy || !session?.token}>{t("Refresh", "Yenile")}</button>
+            <Link className="primary-button" to="/artifacts">{t("Add artifact", "Kaynak ekle")}</Link>
           </div>
         }
       />
@@ -145,44 +143,44 @@ export function DataAdminPage() {
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {success ? <Callout>{success}</Callout> : null}
 
-      <section className="data-overview-grid" aria-label="Database overview">
+      <section className="data-overview-grid" aria-label={t('Database overview', 'Veritabanı özeti')}>
         <article className="data-overview-card panel-subtle">
-          <p className="metric-label">Database revision</p>
-          <code className="data-overview-value">{overview?.alembic_revision ?? 'Not loaded'}</code>
-          <p className="metric-detail">Current Alembic migration version for this database.</p>
+          <p className="metric-label">{t('Database revision', 'Veritabanı sürümü')}</p>
+          <code className="data-overview-value">{overview?.alembic_revision ?? t('Not loaded', 'Yüklenmedi')}</code>
+          <p className="metric-detail">{t('Current database migration version.', 'Bu veritabanının mevcut geçiş sürümü.')}</p>
         </article>
         <article className="data-overview-card panel-subtle">
-          <p className="metric-label">Tables</p>
+          <p className="metric-label">{t('Tables', 'Tablolar')}</p>
           <p className="data-overview-number">{overview?.tables.length ?? '—'}</p>
-          <p className="metric-detail">{totalRows} total stored rows across application tables.</p>
+          <p className="metric-detail">{totalRows} {t('total stored rows across application tables.', 'uygulama tablolarında toplam kayıtlı satır.')} </p>
         </article>
         <article className="data-overview-card panel-subtle">
-          <p className="metric-label">Artifacts</p>
+          <p className="metric-label">{t('Artifacts', 'Kaynaklar')}</p>
           <p className="data-overview-number">{overview?.artifacts.length ?? '—'}</p>
-          <p className="metric-detail">{formatBytes(totalSourceBytes)} stored source data visible to admins.</p>
+          <p className="metric-detail">{formatBytes(totalSourceBytes, t('Missing', 'Eksik'))} {t('stored source data visible to admins.', 'yöneticilere görünür kaynak verisi.')} </p>
         </article>
         <article className="data-overview-card panel-subtle">
-          <p className="metric-label">Workspace</p>
+          <p className="metric-label">{t('Workspace', 'Çalışma alanı')}</p>
           <code className="data-overview-value">{overview?.workspace_id ?? '—'}</code>
-          <p className="metric-detail">Single-company workspace boundary for this deployment.</p>
+          <p className="metric-detail">{t('Single-company workspace boundary for this deployment.', 'Bu kurulumun tek şirket çalışma alanı sınırı.')}</p>
         </article>
       </section>
 
       <div className="two-column-layout wide-right-column">
-        <Panel title="Stored artifacts" description="Admin view of source storage, memory coverage, review state, and supported metadata changes.">
+        <Panel title={t('Stored artifacts', 'Kayıtlı kaynaklar')} description={t('Admin view of source storage, memory coverage, review state, and supported metadata changes.', 'Kaynak depolama, hafıza kapsamı, inceleme durumu ve desteklenen üst veri değişikliklerinin yönetici görünümü.')}>
           {!overview || overview.artifacts.length === 0 ? (
-            <EmptyState title="No stored artifacts" description="Upload or paste evidence to populate the storage inventory." />
+            <EmptyState title={t('No stored artifacts', 'Kayıtlı kaynak yok')} description={t('Upload or paste evidence to populate the storage inventory.', 'Depolama envanterini doldurmak için kanıt yükleyin veya yapıştırın.')} />
           ) : (
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Artifact</th>
-                    <th>Storage</th>
-                    <th>Memory</th>
-                    <th>Review</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
+                    <th>{t('Artifact', 'Kaynak')}</th>
+                    <th>{t('Storage', 'Depolama')}</th>
+                    <th>{t('Memory', 'Hafıza')}</th>
+                    <th>{t('Review', 'İnceleme')}</th>
+                    <th>{t('Updated', 'Güncellendi')}</th>
+                    <th>{t('Actions', 'İşlemler')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -199,20 +197,18 @@ export function DataAdminPage() {
                         <p className="table-secondary">{artifact.artifact_id}</p>
                       </td>
                       <td>
-                        <StatusBadge value={artifact.storage_exists ? 'Stored' : 'Missing'} />
-                        <p className="table-secondary">{formatBytes(artifact.byte_size)}</p>
+                        <StatusBadge value={artifact.storage_exists ? t('Stored', 'Kayıtlı') : t('Missing', 'Eksik')} />
+                        <p className="table-secondary">{formatBytes(artifact.byte_size, t('Missing', 'Eksik'))}</p>
                       </td>
-                      <td>{artifact.memory_object_count} objects / {artifact.chunk_count} chunks</td>
+                      <td>{artifact.memory_object_count} {t('objects', 'nesne')} / {artifact.chunk_count} {t('chunks', 'bölüm')}</td>
                       <td>
-                        <StatusBadge value={formatLabel(artifact.review_status)} />
+                        <StatusBadge value={artifact.review_status} />
                       </td>
                       <td>{formatDateTime(artifact.updated_at)}</td>
                       <td>
                         <div className="table-action-group" onClick={(event) => event.stopPropagation()}>
-                          <SourcePreviewButton artifactId={artifact.artifact_id} title={artifact.title} className="table-action-link">Preview</SourcePreviewButton>
-                          <a className="table-action-link" href={api.artifactDownloadUrl(artifact.artifact_id)}>
-                            Download
-                          </a>
+                          <SourcePreviewButton artifactId={artifact.artifact_id} title={artifact.title} className="table-action-link">{t('Preview', 'Önizle')}</SourcePreviewButton>
+                          <a className="table-action-link" href={api.artifactDownloadUrl(artifact.artifact_id)}>{t("Download", "İndir")}</a>
                         </div>
                       </td>
                     </tr>
@@ -223,44 +219,40 @@ export function DataAdminPage() {
           )}
         </Panel>
 
-        <Panel title="Selected artifact storage" description="Raw source content is immutable; supported edits are metadata, review, and permissions.">
+        <Panel title={t('Selected artifact storage', 'Seçilen kaynak depolaması')} description={t('Raw source content is immutable; supported edits are metadata, review, and permissions.', 'Ham kaynak içeriği değiştirilemez; üst veri, inceleme ve izinler düzenlenebilir.')}>
           {!selectedArtifact ? (
-            <EmptyState title="Select an artifact" description="Choose a stored artifact to inspect its database and storage record." />
+            <EmptyState title={t('Select an artifact', 'Bir kaynak seçin')} description={t('Choose a stored artifact to inspect its database and storage record.', 'Veritabanı ve depolama kaydını incelemek için kayıtlı bir kaynak seçin.')} />
           ) : (
             <div className="stack-lg">
               <div className="artifact-action-strip">
-                <SourcePreviewButton artifactId={selectedArtifact.artifact_id} title={selectedArtifact.title} className="secondary-button">Preview source</SourcePreviewButton>
-                <a className="secondary-button" href={api.artifactDownloadUrl(selectedArtifact.artifact_id)}>
-                  Download source
-                </a>
-                <Link className="secondary-button" to="/artifacts">
-                  Open artifact workspace
-                </Link>
+                <SourcePreviewButton artifactId={selectedArtifact.artifact_id} title={selectedArtifact.title} className="secondary-button">{t('Preview source', 'Kaynağı önizle')}</SourcePreviewButton>
+                <a className="secondary-button" href={api.artifactDownloadUrl(selectedArtifact.artifact_id)}>{t("Download source", "Kaynağı indir")}</a>
+                <Link className="secondary-button" to="/artifacts">{t("Open artifact workspace", "Kaynak çalışma alanını aç")}</Link>
               </div>
 
               <dl className="meta-list">
                 <div>
-                  <dt>Logical locator</dt>
+                  <dt>{t('Logical locator', 'Mantıksal konum')}</dt>
                   <dd>{selectedArtifact.logical_locator}</dd>
                 </div>
                 <div>
-                  <dt>Source path</dt>
+                  <dt>{t('Source path', 'Kaynak yolu')}</dt>
                   <dd>{selectedArtifact.source_path}</dd>
                 </div>
                 <div>
-                  <dt>Checksum</dt>
-                  <dd>{selectedArtifact.checksum_sha256 ?? 'Not recorded'}</dd>
+                  <dt>{t('Checksum', 'Sağlama toplamı')}</dt>
+                  <dd>{selectedArtifact.checksum_sha256 ?? t('Not recorded', 'Kaydedilmedi')}</dd>
                 </div>
                 <div>
-                  <dt>Source type</dt>
+                  <dt>{t('Source type', 'Kaynak türü')}</dt>
                   <dd>{formatLabel(selectedArtifact.source_type)}</dd>
                 </div>
                 <div>
-                  <dt>Visibility</dt>
+                  <dt>{t('Visibility', 'Görünürlük')}</dt>
                   <dd>{formatLabel(selectedArtifact.visibility_scope)}</dd>
                 </div>
                 <div>
-                  <dt>Ingestion</dt>
+                  <dt>{t('Ingestion', 'İşleme')}</dt>
                   <dd>
                     <StatusBadge value={selectedArtifact.ingestion_status} />
                   </dd>
@@ -269,34 +261,34 @@ export function DataAdminPage() {
 
               <form className="form-grid panel-subtle" onSubmit={handleTitleSave}>
                 <label className="field">
-                  <span className="field-label">Artifact title</span>
+                  <span className="field-label">{t('Artifact title', 'Kaynak başlığı')}</span>
                   <input value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} required />
                 </label>
                 <button type="submit" className="secondary-button" disabled={isBusy}>
-                  {isBusy ? 'Saving…' : 'Save title'}
+                  {isBusy ? t('Saving…', 'Kaydediliyor…') : t('Save title', 'Başlığı kaydet')}
                 </button>
               </form>
 
               <Callout>
-                Source bytes are not edited in place. To change document contents, upload or paste a replacement artifact, then mark the old artifact rejected or restrict its visibility if needed.
+                {t('Source bytes are not edited in place. To change document contents, upload or paste a replacement source, then mark the old source rejected or restrict its visibility if needed.', 'Kaynak içeriği yerinde düzenlenmez. Belge içeriğini değiştirmek için yeni bir kaynak yükleyin veya yapıştırın; ardından eski kaynağı reddedilmiş olarak işaretleyin ya da gerekirse görünürlüğünü kısıtlayın.')}
               </Callout>
             </div>
           )}
         </Panel>
       </div>
 
-      <Panel title="Database tables" description="Operational table inventory with row counts and the UI/API surfaces that write and read each area.">
+      <Panel title={t('Database tables', 'Veritabanı tabloları')} description={t('Operational table inventory with row counts and the application surfaces that write and read each area.', 'Satır sayıları ve her alanı yazıp okuyan uygulama yüzeyleriyle operasyonel tablo envanteri.')}>
         {!overview ? (
-          <EmptyState title="Loading database overview" description="The table inventory will appear after the admin endpoint responds." />
+          <EmptyState title={t('Loading database overview', 'Veritabanı özeti yükleniyor')} description={t('The table inventory will appear after the admin endpoint responds.', 'Yönetici hizmeti yanıt verdiğinde tablo envanteri görünecek.')} />
         ) : (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Table</th>
-                  <th>Rows</th>
-                  <th>Write surface</th>
-                  <th>Read surface</th>
+                  <th>{t('Table', 'Tablo')}</th>
+                  <th>{t('Rows', 'Satırlar')}</th>
+                  <th>{t('Write surface', 'Yazma yüzeyi')}</th>
+                  <th>{t('Read surface', 'Okuma yüzeyi')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -314,19 +306,19 @@ export function DataAdminPage() {
         )}
       </Panel>
 
-      <Panel title="How this database is managed" description="Use supported application surfaces first; direct database tools are for operator diagnostics only.">
+      <Panel title={t('How this database is managed', 'Bu veritabanı nasıl yönetilir')} description={t('Use supported application surfaces first; direct database tools are for operator diagnostics only.', 'Önce desteklenen uygulama yüzeylerini kullanın; doğrudan veritabanı araçları yalnızca operatör tanılaması içindir.')}>
         <div className="detail-grid">
           <article className="panel-subtle detail-card">
-            <p className="section-label">SQLite database</p>
-            <p className="table-primary">{overview?.sqlite_path ?? 'Not loaded'}</p>
+            <p className="section-label">{t('SQLite database', 'SQLite veritabanı')}</p>
+            <p className="table-primary">{overview?.sqlite_path ?? t('Not loaded', 'Yüklenmedi')}</p>
           </article>
           <article className="panel-subtle detail-card">
-            <p className="section-label">Uploaded files</p>
-            <p className="table-primary">{overview?.storage_root ?? 'Not loaded'}</p>
+            <p className="section-label">{t('Uploaded files', 'Yüklenen dosyalar')}</p>
+            <p className="table-primary">{overview?.storage_root ?? t('Not loaded', 'Yüklenmedi')}</p>
           </article>
           <article className="panel-subtle detail-card">
-            <p className="section-label">Pasted text</p>
-            <p className="table-primary">{overview?.pasted_text_root ?? 'Not loaded'}</p>
+            <p className="section-label">{t('Pasted text', 'Yapıştırılan metin')}</p>
+            <p className="table-primary">{overview?.pasted_text_root ?? t('Not loaded', 'Yüklenmedi')}</p>
           </article>
         </div>
         <ul className="evidence-list">

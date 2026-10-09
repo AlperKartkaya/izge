@@ -1,3 +1,5 @@
+import { currentLocale, getLanguage, translate } from './language.ts'
+
 const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/
 const explicitZonePattern = /(Z|[+-]\d{2}:?\d{2})$/i
 
@@ -10,7 +12,7 @@ export function normalizeApiTimestamp(value: string): string {
 
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) {
-    return 'Mevcut değil'
+    return translate('Not available', 'Mevcut değil')
   }
 
   const parsed = new Date(normalizeApiTimestamp(value))
@@ -18,7 +20,7 @@ export function formatDateTime(value: string | null | undefined): string {
     return value
   }
 
-  return new Intl.DateTimeFormat('tr-TR', {
+  return new Intl.DateTimeFormat(currentLocale(), {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: 'Europe/Istanbul',
@@ -27,7 +29,7 @@ export function formatDateTime(value: string | null | undefined): string {
 
 export function formatDate(value: string | null | undefined): string {
   if (!value) {
-    return 'Mevcut değil'
+    return translate('Not available', 'Mevcut değil')
   }
 
   const parsed = new Date(normalizeApiTimestamp(value))
@@ -35,7 +37,7 @@ export function formatDate(value: string | null | undefined): string {
     return value
   }
 
-  return new Intl.DateTimeFormat('tr-TR', {
+  return new Intl.DateTimeFormat(currentLocale(), {
     dateStyle: 'medium',
     timeZone: 'Europe/Istanbul',
   }).format(parsed)
@@ -46,7 +48,20 @@ export function formatPercent(value: number): string {
 }
 
 export function formatLabel(value: string): string {
-  return value.replace(/_/g, ' ')
+  return (getLanguage() === 'tr' ? statusLabels[value] ?? uiLabels[value] : englishStatusLabels[value]) ?? value.replace(/_/g, ' ')
+}
+
+const uiLabels: Record<string, string> = {
+  decision: 'Karar', decisions: 'Kararlar', assumption: 'Varsayım', assumptions: 'Varsayımlar',
+  constraint: 'Kısıt', constraints: 'Kısıtlar', outcome: 'Sonuç', outcomes: 'Sonuçlar',
+  commitment: 'Taahhüt', commitments: 'Taahhütler', artifact: 'Kaynak', artifacts: 'Kaynaklar',
+  memory: 'Hafıza', uploaded_file: 'Yüklenen dosya', pasted_text: 'Metin notu', team_chat_attachment: 'Sohbet eki',
+  workspace: 'Çalışma alanı', restricted: 'Kısıtlı', Admin: 'Yönetici', Member: 'Çalışan',
+  critical: 'Kritik', high: 'Yüksek', medium: 'Orta', low: 'Düşük', disabled: 'Devre dışı', enabled: 'Etkin',
+  conflict: 'Çelişki', supports: 'Destekler', contradicts: 'Çelişir', supersedes: 'Günceller', references: 'Referans verir',
+  decision_lineage: 'Karar geçmişi', contradiction_check: 'Çelişki kontrolü', source_review: 'Kaynak incelemesi',
+  'Launch cluster': 'Yayın grubu', 'Security cluster': 'Güvenlik grubu', 'Customer cluster': 'Müşteri grubu',
+  'Engineering cluster': 'Mühendislik grubu', 'Operations cluster': 'Operasyon grubu', 'Company memory': 'Şirket hafızası',
 }
 
 const statusLabels: Record<string, string> = {
@@ -74,6 +89,47 @@ const statusLabels: Record<string, string> = {
   rejected: 'Reddedildi',
 }
 
+const englishStatusLabels: Record<string, string> = { active: 'Active', stale: 'Needs review', reversed: 'Reversed', weakening: 'Weakening', assumption_drift: 'Assumption drift', next_action: 'Suggested task', continuity_overlap: 'Related previous work', contradiction: 'Contradiction', supersession: 'Updated decision', open_commitment: 'Open commitment', pending: 'Pending', queued: 'Queued', running: 'Running', completed: 'Completed', failed: 'Failed', open: 'Open', in_progress: 'In progress', done: 'Done', submitted: 'Submitted', needs_review: 'Needs review', reviewed: 'Reviewed', rejected: 'Rejected' }
+
 export function formatStatus(value: string): string {
-  return statusLabels[value] ?? formatLabel(value)
+  return (getLanguage() === 'tr' ? statusLabels[value] : englishStatusLabels[value]) ?? formatLabel(value)
+}
+
+// Translate only known system stages, never company records or source titles.
+const systemStages: Record<string, string> = {
+  'Çalışma güvenli biçimde yeniden başlatıldı': 'Work restarted safely',
+  'Yeni kayıtlar hafızaya işleniyor': 'Adding new records to memory',
+  'Kurumsal hafıza güncelleniyor': 'Updating company memory',
+  'Kurumsal hafıza güncel': 'Company memory is up to date',
+  'Şirket bilgileri taranıyor': 'Searching company information',
+  'Güncel hafıza taranıyor': 'Searching updated memory',
+  'Kaynaklar hazır': 'Sources are ready',
+  'Yeni kayıt değerlendiriliyor': 'Reviewing the new record',
+  'Yeni kayıt değerlendirildi': 'New record reviewed',
+  'Yanıt hazırlanıyor': 'Preparing a response',
+  'Yanıt hazır': 'Response is ready',
+  'Yanıt üretilemedi': 'Could not generate a response',
+  'Tamamlandı': 'Completed',
+}
+
+const systemCopy: Array<readonly [string, string]> = [
+  ['Launch acceleration or delay', 'Yayını hızlandırma veya erteleme'],
+  ['Pricing or package change', 'Fiyatlandırma veya paket değişikliği'],
+  ['Platform migration or architecture change', 'Platform geçişi veya mimari değişiklik'],
+  ['Compliance, security or audit requirement', 'Uyumluluk, güvenlik veya denetim gereksinimi'],
+  ['Organisation, ownership or staffing change', 'Organizasyon, sorumluluk veya kadro değişikliği'],
+  ['What changes if we accelerate the enterprise onboarding launch?', 'Kurumsal müşteri devreye alımını hızlandırırsak ne değişir?'],
+  ['What memory is affected if we introduce a new enterprise tier?', 'Yeni bir kurumsal paket oluşturursak hangi hafıza kayıtları etkilenir?'],
+  ['Which existing constraints or decisions should be reviewed before migrating the memory store to a managed database?', 'Hafıza deposunu yönetilen veritabanına taşımadan önce hangi kısıtları veya kararları incelemeliyiz?'],
+  ['What memory is affected if security approval is required before launch?', 'Yayın öncesi güvenlik onayı gerekirse hangi hafıza kayıtları etkilenir?'],
+  ['Which commitments are affected if ownership moves to growth?', 'Sorumluluk büyüme ekibine geçerse hangi taahhütler etkilenir?'],
+]
+
+export function formatSystemText(value: string): string {
+  const copy = systemCopy.find(([en, tr]) => en === value || tr === value)
+  if (copy) return translate(copy[0], copy[1])
+  if (getLanguage() !== 'en') return value
+  if (systemStages[value]) return systemStages[value]
+  const suffix = ' hafızaya işleniyor'
+  return value.endsWith(suffix) ? `Adding ${value.slice(0, -suffix.length)} to memory` : value
 }

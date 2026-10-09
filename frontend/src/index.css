@@ -6763,8 +6763,9 @@ body:has(.app-frame-chat) { overflow: hidden; }
 .agent-chat-composer textarea { display: block; min-height: 48px; max-height: 120px; padding: 3px; font-size: 14px; }
 .agent-chat-composer textarea:focus-visible { outline: 0; }
 .agent-prompt-controls { display: flex; align-items: center; gap: 8px; }
-.agent-prompt-add { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: var(--color-ink); font-size: 22px; text-decoration: none; }
+.agent-prompt-add { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--color-ink); font: inherit; font-size: 22px; text-decoration: none; cursor: pointer; }
 .agent-prompt-add:hover { background: var(--color-surface-muted); }
+.agent-prompt-add:disabled { opacity: .45; cursor: wait; }
 .agent-prompt-context { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: 8px; background: var(--color-surface); color: var(--color-ink); font-size: 12px; }
 .agent-prompt-hint { margin-left: auto; color: var(--color-ink-muted); font-size: 11px; }
 .agent-prompt-controls > .primary-button { margin-left: auto; width: 32px; height: 32px; border-radius: 10px; background: var(--color-ink-strong); color: var(--color-surface-elevated); }
@@ -6897,6 +6898,12 @@ body:has(.app-frame-chat) { overflow: hidden; }
 .team-chat-message-copy ul { padding-left: 18px; }
 .team-chat-message-author { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .team-chat-message-author small { color: var(--color-ink-muted); font-size: 10px; }
+.team-chat-attachments { display: grid; gap: 6px; margin-top: 4px; }
+.team-chat-attachment { display: flex; width: min(100%, 310px); align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-elevated); color: var(--color-ink-strong); font: inherit; text-align: left; cursor: pointer; }
+.team-chat-attachment:hover { border-color: var(--color-border-strong); }
+.team-chat-attachment > span:last-child { min-width: 0; display: grid; gap: 2px; }
+.team-chat-attachment strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-chat-attachment small { color: var(--color-ink-muted); font-size: 10px; }
 .agent-user-message > div { margin: 5px 0; line-height: 1.6; }
 .agent-user-message > div p { margin: 0 0 5px; }
 .review-context-card > .review-context-answer { max-height: 22rem; overflow-y: auto; overscroll-behavior: contain; padding: 12px; color: var(--color-ink); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
@@ -6930,3 +6937,9 @@ body:has(.app-frame-chat) { overflow: hidden; }
 .automation-actions { display: flex; flex: none; align-items: center; gap: 7px; }
 .status-muted { opacity: .65; }
 @media (max-width: 700px) { .automation-item { flex-direction: column; } .automation-actions { align-self: flex-start; } .team-chat-sidebar-actions { flex-direction: column; } }
+
+/* Monochrome PNG alpha masks inherit the surrounding button color. */
+.button-icon { display: inline-block; width: 1.15em; height: 1.15em; flex: 0 0 auto; vertical-align: -0.2em; background: currentColor; mask: var(--button-icon) center / contain no-repeat; -webkit-mask: var(--button-icon) center / contain no-repeat; }
+button > .button-icon:not(:only-child), a > .button-icon:not(:only-child) { margin-inline-end: 0.4em; }
+.nav-link > .button-icon { width: 1em; height: 1em; margin-inline-end: 0.35em; }
+.agent-prompt-add .button-icon, .agent-task-check .button-icon, .source-preview-close .button-icon { width: 1.15em; height: 1.15em; }

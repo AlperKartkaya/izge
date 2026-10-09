@@ -5,18 +5,21 @@ import { AgentAnswer, AgentText, ChatComposer, LoadingState, ThinkingState } fro
 import { useChatScroll } from '../components/useChatScroll'
 import { Callout, EmptyState } from '../components/ui'
 import { api, ApiError } from '../lib/api'
+import { buildIzgeFollowUp, focusComposerAtEnd } from '../lib/agentText'
 import { formatDateTime } from '../lib/format'
+import { useLanguage } from '../lib/i18n'
 import type { AgentRunRead } from '../lib/types'
 
-function errorMessage(error: unknown, fallback: string) {
+function errorMessage(error: unknown, fallback: string, t: (english: string, turkish: string) => string) {
   if (!(error instanceof ApiError)) return fallback
-  if (error.status === 403) return 'Bu işlem için yetkiniz yok.'
-  if (error.status === 503) return 'Yerel dil modeli şu anda kullanılamıyor.'
+  if (error.status === 403) return t('You do not have permission for this action.', 'Bu işlem için yetkiniz yok.')
+  if (error.status === 503) return t('The local language model is currently unavailable.', 'Yerel dil modeli şu anda kullanılamıyor.')
   return error.message || fallback
 }
 
 export function QueryPage() {
   const { session } = useAuth()
+  const { language, t } = useLanguage()
   const [searchParams] = useSearchParams()
   const threadId = searchParams.get('thread') ?? 'izge-colleague'
   const notificationRunId = searchParams.get('run')
@@ -47,12 +50,12 @@ export function QueryPage() {
           setError(null)
         }
       } catch (caughtError) {
-        if (!cancelled) { setRuns([]); setLoadedThreadId(threadId); setError(errorMessage(caughtError, 'İzge konuşmaları yüklenemedi.')) }
+        if (!cancelled) { setRuns([]); setLoadedThreadId(threadId); setError(errorMessage(caughtError, t('Izge conversations could not be loaded.', 'İzge konuşmaları yüklenemedi.'), t)) }
       } finally { if (!cancelled) setIsLoading(false) }
     }
     void loadRuns()
     return () => { cancelled = true }
-  }, [session, threadId])
+  }, [session, t, threadId])
 
   useEffect(() => {
     if (!activeRunId || activeRunThreadId !== threadId || !session?.token) return
@@ -70,7 +73,7 @@ export function QueryPage() {
           events.close()
         }
       } catch (caughtError) {
-        setError(errorMessage(caughtError, 'İzge’nin çalışma durumu alınamadı.'))
+        setError(errorMessage(caughtError, t("Izge's work status could not be retrieved.", 'İzge’nin çalışma durumu alınamadı.'), t))
       }
     }
     events.addEventListener('delta', (event) => {
@@ -81,7 +84,7 @@ export function QueryPage() {
     for (const eventName of ['stage', 'source', 'done', 'failed']) events.addEventListener(eventName, () => void refresh())
     events.onerror = () => { events.close(); void refresh() }
     return () => { closed = true; events.close() }
-  }, [activeRunId, activeRunThreadId, session?.token, threadId])
+  }, [activeRunId, activeRunThreadId, session?.token, t, threadId])
 
   async function ask() {
     if (!session?.token || !draft.trim() || isLoading || loadedThreadId !== threadId || isSending || activeRunId) return
@@ -105,39 +108,39 @@ export function QueryPage() {
       setActiveRunId(run.run_id)
     } catch (caughtError) {
       setDraft(message)
-      setError(errorMessage(caughtError, 'Soru İzge’ye iletilemedi.'))
+      setError(errorMessage(caughtError, t('The question could not be sent to Izge.', 'Soru İzge’ye iletilemedi.'), t))
     } finally { setIsSending(false) }
   }
 
   const orderedRuns = useMemo(() => loadedThreadId === threadId ? [...runs].sort((left, right) => Date.parse(left.created_at) - Date.parse(right.created_at)) : [], [loadedThreadId, runs, threadId])
   const fillFollowUp = (question: string) => {
-    setDraft(`@izge ${question}`)
-    window.requestAnimationFrame(() => composerRef.current?.focus())
+    setDraft(buildIzgeFollowUp(question))
+    focusComposerAtEnd(composerRef.current)
   }
 
   return (
     <div className="assistant-page employee-agent-page">
       <header className="employee-page-header">
-        <div><p className="eyebrow">Uyumayan ekip arkadaşınız</p><h1>İzge’ye sor</h1><p>Şirket dosyalarından, günlüklerden ve görevlerden erişebildiği kaynakları bularak yanıt verir.</p></div>
-        <span className="language-chip">Türkçe</span>
+        <div><p className="eyebrow">{t('Your always-on colleague', 'Uyumayan ekip arkadaşınız')}</p><h1>{t('Ask Izge', 'İzge’ye sor')}</h1><p>{t('Finds accessible sources in company files, daily logs, and tasks to answer your questions.', 'Şirket dosyalarından, günlüklerden ve görevlerden erişebildiği kaynakları bularak yanıt verir.')}</p></div>
+        <span className="language-chip">{language === 'en' ? 'English' : 'Türkçe'}</span>
       </header>
       {error ? <Callout tone="warning">{error}</Callout> : null}
       <div className="agent-chat-panel">
-      <section className="agent-conversation" aria-label="İzge konuşması" ref={messagesRef} onScroll={handleMessageScroll} tabIndex={0}>
-        {isLoading || loadedThreadId !== threadId ? <LoadingState label="Konuşmalar yükleniyor" /> : null}
-        {!isLoading && loadedThreadId === threadId && orderedRuns.length === 0 ? <EmptyState title="İzge hazır" description="Bir kararın nedenini, son değişiklikleri veya sıradaki işi sorun." /> : null}
+      <section className="agent-conversation" aria-label={t('Izge conversation', 'İzge konuşması')} ref={messagesRef} onScroll={handleMessageScroll} tabIndex={0}>
+        {isLoading || loadedThreadId !== threadId ? <LoadingState label={t('Loading conversations', 'Konuşmalar yükleniyor')} /> : null}
+        {!isLoading && loadedThreadId === threadId && orderedRuns.length === 0 ? <EmptyState title={t('Izge is ready', 'İzge hazır')} description={t('Ask why a decision was made, what changed, or what to do next.', 'Bir kararın nedenini, son değişiklikleri veya sıradaki işi sorun.')} /> : null}
         {orderedRuns.map((run) => {
           const active = run.run_id === activeRunId
           const answer = active && streamedText ? streamedText : run.answer ?? ''
           return (
             <div className="agent-turn" key={run.run_id}>
-              {run.kind === 'ask' && run.run_id !== notificationRunId ? <article className="agent-user-message"><strong>Siz</strong><div><AgentText text={run.question} /></div><time>{formatDateTime(run.created_at)}</time></article> : null}
+              {run.kind === 'ask' && run.run_id !== notificationRunId ? <article className="agent-user-message"><strong>{t('You', 'Siz')}</strong><div><AgentText text={run.question} /></div><time>{formatDateTime(run.created_at)}</time></article> : null}
               <article className="agent-assistant-message">
                 <div className="agent-message-author"><span className="agent-avatar">İZ</span><strong>İzge</strong></div>
                 {(run.status === 'queued' || run.status === 'running') ? <ThinkingState stages={run.stages} status={run.status} /> : null}
-                {run.status === 'queued' && run.stages.length === 0 ? <LoadingState label="İş sıraya alındı" /> : null}
+                {run.status === 'queued' && run.stages.length === 0 ? <LoadingState label={t('Work queued', 'İş sıraya alındı')} /> : null}
                 {answer ? <AgentAnswer text={answer} sources={run.sources} followUps={run.follow_ups} active={active && run.status === 'running'} onFollowUp={fillFollowUp} /> : null}
-                {run.status === 'failed' ? <Callout tone="warning">{run.error || 'İzge bu işi tamamlayamadı.'}</Callout> : null}
+                {run.status === 'failed' ? <Callout tone="warning">{run.error || t('Izge could not complete this work.', 'İzge bu işi tamamlayamadı.')}</Callout> : null}
               </article>
             </div>
           )

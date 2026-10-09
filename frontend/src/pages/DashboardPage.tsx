@@ -1,11 +1,13 @@
+import { translate } from '../lib/language'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import { canonicalWorkspacePrompt } from '../lib/workspacePrompts'
+import { getCanonicalWorkspacePrompt } from '../lib/workspacePrompts'
 import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { ArtifactRead, AssumptionDriftItem, ContradictionItem, GraphSummary, NextActionSignalItem, SignalRead } from '../lib/types'
+import { useLanguage } from '../lib/i18n'
 
 type DashboardSignalTone = 'critical' | 'drift' | 'action' | 'neutral'
 
@@ -78,6 +80,7 @@ function hasNoDashboardData(
 }
 
 export function DashboardPage() {
+  const { t } = useLanguage()
   const { session } = useAuth()
   const [summary, setSummary] = useState<GraphSummary | null>(null)
   const [artifacts, setArtifacts] = useState<ArtifactRead[]>([])
@@ -119,7 +122,7 @@ export function DashboardPage() {
         }
       } catch (caughtError) {
         if (!cancelled) {
-          setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load dashboard state.')
+          setError(caughtError instanceof ApiError ? caughtError.message : t('Unable to load dashboard state.', 'Gösterge paneli durumu yüklenemedi.'))
         }
       } finally {
         if (!cancelled) {
@@ -133,7 +136,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [session?.token])
+  }, [session?.token, t])
 
   const totalMemoryObjects = useMemo(
     () => Object.values(summary?.memory_counts ?? {}).reduce((total, count) => total + count, 0),
@@ -163,79 +166,79 @@ export function DashboardPage() {
   const workspaceReadiness = useMemo(() => {
     if (isInitialLoad) {
       return {
-        status: 'Loading',
-        title: 'Loading workspace state',
-        detail: 'Checking sources, memory, review state, and current signals.',
-        actionLabel: 'Open memory',
+        status: t('Loading', 'Yükleniyor'),
+        title: t('Loading workspace state', 'Çalışma alanı durumu yükleniyor'),
+        detail: t('Checking sources, memory, review state, and current signals.', 'Kaynaklar, hafıza, inceleme durumu ve mevcut sinyaller kontrol ediliyor.'),
+        actionLabel: t('Open memory', 'Hafızayı aç'),
         actionTo: '/memory',
       }
     }
     if (!latestCompletedArtifact) {
       return {
-        status: 'Needs source',
-        title: 'Load memory sources first',
-        detail: 'Operational use starts only after real company artifacts exist in this workspace.',
-        actionLabel: 'Open memory',
+        status: t('Needs source', 'Kaynak gerekli'),
+        title: t('Load memory sources first', 'Önce hafıza kaynaklarını yükleyin'),
+        detail: t('Operational use starts only after real company artifacts exist in this workspace.', 'Operasyonel kullanım, bu çalışma alanında gerçek şirket kaynakları bulunduktan sonra başlar.'),
+        actionLabel: t('Open memory', 'Hafızayı aç'),
         actionTo: '/memory',
       }
     }
     if (!totalMemoryObjects) {
       return {
-        status: 'Needs memory',
-        title: 'Run ingestion before reasoning',
-        detail: 'Artifacts exist, but reconstructed memory objects are required before answers are credible.',
-        actionLabel: 'Build memory',
+        status: t('Needs memory', 'Hafıza gerekli'),
+        title: t('Run ingestion before reasoning', 'Akıl yürütmeden önce kaynakları işleyin'),
+        detail: t('Artifacts exist, but reconstructed memory objects are required before answers are credible.', 'Kaynaklar var ancak güvenilir yanıtlar için yeniden oluşturulmuş hafıza nesneleri gerekir.'),
+        actionLabel: t('Build memory', 'Hafıza oluştur'),
         actionTo: '/ingestion',
       }
     }
     if (isAdmin && reviewQueue.length > 0) {
       return {
-        status: 'Needs review',
-        title: 'Review source trust before relying on answers',
-        detail: `${reviewQueue.length} artifact(s) are waiting for an admin trust decision.`,
-        actionLabel: 'Open review queue',
+        status: t('Needs review', 'İnceleme gerekli'),
+        title: t('Review source trust before relying on answers', 'Yanıtlara güvenmeden önce kaynak güvenini inceleyin'),
+        detail: t(`${reviewQueue.length} artifact(s) are waiting for an admin trust decision.`, `${reviewQueue.length} kaynak yönetici güven kararı bekliyor.`),
+        actionLabel: t('Open review queue', 'İnceleme kuyruğunu aç'),
         actionTo: '/admin',
       }
     }
     if (!topPersistedSignal) {
       return {
-        status: 'Needs signal',
-        title: 'Generate a durable signal',
-        detail: 'Memory exists; persist a contradiction, drift, supersession, or next-action signal to make the workflow actionable.',
-        actionLabel: 'Inspect graph',
+        status: t('Needs signal', 'Sinyal gerekli'),
+        title: t('Generate a durable signal', 'Kalıcı bir sinyal oluştur'),
+        detail: translate("Memory exists; persist a contradiction, drift, supersession, or next-action signal to make the workflow actionable.", "Hafıza mevcut; iş akışını harekete geçirmek için çelişki, değişim, güncellenen karar veya sonraki iş sinyali oluşturun."),
+        actionLabel: t('Inspect graph', 'Grafiği incele'),
         actionTo: '/graph',
       }
     }
     return {
-      status: 'Ready',
-      title: 'Ready for a grounded question',
-      detail: 'Source, reconstructed memory, review state, and durable signals are present.',
-      actionLabel: 'Ask workspace question',
-      actionTo: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
+      status: t('Ready', 'Hazır'),
+      title: t('Ready for a grounded question', 'Kaynaklı bir soru için hazır'),
+      detail: t('Source, reconstructed memory, review state, and durable signals are present.', 'Kaynak, yeniden oluşturulan hafıza, inceleme durumu ve kalıcı sinyaller mevcut.'),
+      actionLabel: t('Ask workspace question', 'Çalışma alanına soru sor'),
+      actionTo: `/query?prompt=${encodeURIComponent(getCanonicalWorkspacePrompt())}`,
     }
-  }, [isAdmin, isInitialLoad, latestCompletedArtifact, reviewQueue.length, topPersistedSignal, totalMemoryObjects])
+  }, [isAdmin, isInitialLoad, latestCompletedArtifact, reviewQueue.length, t, topPersistedSignal, totalMemoryObjects])
 
   const dashboardStats = useMemo(
     () => [
       {
-        label: 'Sources',
+        label: t('Sources', 'Kaynaklar'),
         value: isInitialLoad ? '—' : artifactCount,
-        detail: isInitialLoad ? 'Checking source inventory' : `${reviewQueue.length} awaiting review`,
+        detail: isInitialLoad ? t('Checking source inventory', 'Kaynak envanteri kontrol ediliyor') : t(`${reviewQueue.length} awaiting review`, `${reviewQueue.length} inceleme bekliyor`),
       },
       {
-        label: 'Memory objects',
+        label: t('Memory objects', 'Hafıza nesneleri'),
         value: isInitialLoad ? '—' : totalMemoryObjects,
-        detail: isInitialLoad ? 'Checking reconstructed memory' : 'Structured decisions, assumptions, constraints, outcomes, and commitments',
+        detail: isInitialLoad ? t('Checking reconstructed memory', 'Yeniden oluşturulan hafıza kontrol ediliyor') : t('Structured decisions, assumptions, constraints, outcomes, and commitments', 'Yapılandırılmış kararlar, varsayımlar, kısıtlar, sonuçlar ve taahhütler'),
       },
       {
-        label: 'Signals',
+        label: t('Signals', 'Sinyaller'),
         value: isInitialLoad ? '—' : persistedSignalCount || nextActions.length,
-        detail: isInitialLoad ? 'Checking active tensions' : `${contradictions.length + assumptionDrift.length} active tensions`,
+        detail: isInitialLoad ? t('Checking active tensions', 'Etkin gerilimler kontrol ediliyor') : t(`${contradictions.length + assumptionDrift.length} active tensions`, `${contradictions.length + assumptionDrift.length} etkin gerilim`),
       },
       {
-        label: 'Review coverage',
+        label: t('Review coverage', 'İnceleme kapsamı'),
         value: isInitialLoad ? '—' : artifactCount > 0 ? formatPercent(reviewedRatio) : '0%',
-        detail: isInitialLoad ? 'Checking review state' : `${reviewedArtifactCount} reviewed / ${rejectedArtifactCount} rejected`,
+        detail: isInitialLoad ? t('Checking review state', 'İnceleme durumu kontrol ediliyor') : t(`${reviewedArtifactCount} reviewed / ${rejectedArtifactCount} rejected`, `${reviewedArtifactCount} incelenen / ${rejectedArtifactCount} reddedilen`),
       },
     ],
     [
@@ -249,6 +252,7 @@ export function DashboardPage() {
       reviewQueue.length,
       reviewedArtifactCount,
       reviewedRatio,
+      t,
       totalMemoryObjects,
     ],
   )
@@ -257,42 +261,42 @@ export function DashboardPage() {
     () => [
       {
         step: '01',
-        label: 'Capture',
-        title: latestCompletedArtifact?.title ?? 'Load company memory',
+        label: t('Capture', 'Kaydet'),
+        title: latestCompletedArtifact?.title ?? t('Load company memory', 'Şirket hafızasını yükle'),
         detail: latestCompletedArtifact
-          ? `${latestCompletedArtifact.artifact_id} is ${formatLabel(latestCompletedArtifact.ingestion_status)} and ${formatLabel(latestCompletedArtifact.review_status)}.`
-          : 'Upload files or paste source text before relying on company memory.',
-        status: latestCompletedArtifact ? formatLabel(latestCompletedArtifact.review_status) : 'Start here',
+          ? `${latestCompletedArtifact.artifact_id} · ${formatLabel(latestCompletedArtifact.ingestion_status)} · ${formatLabel(latestCompletedArtifact.review_status)}.`
+          : t('Upload files or paste source text before relying on company memory.', 'Şirket hafızasına güvenmeden önce dosya yükleyin veya kaynak metni yapıştırın.'),
+        status: latestCompletedArtifact ? formatLabel(latestCompletedArtifact.review_status) : t('Start here', 'Buradan başlayın'),
         to: '/memory',
       },
       {
         step: '02',
-        label: 'Build',
-        title: `${totalMemoryObjects} reconstructed memory objects`,
-        detail: 'Ingestion extracts decisions, assumptions, constraints, outcomes, commitments, provenance, and graph links.',
-        status: totalMemoryObjects > 0 ? 'Built' : 'Pending',
+        label: t('Build', 'Oluştur'),
+        title: t(`${totalMemoryObjects} reconstructed memory objects`, `${totalMemoryObjects} yeniden oluşturulan hafıza nesnesi`),
+        detail: t('Ingestion extracts decisions, assumptions, constraints, outcomes, commitments, provenance, and graph links.', 'İşleme; kararları, varsayımları, kısıtları, sonuçları, taahhütleri, kaynakları ve grafik bağlantılarını çıkarır.'),
+        status: totalMemoryObjects > 0 ? t('Built', 'Oluşturuldu') : t('Pending', 'Bekliyor'),
         to: '/ingestion',
       },
       {
         step: '03',
-        label: 'Govern',
-        title: isAdmin ? `${reviewQueue.length} source item(s) need review` : 'Source trust state is visible',
-        detail: 'Review status is part of the reasoning record so unsupported or rejected material stays traceable.',
-        status: reviewQueue.length > 0 ? 'Needs review' : 'Clear',
+        label: t('Govern', 'Yönet'),
+        title: isAdmin ? t(`${reviewQueue.length} source item(s) need review`, `${reviewQueue.length} kaynak inceleme gerektiriyor`) : t('Source trust state is visible', 'Kaynak güven durumu görünür'),
+        detail: t('Review status is part of the reasoning record so unsupported or rejected material stays traceable.', 'İnceleme durumu akıl yürütme kaydının parçasıdır; desteklenmeyen veya reddedilen içerik izlenebilir kalır.'),
+        status: reviewQueue.length > 0 ? t('Needs review', 'İnceleme gerekli') : t('Clear', 'Temiz'),
         to: isAdmin ? '/admin' : '/audit',
       },
       {
         step: '04',
-        label: 'Use',
-        title: topPersistedSignal ? compactDashboardCopy(topPersistedSignal.title, 78) : 'Ask an evidence-backed question',
+        label: t('Use', 'Kullan'),
+        title: topPersistedSignal ? compactDashboardCopy(topPersistedSignal.title, 78) : t('Ask an evidence-backed question', 'Kanıt destekli bir soru sorun'),
         detail: topPersistedSignal
-          ? compactDashboardCopy(topPersistedSignal.summary || 'Open the newest persisted signal or ask the canonical workspace question.', 118)
-          : canonicalWorkspacePrompt,
-        status: topPersistedSignal ? formatLabel(topPersistedSignal.signal_type) : 'Question',
-        to: topPersistedSignal ? `/signals/${topPersistedSignal.signal_id}` : `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
+          ? compactDashboardCopy(topPersistedSignal.summary || t('Open the newest persisted signal or ask the canonical workspace question.', 'En yeni kayıtlı sinyali açın veya çalışma alanı sorusunu sorun.'), 118)
+          : getCanonicalWorkspacePrompt(),
+        status: topPersistedSignal ? formatLabel(topPersistedSignal.signal_type) : t('Question', 'Soru'),
+        to: topPersistedSignal ? `/signals/${topPersistedSignal.signal_id}` : `/query?prompt=${encodeURIComponent(getCanonicalWorkspacePrompt())}`,
       },
     ],
-    [isAdmin, latestCompletedArtifact, reviewQueue.length, topPersistedSignal, totalMemoryObjects],
+    [isAdmin, latestCompletedArtifact, reviewQueue.length, t, topPersistedSignal, totalMemoryObjects],
   )
 
   const signalRows = useMemo<DashboardSignalRow[]>(() => {
@@ -303,7 +307,7 @@ export function DashboardPage() {
         title: compactDashboardCopy(signal.title, 92),
         summary: compactDashboardCopy(signal.summary, 142),
         detail: compactDashboardCopy(
-          `${signal.source_artifact_title ?? signal.source_artifact_id ?? 'Unknown source'} · urgency ${formatPercent(signal.urgency_score)} · ${formatDateTime(signal.created_at)}`,
+          `${signal.source_artifact_title ?? signal.source_artifact_id ?? translate("Unknown source", "Bilinmeyen kaynak")} · ${t('urgency', 'aciliyet')} ${formatPercent(signal.urgency_score)} · ${formatDateTime(signal.created_at)}`,
           128,
         ),
         tone: signalTone(signal.signal_type),
@@ -313,26 +317,26 @@ export function DashboardPage() {
       })),
       ...contradictions.slice(0, 2).map((item) => {
         const fullTitle = `${item.from_title} ↔ ${item.to_title}`
-        const fullSummary = item.evidence_provenance ?? 'Two pieces of memory conflict and require a decision.'
+        const fullSummary = item.evidence_provenance ?? t('Two pieces of memory conflict and require a decision.', 'İki hafıza kaydı çelişiyor ve karar gerektiriyor.')
         return {
           id: item.edge_id,
-          type: 'Contradiction',
+          type: t('Contradiction', 'Çelişki'),
           title: compactDashboardCopy(fullTitle, 92),
           summary: compactDashboardCopy(fullSummary, 142),
-          detail: `Topic ${item.topic_key} · confidence ${formatPercent(item.confidence_score)}`,
+          detail: t(`Topic ${item.topic_key} · confidence ${formatPercent(item.confidence_score)}`, `Konu ${item.topic_key} · güven ${formatPercent(item.confidence_score)}`),
           tone: 'critical' as const,
           fullTitle,
           fullSummary,
         }
       }),
       ...assumptionDrift.slice(0, 2).map((item) => {
-        const fullSummary = item.validity_notes || item.evidence_provenance || 'Later evidence weakened this assumption.'
+        const fullSummary = item.validity_notes || item.evidence_provenance || t('Later evidence weakened this assumption.', 'Sonraki kanıt bu varsayımı zayıflattı.')
         return {
           id: item.assumption_id,
-          type: 'Assumption drift',
+          type: t('Assumption drift', 'Varsayım değişimi'),
           title: compactDashboardCopy(item.title_or_label, 92),
           summary: compactDashboardCopy(fullSummary, 142),
-          detail: `Status ${formatLabel(item.status)} · topic ${item.topic_key}`,
+          detail: t(`Status ${formatLabel(item.status)} · topic ${item.topic_key}`, `Durum ${formatLabel(item.status)} · konu ${item.topic_key}`),
           tone: 'drift' as const,
           fullTitle: item.title_or_label,
           fullSummary,
@@ -340,10 +344,10 @@ export function DashboardPage() {
       }),
       ...nextActions.slice(0, 2).map((item) => ({
         id: item.signal_id,
-        type: 'Next action',
+        type: t('Next action', 'Sonraki eylem'),
         title: compactDashboardCopy(item.title, 92),
         summary: compactDashboardCopy(item.recommended_action, 142),
-        detail: `Urgency ${formatPercent(item.urgency_score)} · uncertainty ${formatPercent(item.uncertainty_score)}`,
+        detail: t(`Urgency ${formatPercent(item.urgency_score)} · uncertainty ${formatPercent(item.uncertainty_score)}`, `Aciliyet ${formatPercent(item.urgency_score)} · belirsizlik ${formatPercent(item.uncertainty_score)}`),
         tone: 'action' as const,
         fullTitle: item.title,
         fullSummary: item.recommended_action,
@@ -351,7 +355,7 @@ export function DashboardPage() {
     ]
 
     return rows.slice(0, 8)
-  }, [assumptionDrift, contradictions, nextActions, persistedSignals])
+  }, [assumptionDrift, contradictions, nextActions, persistedSignals, t])
 
   const accessibleArtifacts = useMemo(
     () => artifacts.filter((artifact) => artifact.review_status !== 'rejected'),
@@ -361,92 +365,92 @@ export function DashboardPage() {
   const employeeReadiness = useMemo(() => {
     if (isInitialLoad) {
       return {
-        status: 'Loading',
-        title: 'Loading current focus',
-        detail: 'Checking your accessible sources, memory graph, and current signals.',
+        status: t('Loading', 'Yükleniyor'),
+        title: t('Loading current focus', 'Mevcut odak yükleniyor'),
+        detail: t('Checking your accessible sources, memory graph, and current signals.', 'Erişebildiğiniz kaynaklar, hafıza grafiği ve mevcut sinyaller kontrol ediliyor.'),
         to: '/memory',
-        actionLabel: 'Open memory',
+        actionLabel: t('Open memory', 'Hafızayı aç'),
       }
     }
     if (!latestCompletedArtifact) {
       return {
-        status: 'Needs source',
-        title: 'Add the first useful source',
-        detail: 'Upload or paste the company material you need Izge to reason over, then ask your question from the assistant.',
+        status: t('Needs source', 'Kaynak gerekli'),
+        title: t('Add the first useful source', 'İlk yararlı kaynağı ekleyin'),
+        detail: t('Upload or paste the company material you need Izge to reason over, then ask your question from the assistant.', 'İzge’nin değerlendirmesi gereken şirket içeriğini yükleyin veya yapıştırın, ardından asistana sorun.'),
         to: '/memory',
-        actionLabel: 'Add source',
+        actionLabel: t('Add source', 'Kaynak ekle'),
       }
     }
     if (!totalMemoryObjects) {
       return {
-        status: 'Preparing memory',
-        title: 'Memory sources are present',
-        detail: 'Sources exist in this workspace. An admin may need to finish processing before every answer has full memory context.',
+        status: t('Preparing memory', 'Hafıza hazırlanıyor'),
+        title: t('Memory sources are present', 'Hafıza kaynakları mevcut'),
+        detail: t('Sources exist in this workspace. An admin may need to finish processing before every answer has full memory context.', 'Bu çalışma alanında kaynaklar var. Her yanıt tam hafıza bağlamına ulaşmadan önce bir yöneticinin işlemeyi tamamlaması gerekebilir.'),
         to: '/memory',
-        actionLabel: 'Open memory',
+        actionLabel: t('Open memory', 'Hafızayı aç'),
       }
     }
     if (signalRows.length > 0) {
       return {
-        status: 'Action available',
+        status: t('Action available', 'Eylem mevcut'),
         title: signalRows[0].title,
         detail: signalRows[0].summary,
         to: signalRows[0].to ?? '/graph',
-        actionLabel: 'Open focus item',
+        actionLabel: t('Open focus item', 'Odak öğesini aç'),
       }
     }
     return {
-      status: 'Ready',
-      title: 'Ready for a grounded question',
-      detail: 'Ask Izge about decisions, assumptions, next actions, or sources you are allowed to access.',
-      to: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
-      actionLabel: 'Ask Izge',
+      status: t('Ready', 'Hazır'),
+      title: t('Ready for a grounded question', 'Kaynaklı bir soru için hazır'),
+      detail: t('Ask Izge about decisions, assumptions, next actions, or sources you are allowed to access.', 'İzge’ye erişebildiğiniz kararları, varsayımları, sonraki eylemleri veya kaynakları sorun.'),
+      to: `/query?prompt=${encodeURIComponent(getCanonicalWorkspacePrompt())}`,
+      actionLabel: t('Ask Izge', 'İzge’ye sor'),
     }
-  }, [isInitialLoad, latestCompletedArtifact, signalRows, totalMemoryObjects])
+  }, [isInitialLoad, latestCompletedArtifact, signalRows, t, totalMemoryObjects])
   const employeeActions = useMemo(
     () => [
       {
-        title: 'Ask Izge',
-        detail: 'Ask questions grounded in your permitted artifacts.',
+        title: t('Ask Izge', 'İzge’ye sor'),
+        detail: t('Ask questions grounded in your permitted artifacts.', 'İzinli kaynaklarınıza dayanan sorular sorun.'),
         meta: isInitialLoad
-          ? 'Checking memory access'
+          ? t('Checking memory access', 'Hafıza erişimi kontrol ediliyor')
           : totalMemoryObjects > 0
-            ? `${totalMemoryObjects} memory object${totalMemoryObjects === 1 ? '' : 's'} available`
-            : 'Works best after evidence is processed',
-        to: `/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`,
-        cta: 'Ask now',
+            ? t(`${totalMemoryObjects} memory object${totalMemoryObjects === 1 ? '' : 's'} available`, `${totalMemoryObjects} hafıza nesnesi mevcut`)
+            : t('Works best after evidence is processed', 'Kanıt işlendiğinde en iyi sonucu verir'),
+        to: `/query?prompt=${encodeURIComponent(getCanonicalWorkspacePrompt())}`,
+        cta: t('Ask now', 'Şimdi sor'),
         icon: '✦',
         primary: true,
       },
       {
-        title: 'Continue team chat',
-        detail: 'Message coworkers without leaving the workspace.',
-        meta: 'Company conversations stay in context',
+        title: t('Continue team chat', 'Ekip sohbetine devam et'),
+        detail: t('Message coworkers without leaving the workspace.', 'Çalışma alanından ayrılmadan ekip arkadaşlarınıza mesaj gönderin.'),
+        meta: t('Company conversations stay in context', 'Şirket konuşmaları bağlamda kalır'),
         to: '/team-chat',
-        cta: 'Open chat',
+        cta: t('Open chat', 'Sohbeti aç'),
         icon: '◌',
         primary: false,
       },
       {
-        title: 'Open memory',
-        detail: 'Preview accessible sources and check their status.',
-        meta: isInitialLoad ? 'Checking source access' : `${accessibleArtifacts.length} accessible source${accessibleArtifacts.length === 1 ? '' : 's'}`,
+        title: t('Open memory', 'Hafızayı aç'),
+        detail: t('Preview accessible sources and check their status.', 'Erişilebilir kaynakları önizleyin ve durumlarını kontrol edin.'),
+        meta: isInitialLoad ? t('Checking source access', 'Kaynak erişimi kontrol ediliyor') : t(`${accessibleArtifacts.length} accessible source${accessibleArtifacts.length === 1 ? '' : 's'}`, `${accessibleArtifacts.length} erişilebilir kaynak`),
         to: '/memory',
-        cta: 'View memory',
+        cta: t('View memory', 'Hafızayı görüntüle'),
         icon: '□',
         primary: false,
       },
       {
-        title: 'Inspect graph',
-        detail: signalRows[0]?.title ?? (isInitialLoad ? 'Checking current signals.' : 'Explore linked decisions, assumptions, and evidence.'),
-        meta: signalRows.length > 0 ? `${signalRows.length} focus item${signalRows.length === 1 ? '' : 's'}` : isInitialLoad ? 'Checking signals' : 'No urgent signals yet',
+        title: t('Inspect graph', 'Grafiği incele'),
+        detail: signalRows[0]?.title ?? (isInitialLoad ? t('Checking current signals.', 'Mevcut sinyaller kontrol ediliyor.') : t('Explore linked decisions, assumptions, and evidence.', 'Bağlantılı kararları, varsayımları ve kanıtları keşfedin.')),
+        meta: signalRows.length > 0 ? t(`${signalRows.length} focus item${signalRows.length === 1 ? '' : 's'}`, `${signalRows.length} odak kaydı`) : isInitialLoad ? t('Checking signals', 'Sinyaller kontrol ediliyor') : t('No urgent signals yet', 'Henüz acil sinyal yok'),
         to: signalRows[0]?.to ?? '/graph',
-        cta: signalRows.length > 0 ? 'Review signal' : 'Open graph',
+        cta: signalRows.length > 0 ? t('Review signal', 'Sinyali incele') : t('Open graph', 'Grafiği aç'),
         icon: '◇',
         primary: false,
       },
     ],
-    [accessibleArtifacts.length, isInitialLoad, signalRows, totalMemoryObjects],
+    [accessibleArtifacts.length, isInitialLoad, signalRows, t, totalMemoryObjects],
   )
 
   const memoryComposition = useMemo(
@@ -459,33 +463,25 @@ export function DashboardPage() {
       <div className="stack-xl employee-home-page">
         <section className="employee-hero" aria-labelledby="employee-home-title">
           <div className="employee-hero-copy">
-            <p className="eyebrow">Employee workspace</p>
-            <h1 id="employee-home-title" className="brand-title">
-              Get work done with company memory.
-            </h1>
-            <p className="page-description">
-              Ask, check evidence, or message coworkers. Izge uses only the artifacts you are allowed to access.
-            </p>
+            <p className="eyebrow">{t('Employee workspace', 'Çalışan alanı')}</p>
+            <h1 id="employee-home-title" className="brand-title">{t("Get work done with company memory.", "Şirket hafızasıyla işlerinizi tamamlayın.")}</h1>
+            <p className="page-description">{t("Ask, check evidence, or message coworkers. Izge uses only the artifacts you are allowed to access.", "Soru sorun, kaynakları inceleyin veya çalışma arkadaşlarınıza yazın. İzge yalnız erişim izniniz olan kaynakları kullanır.")}</p>
             <div className="employee-hero-actions">
-              <Link className="primary-button" to={`/query?prompt=${encodeURIComponent(canonicalWorkspacePrompt)}`}>
-                Ask Izge
-              </Link>
-              <Link className="secondary-button" to="/team-chat">
-                Team chat
-              </Link>
+              <Link className="primary-button" to={`/query?prompt=${encodeURIComponent(getCanonicalWorkspacePrompt())}`}>{t("Ask Izge", "İzge’ye sor")}</Link>
+              <Link className="secondary-button" to="/team-chat">{t("Team chat", "Ekip sohbeti")}</Link>
             </div>
           </div>
 
-          <aside className="employee-focus-panel" aria-label="Current focus">
+          <aside className="employee-focus-panel" aria-label={t('Current focus', 'Mevcut odak')}>
             <div className="employee-focus-header">
               <div>
-                <p className="section-label">Current focus</p>
+                <p className="section-label">{t('Current focus', 'Mevcut odak')}</p>
                 <p className="table-primary">{employeeReadiness.title}</p>
               </div>
               <StatusBadge value={employeeReadiness.status} />
             </div>
             <details className="employee-focus-details">
-              <summary>Details</summary>
+              <summary>{t('Details', 'Ayrıntılar')}</summary>
               <p className="muted-copy">{employeeReadiness.detail}</p>
             </details>
             <Link className="secondary-button" to={employeeReadiness.to}>
@@ -493,12 +489,12 @@ export function DashboardPage() {
             </Link>
             <dl className="employee-context-list">
               <div>
-                <dt>Signed in as</dt>
-                <dd>{session?.user.display_name ?? 'Employee'}</dd>
+                <dt>{t('Signed in as', 'Oturum açan')}</dt>
+                <dd>{session?.user.display_name ?? t('Employee', 'Çalışan')}</dd>
               </div>
               <div>
-                <dt>Access rule</dt>
-                <dd>Your answers use only permitted company memory.</dd>
+                <dt>{t('Access rule', 'Erişim kuralı')}</dt>
+                <dd>{t('Your answers use only permitted company memory.', 'Yanıtlarınız yalnızca izinli şirket hafızasını kullanır.')}</dd>
               </div>
             </dl>
           </aside>
@@ -506,7 +502,7 @@ export function DashboardPage() {
 
         {error ? <Callout tone="warning">{error}</Callout> : null}
 
-        <section className="employee-action-grid" aria-label="Primary employee actions">
+        <section className="employee-action-grid" aria-label={t('Primary employee actions', 'Temel çalışan eylemleri')}>
           {employeeActions.map((action) => (
             <Link key={action.title} className={action.primary ? 'employee-action-card employee-action-card-primary' : 'employee-action-card'} to={action.to}>
               <span className="employee-action-icon" aria-hidden="true">
@@ -524,19 +520,17 @@ export function DashboardPage() {
 
         <div className="employee-content-grid">
           <Panel
-            title="Work queue"
-            description="Current signals that need attention."
+            title={t('Work queue', 'İş kuyruğu')}
+            description={t('Current signals that need attention.', 'Dikkat gerektiren mevcut sinyaller.')}
             aside={
-              <Link className="secondary-button" to="/graph">
-                Open graph
-              </Link>
+              <Link className="secondary-button" to="/graph">{t("Open graph", "Grafiği aç")}</Link>
             }
           >
-            {isLoading ? <p className="muted-copy">Loading your workspace…</p> : null}
+            {isLoading ? <p className="muted-copy">{t('Loading your workspace…', 'Çalışma alanınız yükleniyor…')}</p> : null}
             {!isLoading && signalRows.length === 0 ? (
               <EmptyState
-                title="No active focus items"
-                description="Signals appear here when accessible evidence needs action."
+                title={t('No active focus items', 'Etkin odak öğesi yok')}
+                description={t('Signals appear here when accessible evidence needs action.', 'Erişilebilir kanıt eylem gerektirdiğinde sinyaller burada görünür.')}
               />
             ) : null}
             {signalRows.length > 0 ? (
@@ -564,27 +558,25 @@ export function DashboardPage() {
           </Panel>
 
           <Panel
-            title="Recent memory sources"
-            description="Accessible company sources."
+            title={t('Recent memory sources', 'Son hafıza kaynakları')}
+            description={t('Accessible company sources.', 'Erişilebilir şirket kaynakları.')}
             aside={
-              <Link className="secondary-button" to="/memory">
-                View all
-              </Link>
+              <Link className="secondary-button" to="/memory">{t("View all", "Tümünü gör")}</Link>
             }
           >
-            {isLoading ? <p className="muted-copy">Loading memory…</p> : null}
+            {isLoading ? <p className="muted-copy">{t('Loading memory…', 'Hafıza yükleniyor…')}</p> : null}
             {!isLoading && employeeEvidenceRows.length === 0 ? (
-              <EmptyState title="No accessible sources yet" description="Add source material or ask an admin to grant access." />
+              <EmptyState title={t('No accessible sources yet', 'Henüz erişilebilir kaynak yok')} description={t('Add source material or ask an admin to grant access.', 'Kaynak ekleyin veya erişim için bir yöneticiye başvurun.')} />
             ) : null}
             {employeeEvidenceRows.length > 0 ? (
               <div className="table-wrap employee-evidence-table-wrap">
                 <table className="data-table employee-evidence-table">
                   <thead>
                     <tr>
-                      <th>Source</th>
-                      <th>Status</th>
-                      <th>Updated</th>
-                      <th>Action</th>
+                      <th>{t('Source', 'Kaynak')}</th>
+                      <th>{t('Status', 'Durum')}</th>
+                      <th>{t('Updated', 'Güncellendi')}</th>
+                      <th>{t('Action', 'Eylem')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -597,13 +589,11 @@ export function DashboardPage() {
                           </div>
                         </td>
                         <td>
-                          <StatusBadge value={formatLabel(artifact.ingestion_status)} />
+                          <StatusBadge value={artifact.ingestion_status} />
                         </td>
                         <td>{formatDateTime(artifact.updated_at)}</td>
                         <td>
-                          <Link className="text-button" to="/memory">
-                            Open
-                          </Link>
+                          <Link className="text-button" to="/memory">{t("Open", "Aç")}</Link>
                         </td>
                       </tr>
                     ))}
@@ -618,23 +608,19 @@ export function DashboardPage() {
   }
 
   const reasoningModes = [
-    ['Decision lineage', 'Understand why a decision exists', 'Timeline, owner, evidence, and related commitments'],
-    ['Contradiction analysis', 'Resolve conflicting claims', 'Conflicting memory objects with provenance and confidence'],
-    ['Assumption drift', 'Find stale operating assumptions', 'Assumptions whose validity changed after later evidence'],
-    ['Next-action guidance', 'Move from evidence to work', 'Recommended action with urgency, uncertainty, and supporting facts'],
+    [t('Decision lineage', 'Karar geçmişi'), t('Understand why a decision exists', 'Bir kararın neden var olduğunu anlayın'), t('Timeline, owner, evidence, and related commitments', 'Zaman çizelgesi, sorumlu, kanıt ve ilgili taahhütler')],
+    [t('Contradiction analysis', 'Çelişki analizi'), t('Resolve conflicting claims', 'Çelişen ifadeleri çözün'), t('Conflicting memory objects with provenance and confidence', 'Kaynağı ve güven düzeyiyle çelişen hafıza nesneleri')],
+    [t('Assumption drift', 'Varsayım değişimi'), t('Find stale operating assumptions', 'Eski işletme varsayımlarını bulun'), t('Assumptions whose validity changed after later evidence', 'Sonraki kanıtlarla geçerliliği değişen varsayımlar')],
+    [t('Next-action guidance', 'Sonraki eylem yönlendirmesi'), t('Move from evidence to work', 'Kanıttan eyleme geçin'), t('Recommended action with urgency, uncertainty, and supporting facts', 'Aciliyet, belirsizlik ve destekleyici olgularla önerilen eylem')],
   ]
 
   return (
     <div className="stack-xl dashboard-page">
       <section className="dashboard-hero" aria-labelledby="dashboard-title">
         <div className="dashboard-hero-copy">
-          <p className="eyebrow">Operations dashboard</p>
-          <h1 id="dashboard-title" className="brand-title">
-            Company memory control center
-          </h1>
-          <p className="page-description">
-            A practical operating view for source intake, evidence governance, memory reconstruction, signal review, and grounded answers.
-          </p>
+          <p className="eyebrow">{t('Operations dashboard', 'Operasyon gösterge paneli')}</p>
+          <h1 id="dashboard-title" className="brand-title">{t("Company memory control center", "Şirket hafızası kontrol merkezi")}</h1>
+          <p className="page-description">{t("A practical operating view for source intake, evidence governance, memory reconstruction, signal review, and grounded answers.", "Kaynak ekleme, kanıt yönetimi, hafızayı yeniden oluşturma, sinyal inceleme ve kaynaklı yanıtlar için operasyon görünümü.")}</p>
           <div className="inline-actions">
             <Link className="primary-button" to={workspaceReadiness.actionTo}>
               {workspaceReadiness.actionLabel}
@@ -642,10 +628,10 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <aside className="dashboard-hero-panel" aria-label="Current readiness and workspace boundary">
+        <aside className="dashboard-hero-panel" aria-label={t('Current readiness and workspace boundary', 'Mevcut hazırlık ve çalışma alanı sınırı')}>
           <div className="readiness-header">
             <div>
-              <p className="section-label">Current state</p>
+              <p className="section-label">{t('Current state', 'Mevcut durum')}</p>
               <p className="table-primary">{workspaceReadiness.title}</p>
             </div>
             <StatusBadge value={workspaceReadiness.status} />
@@ -653,20 +639,20 @@ export function DashboardPage() {
           <p className="muted-copy">{workspaceReadiness.detail}</p>
           <dl className="dashboard-meta-list">
             <div>
-              <dt>User</dt>
-              <dd>{session?.user.display_name ?? 'Unavailable'}</dd>
+              <dt>{t('User', 'Kullanıcı')}</dt>
+              <dd>{session?.user.display_name ?? t('Unavailable', 'Kullanılamıyor')}</dd>
             </div>
             <div>
-              <dt>Role</dt>
-              <dd>{session?.user.role ?? 'Unavailable'}</dd>
+              <dt>{t('Role', 'Rol')}</dt>
+              <dd>{session?.user.role ?? t('Unavailable', 'Kullanılamıyor')}</dd>
             </div>
             <div>
-              <dt>Workspace</dt>
-              <dd>{summary?.workspace_id ?? session?.user.workspace_id ?? 'Unavailable'}</dd>
+              <dt>{t('Workspace', 'Çalışma alanı')}</dt>
+              <dd>{summary?.workspace_id ?? session?.user.workspace_id ?? t('Unavailable', 'Kullanılamıyor')}</dd>
             </div>
             <div>
-              <dt>Stance</dt>
-              <dd>Reconstruct first. Compare second. Recommend last.</dd>
+              <dt>{t('Stance', 'Yaklaşım')}</dt>
+              <dd>{t('Reconstruct first. Compare second. Recommend last.', 'Önce yeniden kur. Sonra karşılaştır. En son öner.')}</dd>
             </div>
           </dl>
         </aside>
@@ -674,7 +660,7 @@ export function DashboardPage() {
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
-      <section className="dashboard-kpi-strip" aria-label="Current workspace health">
+      <section className="dashboard-kpi-strip" aria-label={t('Current workspace health', 'Mevcut çalışma alanı sağlığı')}>
         {dashboardStats.map((metric) => (
           <article key={metric.label} className="dashboard-kpi">
             <p className="section-label">{metric.label}</p>
@@ -686,12 +672,10 @@ export function DashboardPage() {
 
       <div className="dashboard-main-grid">
         <Panel
-          title="Operating path"
-          description="The next operational step should be clear without forcing employees through a wall of similar cards."
+          title={t('Operating path', 'Çalışma yolu')}
+          description={t('The next operational step should be clear without forcing employees through many similar cards.', 'Sonraki operasyonel adım, çalışanları benzer kartlara boğmadan açık olmalıdır.')}
           aside={
-            <Link className="secondary-button" to={workspaceReadiness.actionTo}>
-              Continue
-            </Link>
+            <Link className="secondary-button" to={workspaceReadiness.actionTo}>{t("Continue", "Devam et")}</Link>
           }
         >
           <ol className="workflow-step-list">
@@ -708,9 +692,7 @@ export function DashboardPage() {
                   </div>
                   <p className="muted-copy">{step.detail}</p>
                 </div>
-                <Link className="text-button" to={step.to}>
-                  Open
-                </Link>
+                <Link className="text-button" to={step.to}>{t("Open", "Aç")}</Link>
               </li>
             ))}
           </ol>
@@ -718,25 +700,23 @@ export function DashboardPage() {
 
         {isAdmin ? (
           <Panel
-            title="Evidence governance"
-            description="Trusted answers depend on an explicit source review state. Stored records remain auditable even when rejected."
+            title={t('Evidence governance', 'Kanıt yönetimi')}
+            description={t('Trusted answers depend on an explicit source review state. Stored records remain auditable even when rejected.', 'Güvenilir yanıtlar açık bir kaynak inceleme durumuna bağlıdır. Reddedilen kayıtlar da denetlenebilir kalır.')}
             aside={
-              <Link className="secondary-button" to="/admin/users">
-                Manage
-              </Link>
+              <Link className="secondary-button" to="/admin/users">{t("Manage", "Yönet")}</Link>
             }
           >
             <dl className="review-ledger">
               <div>
-                <dt>Waiting</dt>
+                <dt>{t('Waiting', 'Bekliyor')}</dt>
                 <dd>{reviewQueue.length}</dd>
               </div>
               <div>
-                <dt>Reviewed</dt>
+                <dt>{t('Reviewed', 'İncelendi')}</dt>
                 <dd>{reviewedArtifactCount}</dd>
               </div>
               <div>
-                <dt>Rejected</dt>
+                <dt>{t('Rejected', 'Reddedildi')}</dt>
                 <dd>{rejectedArtifactCount}</dd>
               </div>
             </dl>
@@ -747,35 +727,33 @@ export function DashboardPage() {
                     <div>
                       <p className="table-primary">{artifact.title}</p>
                       <p className="table-secondary">
-                        {formatLabel(artifact.ingestion_status)} · updated {formatDateTime(artifact.updated_at)}
+                        {formatLabel(artifact.ingestion_status)}{t(" · updated ", " · güncellendi ")}{formatDateTime(artifact.updated_at)}
                       </p>
                     </div>
-                    <StatusBadge value={formatLabel(artifact.review_status)} />
+                    <StatusBadge value={artifact.review_status} />
                   </Link>
                 ))}
               </div>
             ) : (
-              <p className="muted-copy">No submitted or needs-review artifacts are waiting in the admin queue.</p>
+              <p className="muted-copy">{t('No submitted or needs-review sources are waiting in the admin queue.', 'Yönetici kuyruğunda gönderilmiş veya inceleme bekleyen kaynak yok.')}</p>
             )}
           </Panel>
         ) : (
-          <Panel title="Evidence boundary" description="Permissions and trust state remain part of every answer.">
-            <p className="muted-copy">
-              You are viewing the workspace as {session?.user.display_name ?? 'the current user'}. Restricted evidence stays out of answers when permissions do not allow it.
-            </p>
+          <Panel title={t('Evidence boundary', 'Kanıt sınırı')} description={t('Permissions and trust state remain part of every answer.', 'İzinler ve güven durumu her yanıtın parçası kalır.')}>
+            <p className="muted-copy">{t("You are viewing the workspace as", "Çalışma alanını şu kullanıcı olarak görüntülüyorsunuz:")}{session?.user.display_name ?? translate("the current user", "mevcut kullanıcı")}{t(". Restricted evidence stays out of answers when permissions do not allow it.", ". Erişim izni olmayan kaynaklar yanıtlara dahil edilmez.")}</p>
           </Panel>
         )}
       </div>
 
       <div className="dashboard-analysis-grid">
-        <Panel title="Reasoning modes" description="Modes are operational tools, not marketing copy or chat personas.">
+        <Panel title={t('Reasoning modes', 'Akıl yürütme modları')} description={t('Modes are operational tools, not marketing copy or chat personas.', 'Modlar pazarlama metni veya sohbet karakteri değil, operasyonel araçlardır.')}>
           <div className="table-wrap mode-table-wrap">
             <table className="data-table mode-table">
               <thead>
                 <tr>
-                  <th>Mode</th>
-                  <th>Use when</th>
-                  <th>Output</th>
+                  <th>{t('Mode', 'Mod')}</th>
+                  <th>{t('Use when', 'Ne zaman kullanılır')}</th>
+                  <th>{t('Output', 'Çıktı')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -791,11 +769,11 @@ export function DashboardPage() {
           </div>
         </Panel>
 
-        <Panel title="Memory composition" description="A compact graph of what ingestion reconstructed from company sources.">
+        <Panel title={t('Memory composition', 'Hafıza bileşimi')} description={t('A compact graph of what processing reconstructed from company sources.', 'İşlemenin şirket kaynaklarından yeniden kurduğu bilgilerin küçük grafiği.')}>
           {memoryComposition.length === 0 ? (
-            <EmptyState title="No memory graph yet" description="Run ingestion to populate the memory composition graph." />
+            <EmptyState title={t('No memory graph yet', 'Henüz hafıza grafiği yok')} description={t('Process sources to populate the memory composition graph.', 'Hafıza bileşimi grafiğini doldurmak için kaynakları işleyin.')} />
           ) : (
-            <div className="composition-chart" aria-label="Memory object composition">
+            <div className="composition-chart" aria-label={t('Memory object composition', 'Hafıza nesnesi bileşimi')}>
               {memoryComposition.map(([memoryType, count]) => {
                 const width = totalMemoryObjects > 0 ? Math.max(6, (count / totalMemoryObjects) * 100) : 0
                 return (
@@ -814,16 +792,14 @@ export function DashboardPage() {
       </div>
 
       <Panel
-        title="Signals requiring a decision"
-        description="Signals are shown as an action list so users can scan type, evidence, urgency, and next destination quickly."
+        title={t('Signals requiring a decision', 'Karar gerektiren sinyaller')}
+        description={t('Signals are shown as an action list so users can scan type, evidence, urgency, and destination quickly.', 'Sinyaller, kullanıcıların türü, kanıtı, aciliyeti ve hedefi hızla tarayabilmesi için eylem listesi olarak gösterilir.')}
         aside={
-          <Link className="secondary-button" to="/graph">
-            Inspect graph
-          </Link>
+          <Link className="secondary-button" to="/graph">{t("Inspect graph", "Grafiği incele")}</Link>
         }
       >
         {signalRows.length === 0 ? (
-          <EmptyState title="No active signals yet" description="Run ingestion on company artifacts to surface contradictions, drift, and grounded guidance." />
+          <EmptyState title={t('No active signals yet', 'Henüz etkin sinyal yok')} description={t('Process company sources to surface contradictions, drift, and grounded guidance.', 'Çelişkileri, değişimleri ve kaynaklı yönlendirmeyi bulmak için şirket kaynaklarını işleyin.')} />
         ) : (
           <div className="decision-list">
             {signalRows.map((row) => {
@@ -858,28 +834,26 @@ export function DashboardPage() {
       </Panel>
 
       <Panel
-        title="Recent memory sources entering memory"
-        description="Sources are inspectable provenance, not background files."
+        title={t('Recent memory sources entering memory', 'Hafızaya giren son kaynaklar')}
+        description={t('Sources are inspectable provenance, not background files.', 'Kaynaklar arka plandaki dosyalar değil, incelenebilir dayanaklardır.')}
         aside={
-          <Link className="secondary-button" to="/memory">
-            View all
-          </Link>
+          <Link className="secondary-button" to="/memory">{t("View all", "Tümünü gör")}</Link>
         }
       >
-        {isLoading ? <p className="muted-copy">Loading source inventory…</p> : null}
+        {isLoading ? <p className="muted-copy">{t('Loading source inventory…', 'Kaynak envanteri yükleniyor…')}</p> : null}
         {!isLoading && artifacts.length === 0 ? (
-          <EmptyState title="No sources yet" description="Upload a file or submit pasted text to start reconstructing institutional memory." />
+          <EmptyState title={t('No sources yet', 'Henüz kaynak yok')} description={t('Upload a file or paste text to start reconstructing institutional memory.', 'Kurumsal hafızayı yeniden oluşturmaya başlamak için dosya yükleyin veya metin yapıştırın.')} />
         ) : null}
         {artifacts.length > 0 ? (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Source</th>
-                  <th>Visibility</th>
-                  <th>Status</th>
-                  <th>Review</th>
-                  <th>Updated</th>
+                  <th>{t('Source', 'Kaynak')}</th>
+                  <th>{t('Visibility', 'Görünürlük')}</th>
+                  <th>{t('Status', 'Durum')}</th>
+                  <th>{t('Review', 'İnceleme')}</th>
+                  <th>{t('Updated', 'Güncellendi')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -893,10 +867,10 @@ export function DashboardPage() {
                     </td>
                     <td>{artifact.visibility_scope}</td>
                     <td>
-                      <StatusBadge value={formatLabel(artifact.ingestion_status)} />
+                      <StatusBadge value={artifact.ingestion_status} />
                     </td>
                     <td>
-                      <StatusBadge value={formatLabel(artifact.review_status)} />
+                      <StatusBadge value={artifact.review_status} />
                     </td>
                     <td>{formatDateTime(artifact.updated_at)}</td>
                   </tr>

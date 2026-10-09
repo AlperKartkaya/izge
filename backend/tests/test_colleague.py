@@ -16,10 +16,10 @@ from sqlalchemy.orm import Session
 from app.db import Base
 from app.models import Artifact, ArtifactChunk, ArtifactPermission, ColleagueRun, ColleagueRunEvent, CompanyChatMessage, Signal, User, WorkTask, Workspace
 from app.routers.team_chat import _message_is_visible_to_user, create_team_chat_message, list_team_chat_messages
-from app.routers.work import _event_stream, _run_read, _task_read, _utc_naive, list_runs
+from app.routers.work import _event_stream, _run_read, _task_read, _utc_naive, list_runs, request_review
 from app.schemas.api import TeamChatMessageCreate
-from app.schemas.work import WorkTaskCreate
-from app.services.colleague import LocalLLMError, LostColleagueLeaseError, _recent_thread_context, _shared_signal_context, _stream_local_answer, _validate_answer_citations, add_run_event, claim_next_colleague_run, dispatch_due_reminders, enqueue_colleague_question, enqueue_due_evening_reviews, process_colleague_run, retrieve_shared_context
+from app.schemas.work import ColleagueAskCreate, WorkTaskCreate
+from app.services.colleague import LocalLLMError, LostColleagueLeaseError, _generate_follow_ups, _recent_thread_context, _shared_signal_context, _stream_local_answer, _validate_answer_citations, add_run_event, claim_next_colleague_run, dispatch_due_reminders, enqueue_colleague_question, enqueue_due_evening_reviews, _ensure_answer_citations, process_colleague_run, retrieve_shared_context
 
 
 class ColleagueServiceTest(unittest.TestCase):
@@ -111,6 +111,59 @@ class ColleagueServiceTest(unittest.TestCase):
         )
         sources, _tasks = retrieve_shared_context(self.db, run)
         self.assertEqual([], sources)
+
+    def test_question_language_is_validated_persisted_and_part_of_idempotency(self) -> None:
+        with self.assertRaises(ValidationError):
+            ColleagueAskCreate(message="Status?", client_request_id="language-invalid", response_language="de")
+        run = enqueue_colleague_question(
+            self.db,
+            actor=self.alice,
+            message="What is the status?",
+            client_request_id="language-request",
+            thread_id="izge-colleague",
+            thread_title="Izge",
+            thread_kind="direct",
+            participant_user_ids=[],
+            response_language="en",
+        )
+        self.assertEqual("en", run.response_language)
+        repeated = enqueue_colleague_question(
+            self.db,
+            actor=self.alice,
+            message="What is the status?",
+            client_request_id="language-request",
+            thread_id="izge-colleague",
+            thread_title="Izge",
+            thread_kind="direct",
+            participant_user_ids=[],
+            response_language="en",
+        )
+        self.assertEqual(run.run_id, repeated.run_id)
+        with self.assertRaises(HTTPException) as raised:
+            enqueue_colleague_question(
+                self.db,
+                actor=self.alice,
+                message="What is the status?",
+                client_request_id="language-request",
+                thread_id="izge-colleague",
+                thread_title="Izge",
+                thread_kind="direct",
+                participant_user_ids=[],
+                response_language="tr",
+            )
+        self.assertEqual(409, raised.exception.status_code)
+
+    def test_manual_review_uses_accept_language_while_scheduled_review_defaults_to_turkish(self) -> None:
+        accepted = request_review("en-US,en;q=0.9", self.alice, self.db)
+        manual = self.db.get(ColleagueRun, accepted.run_id)
+        assert manual is not None
+        self.assertEqual("en", manual.response_language)
+        self.assertIn("English", manual.question)
+        now = datetime(2026, 10, 9, 17, 1, tzinfo=UTC)
+        self.assertEqual(1, enqueue_due_evening_reviews(self.db, now))
+        scheduled = self.db.scalar(select(ColleagueRun).where(ColleagueRun.idempotency_key.like("evening-review:%")))
+        assert scheduled is not None
+        self.assertEqual("tr", scheduled.response_language)
 
     def test_retrieval_keeps_full_evidence_and_prefers_first_chunk_over_equal_tail(self) -> None:
         evidence = "Atlas teslim kaydı\n" + "Çalışma bilgisi. " * 44 + "\nToplam 18 saat; saatlik 2.000 TL, potansiyel 36.000 TL."
@@ -506,6 +559,83 @@ class ColleagueServiceTest(unittest.TestCase):
             with self.assertRaises(LocalLLMError):
                 list(_stream_local_answer("soru", [], [], review=False))
         self.assertIn("Onay bekleyen tutarı yanıtın hiçbir bölümünde kesinleşmiş alacak", connection.payload["messages"][0]["content"])
+
+    def test_english_stream_and_follow_up_prompts_request_english(self) -> None:
+        class FakeResponse:
+            status = 200
+
+            def __init__(self) -> None:
+                self.lines = iter([b'{"message":{"content":"Done."}}\n', b'{"done":true}\n'])
+
+            def readline(self) -> bytes:
+                return next(self.lines)
+
+        class FakeConnection:
+            payload: dict | None = None
+
+            def request(self, *_args, **kwargs) -> None:
+                self.payload = json.loads(kwargs["body"])
+
+            def getresponse(self) -> FakeResponse:
+                return FakeResponse()
+
+            def close(self) -> None:
+                return None
+
+        connection = FakeConnection()
+        settings = SimpleNamespace(local_llm_enabled=True, local_llm_model="test", local_llm_timeout_seconds=60)
+        with (
+            patch("app.services.colleague.get_settings", return_value=settings),
+            patch("app.services.colleague.validated_local_llm_base_url", return_value="http://127.0.0.1:11434"),
+            patch("app.services.colleague.http.client.HTTPConnection", return_value=connection),
+        ):
+            self.assertEqual(["Done."], list(_stream_local_answer("Status?", [], [], review=False, response_language="en", conversation=[{"question": "Old?", "answer": "Old fact [2]."}])))
+        self.assertIn("İngilizce", (connection.payload or {})["messages"][0]["content"])
+        self.assertIn("Old fact", (connection.payload or {})["messages"][1]["content"])
+        self.assertNotIn("Old fact [2]", (connection.payload or {})["messages"][1]["content"])
+
+        with patch("app.services.colleague._structured_local_output", return_value={"follow_ups": ["Who owns this work?"]}) as structured:
+            follow_ups = _generate_follow_ups("Status?", "Open [1].", [{"title": "Plan", "quote": "Open"}], response_language="en")
+        self.assertEqual(["Who owns this work?"], follow_ups)
+        self.assertIn("İngilizce", structured.call_args.kwargs["system_prompt"])
+
+    def test_explicit_chat_attachment_precedes_old_conversation_sources(self) -> None:
+        old = self._artifact("Old delivery plan", "Delivery customer approval hours rate work contract")
+        attachment = self._artifact("note.md", "Seven hours requested")
+        attachment.source_type = "team_chat_attachment"
+        previous = self._run([])
+        previous.status = "completed"
+        previous.answer = "Delivery customer approval hours [1]."
+        previous.sources = [{"artifact_id": old.artifact_id, "title": old.title, "quote": old.extracted_text}]
+        self.db.add(CompanyChatMessage(workspace_id=self.workspace.workspace_id, author_user_id=self.alice.user_id,
+            body="Attachment", message_metadata={"thread_id":"izge-colleague", "thread_kind":"direct",
+                "participant_user_ids":[self.alice.user_id], "attachments":[{"artifact_id":attachment.artifact_id}]}))
+        self.db.commit()
+        current = self._run([])
+        sources, _ = retrieve_shared_context(self.db, current)
+        self.assertEqual(attachment.artifact_id, sources[0]["artifact_id"])
+
+    def test_citation_repair_calls_real_model_once_and_still_fails_closed(self) -> None:
+        sources = [{"title": "File", "quote": "Seven hours requested"}]
+        with patch("app.services.colleague._structured_local_output") as repair:
+            self.assertEqual("Seven hours [1].", _ensure_answer_citations("Hours?", "Seven hours [1].", sources, response_language="en"))
+            repair.assert_not_called()
+        with patch("app.services.colleague._structured_local_output", return_value={"answer": "Seven hours requested [1]."}) as repair:
+            self.assertEqual("Seven hours requested [1].", _ensure_answer_citations("Hours?", "Seven hours requested.", sources, response_language="en"))
+            repair.assert_called_once()
+            self.assertIn("[1] File", repair.call_args.kwargs["user_prompt"])
+        with patch("app.services.colleague._structured_local_output", return_value={"answer": "Seven hours [2]."}) as repair, self.assertRaises(LocalLLMError):
+            _ensure_answer_citations("Hours?", "Seven hours.", sources, response_language="en")
+        repair.assert_called_once()
+
+    def test_follow_up_prompt_uses_only_sources_cited_by_the_answer(self) -> None:
+        sources = [{"title": "Unrelated", "quote": "unrelated source details"},
+                   {"title": "Conversation attachment", "quote": "Seven requested hours; approval pending."}]
+        with patch("app.services.colleague._structured_local_output", return_value={"follow_ups": []}) as output:
+            _generate_follow_ups("Hours?", "Seven requested hours [2].", sources)
+        prompt = output.call_args.kwargs["user_prompt"]
+        self.assertIn("Seven requested hours; approval pending.", prompt)
+        self.assertNotIn("unrelated source details", prompt)
 
     def test_malformed_ollama_line_and_invalid_citations_fail_closed(self) -> None:
         class BadResponse:

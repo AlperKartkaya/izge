@@ -34,10 +34,13 @@ def require_admin(user: User) -> None:
 
 
 def artifact_is_visible_to_user(db: Session, artifact: Artifact, user: User) -> bool:
-    if user.role == "Admin":
+    if artifact.workspace_id != user.workspace_id:
+        return False
+    # Conversation attachments inherit conversation membership; admin status must not open private chat files.
+    if user.role == "Admin" and artifact.source_type != "team_chat_attachment":
         return True
     if artifact.visibility_scope == "workspace":
-        return artifact.workspace_id == user.workspace_id
+        return True
     permission = db.scalar(
         select(ArtifactPermission).where(
             ArtifactPermission.artifact_id == artifact.artifact_id,

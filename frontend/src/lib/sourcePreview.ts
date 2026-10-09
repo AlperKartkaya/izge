@@ -1,3 +1,5 @@
+import { translate } from './language.ts'
+
 export type SourcePreviewKind = 'text' | 'pdf' | 'unsupported'
 
 export function sourcePreviewKind(contentType: string | null): SourcePreviewKind {
@@ -9,7 +11,7 @@ export function sourcePreviewKind(contentType: string | null): SourcePreviewKind
 }
 
 export function sourcePreviewError(status: number): string {
-  if (status === 401 || status === 403) return 'Bu kaynağı görüntüleme yetkiniz yok.'
-  if (status === 404) return 'Kaynak bulunamadı.'
-  return 'Kaynak önizlemesi yüklenemedi.'
+  if (status === 401 || status === 403) return translate('You do not have permission to view this source.', 'Bu kaynağı görüntüleme yetkiniz yok.')
+  if (status === 404) return translate('Source not found.', 'Kaynak bulunamadı.')
+  return translate('Could not load the source preview.', 'Kaynak önizlemesi yüklenemedi.')
 }

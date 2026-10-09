@@ -23,7 +23,37 @@ export function tokenizeAgentText(value: string, sourceCount = Infinity): AgentI
 }
 
 export function insertIzgeMention(value: string) {
-  const match = value.match(/(^|\s)@[\p{L}]*$/u)
-  if (!match || match.index === undefined) return `${value}${value && !value.endsWith(' ') ? ' ' : ''}@izge `
-  return `${value.slice(0, match.index)}${match[1]}@izge `
+  return insertIzgeMentionAtCaret(value, value.length).value
+}
+
+export function insertIzgeMentionAtCaret(value: string, selectionStart: number, selectionEnd = selectionStart) {
+  const beforeCaret = value.slice(0, selectionStart)
+  const match = beforeCaret.match(/(^|\s)@[\p{L}]*$/u)
+  if (!match || match.index === undefined) {
+    const prefix = value.slice(0, selectionStart)
+    const suffix = value.slice(selectionEnd)
+    const mention = `${prefix && !/\s$/u.test(prefix) ? ' ' : ''}@izge `
+    return { value: `${prefix}${mention}${suffix}`, caret: prefix.length + mention.length }
+  }
+
+  const tokenStart = match.index + match[1].length
+  const tokenEnd = selectionEnd + (value.slice(selectionEnd).match(/^[\p{L}]*/u)?.[0].length ?? 0)
+  const suffix = value.slice(tokenEnd).replace(/^ /u, '')
+  const nextValue = `${value.slice(0, tokenStart)}@izge ${suffix}`
+  return { value: nextValue, caret: tokenStart + '@izge '.length }
+}
+
+export function buildIzgeFollowUp(question: string) {
+  return `@izge ${question.trim()} `
+}
+
+export function focusComposerAtEnd(element: HTMLTextAreaElement | null) {
+  window.requestAnimationFrame(() => {
+    if (!element) return
+    element.focus()
+    const end = element.value.length
+    element.setSelectionRange(end, end)
+    element.scrollTop = element.scrollHeight
+    element.dispatchEvent(new Event('scroll', { bubbles: true }))
+  })
 }

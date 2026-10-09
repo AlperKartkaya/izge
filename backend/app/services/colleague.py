@@ -91,6 +91,44 @@ def normalize_participants(db: Session, actor: User, requested_user_ids: list[st
     return sorted(valid_ids)
 
 
+def _recent_thread_attachment_ids(db: Session, *, workspace_id: str, thread_id: str, readers: list[User]) -> list[str]:
+    # shortcut: only the four latest attachments are pinned, older files still participate in normal retrieval.
+    messages = db.scalars(
+        select(CompanyChatMessage)
+        .where(CompanyChatMessage.workspace_id == workspace_id)
+        .order_by(CompanyChatMessage.created_at.desc())
+        .limit(200)
+    ).all()
+    candidate_ids: list[str] = []
+    for message in messages:
+        metadata = message.message_metadata or {}
+        if str(metadata.get("thread_id") or metadata.get("channel") or "company-general") != thread_id:
+            continue
+        attachments = metadata.get("attachments")
+        if not isinstance(attachments, list):
+            continue
+        for attachment in attachments:
+            if isinstance(attachment, dict) and isinstance(attachment.get("artifact_id"), str) and attachment["artifact_id"] not in candidate_ids:
+                candidate_ids.append(attachment["artifact_id"])
+                if len(candidate_ids) >= 4:
+                    break
+        if len(candidate_ids) >= 4:
+            break
+    if not candidate_ids:
+        return []
+    artifacts = db.scalars(select(Artifact).where(
+        Artifact.workspace_id == workspace_id,
+        Artifact.artifact_id.in_(candidate_ids),
+        Artifact.source_type == "team_chat_attachment",
+    )).all()
+    visible_ids = {
+        artifact.artifact_id
+        for artifact in artifacts
+        if all(artifact_is_visible_to_user(db, artifact, reader) for reader in readers)
+    }
+    return [artifact_id for artifact_id in candidate_ids if artifact_id in visible_ids]
+
+
 def enqueue_colleague_question(
     db: Session,
     *,
@@ -101,6 +139,7 @@ def enqueue_colleague_question(
     thread_title: str | None,
     thread_kind: str,
     participant_user_ids: list[str],
+    response_language: str = "tr",
 ) -> ColleagueRun:
     existing = db.scalar(
         select(ColleagueRun).where(
@@ -114,6 +153,7 @@ def enqueue_colleague_question(
             existing.created_by != actor.user_id
             or existing.question != " ".join(message.strip().split())
             or existing.thread_id != requested_thread_id
+            or existing.response_language != response_language
         ):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu istek kimliği başka bir mesaj için kullanılmış.")
         return existing
@@ -125,6 +165,7 @@ def enqueue_colleague_question(
     participants = normalize_participants(db, actor, participant_user_ids, agent)
     cleaned_thread_id = _clean_thread_id(thread_id, actor.user_id)
     cleaned_title = _clean_thread_title(thread_title)
+    readers = _workspace_users(db, actor.workspace_id, set(participants) - {agent.user_id})
     run = ColleagueRun(
         workspace_id=actor.workspace_id,
         created_by=actor.user_id,
@@ -135,6 +176,13 @@ def enqueue_colleague_question(
         thread_kind=thread_kind,
         participant_user_ids=participants,
         question=question,
+        response_language=response_language,
+        context_artifact_ids=_recent_thread_attachment_ids(
+            db,
+            workspace_id=actor.workspace_id,
+            thread_id=cleaned_thread_id,
+            readers=readers,
+        ),
     )
     db.add(run)
     try:
@@ -227,7 +275,7 @@ def enqueue_artifact_review(db: Session, *, artifact: Artifact, actor: User) -> 
     return run
 
 
-def enqueue_manual_review(db: Session, actor: User) -> ColleagueRun:
+def enqueue_manual_review(db: Session, actor: User, *, response_language: str = "tr") -> ColleagueRun:
     agent = ensure_colleague_user(db, actor.workspace_id)
     users = list(db.scalars(select(User).where(User.workspace_id == actor.workspace_id, User.is_active.is_(True))).all())
     return _enqueue_review(
@@ -237,6 +285,7 @@ def enqueue_manual_review(db: Session, actor: User) -> ColleagueRun:
         participant_user_ids=[user.user_id for user in users],
         idempotency_key=f"manual-review:{secrets.token_hex(8)}",
         agent=agent,
+        response_language=response_language,
     )
 
 
@@ -276,6 +325,7 @@ def _enqueue_review(
     participant_user_ids: list[str],
     idempotency_key: str,
     agent: User,
+    response_language: str = "tr",
 ) -> ColleagueRun:
     run = ColleagueRun(
         workspace_id=workspace_id,
@@ -283,13 +333,17 @@ def _enqueue_review(
         kind="evening_review",
         idempotency_key=idempotency_key,
         thread_id="company-general",
-        thread_title="Şirket Geneli",
+        thread_title="Company-wide" if response_language == "en" else "Şirket Geneli",
         thread_kind="channel",
         participant_user_ids=sorted(set(participant_user_ids + [agent.user_id])),
         question=(
-            "Bugün eklenen şirket kayıtlarını ve açık işleri gözden geçir. Değişmiş veya riskli varsayımları, "
-            "takip gerektiren işleri ve yarın için en yararlı üç öneriyi kaynaklara dayanarak Türkçe özetle."
+            "Review today's company records and open work. Summarise changed or risky assumptions, work that needs follow-up, "
+            "and the three most useful suggestions for tomorrow in English, based on sources."
+            if response_language == "en"
+            else "Bugün eklenen şirket kayıtlarını ve açık işleri gözden geçir. Değişmiş veya riskli varsayımları, "
+                 "takip gerektiren işleri ve yarın için en yararlı üç öneriyi kaynaklara dayanarak Türkçe özetle."
         ),
+        response_language=response_language,
     )
     db.add(run)
     db.commit()
@@ -515,6 +569,7 @@ def retrieve_shared_context(db: Session, run: ColleagueRun, *, artifact_limit: i
     ranked_chunks = sorted(
         chunks,
         key=lambda chunk: (
+            chunk.artifact_id in context_artifact_ids,
             chunk.artifact_id in priority_source_ids,
             len(query_terms & _terms(f"{allowed_by_id[chunk.artifact_id].title} {chunk.text}")),
             -chunk.sequence_number,
@@ -603,6 +658,7 @@ def _stream_local_answer(
     *,
     review: bool,
     conversation: list[dict] | None = None,
+    response_language: str = "tr",
 ) -> Iterator[str]:
     settings = get_settings()
     if not settings.local_llm_enabled:
@@ -618,13 +674,15 @@ def _stream_local_answer(
         f"- {signal['title']}: {signal['summary']} Öneri: {signal['recommended_action'] or 'yok'}"
         for signal in (signals or [])
     ) or "Aktif değişim/risk sinyali bulunamadı."
-    conversation_text = "\n\n".join(
-        f"Önceki soru: {turn['question']}\nİzge'nin önceki yanıtı: {turn['answer']}"
-        for turn in (conversation or [])
-    ) or "Önceki konuşma yok."
+    conversation_parts = []
+    for turn in conversation or []:
+        # Citation numbers belong to that answer, not today's reordered sources.
+        historical_answer = re.sub(r"\[\d+\]", "", turn["answer"])
+        conversation_parts.append(f"Önceki soru: {turn['question']}\nİzge'nin önceki yanıtı: {historical_answer}")
+    conversation_text = "\n\n".join(conversation_parts) or "Önceki konuşma yok."
     system_prompt = (
         "Sen İzge'sin: şirketteki işleri bilen, deneyimli ve güvenilir bir çalışma arkadaşısın. "
-        "Her zaman Türkçe, kısa ve doğrudan yaz. Yalnızca aşağıda verilen şirket kaynakları ve görev kayıtlarına dayan. "
+        f"Her zaman {'İngilizce' if response_language == 'en' else 'Türkçe'}, kısa ve doğrudan yaz. Yalnızca aşağıda verilen şirket kaynakları ve görev kayıtlarına dayan. "
         "Dosyaya dayalı her önemli iddianın sonuna [1] biçiminde kaynak numarası koy. Kaynak yetersizse bunu açıkça söyle; uydurma. "
         "Varsayım etiketli bilgi bir hipotezdir, doğrulanmış sonuç değildir. Kaynakta hipotez veya doğrulanmamış neden olarak geçen bilgiyi kesin kök neden gibi sunma. "
         "Risk ile gerçekleşmiş ihlali, potansiyel ücret ile onaylanmış alacağı ayır; kaynakta kanıtlanmayan SLA ihlali çıkarma. "
@@ -632,8 +690,10 @@ def _stream_local_answer(
         "Faturalanmamış iş tutarında yalnız teslim edilmiş kapsam dışı işleri hesapla; başlanmamış talepleri ve bakım kapsamındaki müdahaleleri bu toplama dahil etme. "
         "Yalnız mevcut isteği yanıtla; devam sorusunda önceki konuşmanın konusunu koru ve sorulmamış başka müşteri veya riskleri listeleme. "
         "İşi yapan, aktaracak ve onaylayacak kişileri karıştırma; isim ve rolleri kayıttaki haliyle koru. "
-        "Görev kayıtlarını operasyonel bağlam olarak kullan ama dosya kaynağıymış gibi numaralandırma."
+        "Görev kayıtlarını operasyonel bağlam olarak kullan ama dosya kaynağıymış gibi numaralandırma. Kaynak numaralarını yalnız bu isteğin DOSYA KAYNAKLARI listesinden al; önceki yanıtların numaraları geçerli değildir."
     )
+    language_instruction = "Respond only in English, even when the request or source text is Turkish. Keep names and source titles unchanged. Cite each file-based claim with its source number, e.g. [1]; filenames do not replace numbered citations." if response_language == "en" else "Yanıtı yalnız Türkçe yaz; kaynak başlıklarını ve kişi adlarını koru. Dosyaya dayalı her iddiaya [1] biçiminde kaynak numarası ekle; dosya adı numaralı referansın yerine geçmez."
+    system_prompt = language_instruction + "\n" + system_prompt
     if review:
         system_prompt += " Gün sonu değerlendirmesinde riskleri ve yarın için en fazla üç somut öneriyi önceliklendir."
     payload = {
@@ -645,7 +705,7 @@ def _stream_local_answer(
             {"role": "system", "content": system_prompt},
             {
                 "role": "user",
-                "content": f"ÖNCEKİ KONUŞMA:\n{conversation_text}\n\nDOSYA KAYNAKLARI:\n{source_text}\n\nAÇIK İŞLER:\n{task_text}\n\nTÜRETİLMİŞ DEĞİŞİM VE RİSK SİNYALLERİ:\n{signal_text}\n\nİSTEK:\n{question}",
+                "content": f"ÖNCEKİ KONUŞMA:\n{conversation_text}\n\nDOSYA KAYNAKLARI:\n{source_text}\n\nAÇIK İŞLER:\n{task_text}\n\nTÜRETİLMİŞ DEĞİŞİM VE RİSK SİNYALLERİ:\n{signal_text}\n\nİSTEK:\n{question}\n\n{language_instruction}",
             },
         ],
     }
@@ -730,16 +790,18 @@ def _structured_local_output(*, system_prompt: str, user_prompt: str, schema: di
         connection.close()
 
 
-def _generate_follow_ups(question: str, answer: str, sources: list[dict]) -> list[str]:
-    source_text = "\n".join(f"- {source['title']}: {source['quote']}" for source in sources) or "Kaynak yok."
+def _generate_follow_ups(question: str, answer: str, sources: list[dict], *, response_language: str = "tr") -> list[str]:
+    cited_indices = {int(value) - 1 for value in re.findall(r"\[(\d+)\]", answer)}
+    cited_sources = [source for index, source in enumerate(sources) if index in cited_indices]
+    source_text = "\n".join(f"- {source['title']}: {source['quote']}" for source in cited_sources) or "Kaynak yok."
     result = _structured_local_output(
         system_prompt=(
-            "Ana yanıtı değiştirmeden, kullanıcının İzge'ye sorabileceği en fazla üç kısa Türkçe takip sorusu üret. "
+            f"Ana yanıtı değiştirmeden, kullanıcının İzge'ye sorabileceği en fazla üç kısa {'İngilizce' if response_language == 'en' else 'Türkçe'} takip sorusu üret. "
             "Sorular kullanıcı ağzından, birbirinden farklı ve yalnız verilen yanıta ve kaynaklara dayanmalı. "
             "Soruların içine doğrulanmamış öncül gömme; teslim, plan ve onay ayrımını koru. "
-            "Yanıtın konusu dışındaki kaynaklardan yeni gündem açma. Yeni olgu uydurma. Uygun soru yoksa boş liste döndür."
+            "Yanıtın konusu dışındaki kaynaklardan yeni gündem açma. Yeni olgu uydurma. Kaynaklı ve anlamlı bir yanıt varsa en az bir soru üret. Yalnız kaynaklı bilgi yoksa boş liste döndür."
         ),
-        user_prompt=f"SORU:\n{question}\n\nYANIT:\n{answer}\n\nERİŞİLEBİLİR KAYNAKLAR:\n{source_text}",
+        user_prompt=f"SORU:\n{question}\n\nYANIT:\n{answer}\n\nERİŞİLEBİLİR KAYNAKLAR:\n{source_text}\n\n" + ("Write all follow-up questions in English only, even if the sources or original question are Turkish." if response_language == "en" else "Bütün takip sorularını yalnız Türkçe yaz."),
         schema={
             "type": "object",
             "properties": {
@@ -747,6 +809,7 @@ def _generate_follow_ups(question: str, answer: str, sources: list[dict]) -> lis
                     "type": "array",
                     "items": {"type": "string", "minLength": 6, "maxLength": 160},
                     "maxItems": 3,
+                    "minItems": 1 if cited_sources else 0,
                 }
             },
             "required": ["follow_ups"],
@@ -770,9 +833,35 @@ def _generate_follow_ups(question: str, answer: str, sources: list[dict]) -> lis
     return follow_ups[:3]
 
 
-def _safe_follow_ups(question: str, answer: str, sources: list[dict]) -> list[str]:
+def _ensure_answer_citations(question: str, answer: str, sources: list[dict], *, response_language: str) -> str:
     try:
-        return _generate_follow_ups(question, answer, sources)
+        _validate_answer_citations(answer, sources)
+        return answer
+    except LocalLLMError:
+        if not sources:
+            raise
+    # One real-model repair; never assign citations to claims by guessing.
+    source_text = "\n\n".join(f"[{index}] {source['title']}\n{source['quote']}" for index, source in enumerate(sources, 1))
+    repaired = _structured_local_output(
+        system_prompt=(
+            "Repair the supplied answer's numbered source citations using only the current source list. "
+            "Keep the answer's language, facts and uncertainty; do not add claims or reuse old citation indices. "
+            "Cite each supported claim as [1], [2], etc. Remove claims unsupported by these sources. "
+            + ("Write the answer in English only." if response_language == "en" else "Yanıtı yalnız Türkçe yaz.")
+        ),
+        user_prompt=f"QUESTION:\n{question}\n\nANSWER TO REPAIR:\n{answer}\n\nCURRENT SOURCES:\n{source_text}",
+        schema={"type": "object", "properties": {"answer": {"type": "string", "minLength": 1, "maxLength": 5000}}, "required": ["answer"], "additionalProperties": False},
+        max_tokens=1000,
+    ).get("answer")
+    if not isinstance(repaired, str) or not repaired.strip():
+        raise LocalLLMError("Yerel dil modeli kaynak referanslarını doğrulayamadı.")
+    _validate_answer_citations(repaired, sources)
+    return repaired.strip()
+
+
+def _safe_follow_ups(question: str, answer: str, sources: list[dict], *, response_language: str = "tr") -> list[str]:
+    try:
+        return _generate_follow_ups(question, answer, sources, response_language=response_language)
     except LocalLLMError as exc:
         logging.getLogger(__name__).warning("Takip soruları üretilemedi: %s", exc)
         return []
@@ -1007,6 +1096,7 @@ def process_colleague_run(db: Session, run: ColleagueRun, *, lease_owner: str | 
             signals,
             review=run.kind == "evening_review",
             conversation=_recent_thread_context(db, run),
+            response_language=run.response_language,
         ):
             answer_parts.append(delta)
             buffer += delta
@@ -1018,8 +1108,8 @@ def process_colleague_run(db: Session, run: ColleagueRun, *, lease_owner: str | 
         answer = "".join(answer_parts).strip()
         if not answer:
             raise LocalLLMError("Yerel dil modeli boş yanıt döndürdü.")
-        _validate_answer_citations(answer, sources)
-        follow_ups = _safe_follow_ups(run.question, answer, sources)
+        answer = _ensure_answer_citations(run.question, answer, sources, response_language=run.response_language)
+        follow_ups = _safe_follow_ups(run.question, answer, sources, response_language=run.response_language)
 
         add_run_event(db, run, "stage", stage_key="thinking", label="Yanıt hazır", payload={"status": "completed"}, lease_owner=lease_owner)
         agent = ensure_colleague_user(db, run.workspace_id)

@@ -1,3 +1,4 @@
+import { getLanguage, translate } from './language'
 import type {
   ArtifactDetail,
   ArtifactProactiveSignals,
@@ -66,6 +67,7 @@ export class ApiError extends Error {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { token, headers, body, ...init } = options
   const requestHeaders = new Headers(headers)
+  requestHeaders.set('Accept-Language', getLanguage())
 
   if (!(body instanceof FormData) && !requestHeaders.has('Content-Type')) {
     requestHeaders.set('Content-Type', 'application/json')
@@ -91,7 +93,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         ? payload
         : typeof payload?.detail === 'string'
           ? payload.detail
-          : 'Request failed'
+          : translate('Request failed', 'İstek başarısız')
     throw new ApiError(detail, response.status)
   }
 
@@ -263,6 +265,16 @@ export const api = {
     })
   },
 
+  attachTeamChatFile(token: string, file: File, options: { thread_id: string; thread_title: string; thread_kind: 'channel' | 'direct' | 'group'; participant_user_ids: string[] }) {
+    const body = new FormData()
+    body.append('file', file)
+    body.append('thread_id', options.thread_id)
+    body.append('thread_title', options.thread_title)
+    body.append('thread_kind', options.thread_kind)
+    body.append('participant_user_ids', JSON.stringify(options.participant_user_ids))
+    return request<TeamChatMessageRead>('/team-chat/attachments', { method: 'POST', token, body })
+  },
+
   markTeamChatTyping(token: string, thread_id: string, thread_kind: 'channel' | 'direct' | 'group' = 'channel') {
     return request<TeamChatTypingRead>('/team-chat/typing', {
       method: 'POST',
@@ -321,7 +333,7 @@ export const api = {
     return request<AgentRunCreated>('/work/ask', {
       method: 'POST',
       token,
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, response_language: getLanguage() }),
     })
   },
 
@@ -358,11 +370,11 @@ export const api = {
   },
 
   createAutomation(token: string, payload: { title: string; prompt: string; schedule_time: string; enabled?: boolean }) {
-    return request<AutomationRead>('/automations', { method: 'POST', token, body: JSON.stringify(payload) })
+    return request<AutomationRead>('/automations', { method: 'POST', token, body: JSON.stringify({ ...payload, response_language: getLanguage() }) })
   },
 
   updateAutomation(token: string, automationId: string, payload: Partial<Pick<AutomationRead, 'title' | 'prompt' | 'schedule_time' | 'enabled'>>) {
-    return request<AutomationRead>(`/automations/${automationId}`, { method: 'PATCH', token, body: JSON.stringify(payload) })
+    return request<AutomationRead>(`/automations/${automationId}`, { method: 'PATCH', token, body: JSON.stringify({ ...payload, ...(payload.prompt !== undefined ? { response_language: getLanguage() } : {}) }) })
   },
 
   runAutomation(token: string, automationId: string) {

@@ -38,6 +38,11 @@ from app.services.permissions import artifact_is_visible_to_user
 router = APIRouter(prefix="/work", tags=["work"])
 
 
+def _response_language_from_header(value: str | None) -> Literal["tr", "en"]:
+    primary = (value or "tr").split(",", 1)[0].strip().split("-", 1)[0].lower()
+    return "en" if primary == "en" else "tr"
+
+
 def _utc_naive(value: datetime | None) -> datetime | None:
     if value is None or value.tzinfo is None:
         return value
@@ -213,6 +218,7 @@ def ask_colleague(payload: ColleagueAskCreate, current_user: User = Depends(get_
         thread_title=payload.thread_title,
         thread_kind=payload.thread_kind,
         participant_user_ids=payload.participant_user_ids,
+        response_language=payload.response_language,
     )
     return ColleagueAskAccepted(run_id=run.run_id, thread_id=run.thread_id, status=cast(RunStatus, run.status))
 
@@ -307,6 +313,10 @@ def stream_run_events(
 
 
 @router.post("/review", response_model=ColleagueReviewAccepted, status_code=status.HTTP_202_ACCEPTED)
-def request_review(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ColleagueReviewAccepted:
-    run = enqueue_manual_review(db, current_user)
+def request_review(
+    accept_language: str | None = Header(default=None, alias="Accept-Language"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ColleagueReviewAccepted:
+    run = enqueue_manual_review(db, current_user, response_language=_response_language_from_header(accept_language))
     return ColleagueReviewAccepted(run_id=run.run_id, status=cast(RunStatus, run.status))

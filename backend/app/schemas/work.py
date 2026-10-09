@@ -67,6 +67,7 @@ class WorkTaskList(BaseModel):
 
 
 class ColleagueAskCreate(BaseModel):
+    response_language: Literal["tr", "en"] = "tr"
     message: str = Field(min_length=1, max_length=8000)
     client_request_id: str = Field(min_length=8, max_length=120)
     thread_id: str | None = Field(default=None, min_length=1, max_length=80)

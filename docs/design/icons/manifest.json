@@ -1,0 +1,545 @@
+{
+  "version": 1,
+  "sheet_size": 1536,
+  "grid": {
+    "rows": 3,
+    "columns": 3,
+    "cell_size": 512,
+    "order": "row-major, top-left first"
+  },
+  "alpha": "true RGBA transparency; solid white glyphs only, transparent holes",
+  "sheets": [
+    {
+      "file": "sheet1.png",
+      "icons": [
+        {
+          "id": "home",
+          "row": 1,
+          "column": 1,
+          "crop": [
+            0,
+            0,
+            512,
+            512
+          ],
+          "visual": "Small house",
+          "function_tr": "Ana sayfa: günlük özet ve açık işlere git",
+          "treatment": "with-label"
+        },
+        {
+          "id": "ask-izge",
+          "row": 1,
+          "column": 2,
+          "crop": [
+            512,
+            0,
+            1024,
+            512
+          ],
+          "visual": "Speech bubble with a four-point spark",
+          "function_tr": "İzge’ye sor: şirket kaynaklarına dayalı agent konuşmasını aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "team-chat",
+          "row": 1,
+          "column": 3,
+          "crop": [
+            1024,
+            0,
+            1536,
+            512
+          ],
+          "visual": "Two overlapping speech bubbles",
+          "function_tr": "Ekip sohbeti: çalışma arkadaşlarının konuşmalarını aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "memory",
+          "row": 2,
+          "column": 1,
+          "crop": [
+            0,
+            512,
+            512,
+            1024
+          ],
+          "visual": "Document with three connected memory nodes",
+          "function_tr": "Hafıza: kaynak dosyaları ve şirket kayıtlarını aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "tasks",
+          "row": 2,
+          "column": 2,
+          "crop": [
+            512,
+            512,
+            1024,
+            1024
+          ],
+          "visual": "Checklist with two ticks",
+          "function_tr": "İşlerim: işleri ve durumlarını aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "automations",
+          "row": 2,
+          "column": 3,
+          "crop": [
+            1024,
+            512,
+            1536,
+            1024
+          ],
+          "visual": "Circular arrow around a small gear",
+          "function_tr": "Otomasyonlar: İzge’nin rutinlerini ve zamanlamalarını aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "notifications",
+          "row": 3,
+          "column": 1,
+          "crop": [
+            0,
+            1024,
+            512,
+            1536
+          ],
+          "visual": "Bell with a small notification dot",
+          "function_tr": "Bildirimler: mesaj ve İzge uyarılarını aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "search",
+          "row": 3,
+          "column": 2,
+          "crop": [
+            512,
+            1024,
+            1024,
+            1536
+          ],
+          "visual": "Magnifying glass",
+          "function_tr": "Konuşma ve kaynak arama",
+          "treatment": "icon-only"
+        },
+        {
+          "id": "language",
+          "row": 3,
+          "column": 3,
+          "crop": [
+            1024,
+            1024,
+            1536,
+            1536
+          ],
+          "visual": "Globe with simple meridians",
+          "function_tr": "Türkçe/English dil seçimini belirt; seçili dil yazısı yanında",
+          "treatment": "with-label"
+        }
+      ]
+    },
+    {
+      "file": "sheet2.png",
+      "icons": [
+        {
+          "id": "send",
+          "row": 1,
+          "column": 1,
+          "crop": [
+            0,
+            0,
+            512,
+            512
+          ],
+          "visual": "Upward arrow",
+          "function_tr": "Hazırlanmış sohbet mesajını gönder",
+          "treatment": "icon-only"
+        },
+        {
+          "id": "attach",
+          "row": 1,
+          "column": 2,
+          "crop": [
+            512,
+            0,
+            1024,
+            512
+          ],
+          "visual": "Paperclip",
+          "function_tr": "Bulunulan sohbete dosya eklemek için dosya seçiciyi aç",
+          "treatment": "icon-only"
+        },
+        {
+          "id": "add",
+          "row": 1,
+          "column": 3,
+          "crop": [
+            1024,
+            0,
+            1536,
+            512
+          ],
+          "visual": "Plus sign",
+          "function_tr": "Yeni sohbet, grup, iş veya otomasyon oluştur",
+          "treatment": "with-label"
+        },
+        {
+          "id": "close",
+          "row": 2,
+          "column": 1,
+          "crop": [
+            0,
+            512,
+            512,
+            1024
+          ],
+          "visual": "Diagonal X",
+          "function_tr": "Önizleme veya oluşturma penceresini kapat",
+          "treatment": "icon-only"
+        },
+        {
+          "id": "open-source",
+          "row": 2,
+          "column": 2,
+          "crop": [
+            512,
+            512,
+            1024,
+            1024
+          ],
+          "visual": "Document with a tiny magnifying glass",
+          "function_tr": "Kaynak alıntısını uygulama içi önizleme penceresinde aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "download",
+          "row": 2,
+          "column": 3,
+          "crop": [
+            1024,
+            512,
+            1536,
+            1024
+          ],
+          "visual": "Downward arrow entering a tray",
+          "function_tr": "Ek veya kaynak dosyasını indir",
+          "treatment": "with-label"
+        },
+        {
+          "id": "new-group",
+          "row": 3,
+          "column": 1,
+          "crop": [
+            0,
+            1024,
+            512,
+            1536
+          ],
+          "visual": "Three person silhouettes with a small plus",
+          "function_tr": "Yeni ekip konuşması oluştur",
+          "treatment": "with-label"
+        },
+        {
+          "id": "sign-out",
+          "row": 3,
+          "column": 2,
+          "crop": [
+            512,
+            1024,
+            1024,
+            1536
+          ],
+          "visual": "Doorway with rightward exit arrow",
+          "function_tr": "Oturumu kapat",
+          "treatment": "with-label"
+        },
+        {
+          "id": "theme",
+          "row": 3,
+          "column": 3,
+          "crop": [
+            1024,
+            1024,
+            1536,
+            1536
+          ],
+          "visual": "Circle split into a sun half and crescent moon half",
+          "function_tr": "Açık/koyu görünümü değiştir; hedef tema yazısı yanında",
+          "treatment": "with-label"
+        }
+      ]
+    },
+    {
+      "file": "sheet3.png",
+      "icons": [
+        {
+          "id": "task-open",
+          "row": 1,
+          "column": 1,
+          "crop": [
+            0,
+            0,
+            512,
+            512
+          ],
+          "visual": "Empty circular ring",
+          "function_tr": "İş açık; tıklayınca Devam ediyor durumuna geç",
+          "treatment": "icon-only"
+        },
+        {
+          "id": "task-progress",
+          "row": 1,
+          "column": 2,
+          "crop": [
+            512,
+            0,
+            1024,
+            512
+          ],
+          "visual": "Circular ring half filled with a short clock hand",
+          "function_tr": "İş devam ediyor; tıklayınca Tamamlandı durumuna geç",
+          "treatment": "icon-only"
+        },
+        {
+          "id": "task-done",
+          "row": 1,
+          "column": 3,
+          "crop": [
+            1024,
+            0,
+            1536,
+            512
+          ],
+          "visual": "Circle enclosing a check mark",
+          "function_tr": "İş tamamlandı; tıklayınca Açık durumuna geri dön",
+          "treatment": "icon-only"
+        },
+        {
+          "id": "reminder",
+          "row": 2,
+          "column": 1,
+          "crop": [
+            0,
+            512,
+            512,
+            1024
+          ],
+          "visual": "Small clock with a bell corner",
+          "function_tr": "İş için hatırlatma zamanı belirle",
+          "treatment": "with-label"
+        },
+        {
+          "id": "edit",
+          "row": 2,
+          "column": 2,
+          "crop": [
+            512,
+            512,
+            1024,
+            1024
+          ],
+          "visual": "Pencil on a short diagonal line",
+          "function_tr": "İşi veya otomasyonu düzenle",
+          "treatment": "with-label"
+        },
+        {
+          "id": "save",
+          "row": 2,
+          "column": 3,
+          "crop": [
+            1024,
+            512,
+            1536,
+            1024
+          ],
+          "visual": "Simple floppy disk with no letters",
+          "function_tr": "Değişiklikleri kaydet",
+          "treatment": "with-label"
+        },
+        {
+          "id": "delete",
+          "row": 3,
+          "column": 1,
+          "crop": [
+            0,
+            1024,
+            512,
+            1536
+          ],
+          "visual": "Lidded trash bin",
+          "function_tr": "Kayıt veya otomasyonu sil; metin ve mevcut onay korunur",
+          "treatment": "with-label"
+        },
+        {
+          "id": "pause",
+          "row": 3,
+          "column": 2,
+          "crop": [
+            512,
+            1024,
+            1024,
+            1536
+          ],
+          "visual": "Two vertical bars",
+          "function_tr": "Zamanlanmış otomasyonu duraklat",
+          "treatment": "with-label"
+        },
+        {
+          "id": "run",
+          "row": 3,
+          "column": 3,
+          "crop": [
+            1024,
+            1024,
+            1536,
+            1536
+          ],
+          "visual": "Right-pointing play triangle",
+          "function_tr": "Otomasyonu veya günlük değerlendirmeyi şimdi çalıştır",
+          "treatment": "with-label"
+        }
+      ]
+    },
+    {
+      "file": "sheet4.png",
+      "icons": [
+        {
+          "id": "knowledge-graph",
+          "row": 1,
+          "column": 1,
+          "crop": [
+            0,
+            0,
+            512,
+            512
+          ],
+          "visual": "Five connected circular nodes",
+          "function_tr": "Bilgi grafiği ve kaynak ilişkilerini aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "ingestion",
+          "row": 1,
+          "column": 2,
+          "crop": [
+            512,
+            0,
+            1024,
+            512
+          ],
+          "visual": "Document entering a bracket via a downward arrow",
+          "function_tr": "Yönetici: kaynak işleme durumunu aç/işlemeyi başlat",
+          "treatment": "with-label"
+        },
+        {
+          "id": "filesystem",
+          "row": 1,
+          "column": 3,
+          "crop": [
+            1024,
+            0,
+            1536,
+            512
+          ],
+          "visual": "Folder with two tiny horizontal document lines",
+          "function_tr": "Yönetici: şirket hafızasının dosya görünümünü aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "operations",
+          "row": 2,
+          "column": 1,
+          "crop": [
+            0,
+            512,
+            512,
+            1024
+          ],
+          "visual": "Activity pulse inside a rounded square",
+          "function_tr": "Yönetici: operasyon durumunu aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "audit",
+          "row": 2,
+          "column": 2,
+          "crop": [
+            512,
+            512,
+            1024,
+            1024
+          ],
+          "visual": "Shield with a check mark",
+          "function_tr": "Yönetici: denetim ve işlem kayıtlarını aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "users",
+          "row": 2,
+          "column": 3,
+          "crop": [
+            1024,
+            512,
+            1536,
+            1024
+          ],
+          "visual": "Two simple person silhouettes",
+          "function_tr": "Yönetici: kullanıcıları ve ekip üyelerini aç",
+          "treatment": "with-label"
+        },
+        {
+          "id": "copy",
+          "row": 3,
+          "column": 1,
+          "crop": [
+            0,
+            1024,
+            512,
+            1536
+          ],
+          "visual": "Two overlapping rectangular pages",
+          "function_tr": "Mesaj veya kaynak metnini kopyala",
+          "treatment": "with-label"
+        },
+        {
+          "id": "filter",
+          "row": 3,
+          "column": 2,
+          "crop": [
+            512,
+            1024,
+            1024,
+            1536
+          ],
+          "visual": "Funnel with a short stem",
+          "function_tr": "İşleri, kaynakları veya kayıtları filtrele",
+          "treatment": "with-label"
+        },
+        {
+          "id": "refresh",
+          "row": 3,
+          "column": 3,
+          "crop": [
+            1024,
+            1024,
+            1536,
+            1536
+          ],
+          "visual": "Single circular arrow",
+          "function_tr": "Listeyi yenile veya başarısız yüklemeyi tekrar dene",
+          "treatment": "with-label"
+        }
+      ]
+    }
+  ],
+  "prepared_assets": {
+    "input_size": 1254,
+    "normalized_sheet_size": 1536,
+    "output_size": 256,
+    "glyph_max_size": 224,
+    "recolor": "CSS currentColor alpha mask",
+    "source_preserved": true
+  }
+}

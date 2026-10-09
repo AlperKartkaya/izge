@@ -1,3 +1,4 @@
+import { translate } from '../lib/language'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
@@ -5,6 +6,7 @@ import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '
 import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { OperationsHealthStatus, OperationsOverviewRead, OperationsSectionRead } from '../lib/types'
+import { useLanguage } from '../lib/i18n'
 
 const SECTION_ORDER = [
   'database_storage',
@@ -98,7 +100,7 @@ function severityLabel(status: OperationsHealthStatus): string {
     return 'Critical'
   }
   if (status === 'warning') {
-    return 'Needs attention'
+    return translate("Needs attention", "Dikkat gerekli")
   }
   return 'Healthy'
 }
@@ -135,6 +137,7 @@ function SectionMetrics({ sectionKey, section }: { sectionKey: string; section: 
 }
 
 export function OperationsPage() {
+  const { t } = useLanguage()
   const { session } = useAuth()
   const [overview, setOverview] = useState<OperationsOverviewRead | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -149,7 +152,7 @@ export function OperationsPage() {
     try {
       setOverview(await api.getOperationsOverview(session.token))
     } catch (caughtError) {
-      setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load operations overview.')
+      setError(caughtError instanceof ApiError ? caughtError.message : t('Unable to load operations overview.', 'Operasyon özeti yüklenemedi.'))
     } finally {
       setIsRefreshing(false)
     }
@@ -170,7 +173,7 @@ export function OperationsPage() {
         }
       } catch (caughtError) {
         if (!cancelled) {
-          setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load operations overview.')
+          setError(caughtError instanceof ApiError ? caughtError.message : t('Unable to load operations overview.', 'Operasyon özeti yüklenemedi.'))
         }
       }
     }
@@ -180,7 +183,7 @@ export function OperationsPage() {
     return () => {
       cancelled = true
     }
-  }, [session?.token])
+  }, [session?.token, t])
 
   const warningCount = useMemo(() => {
     if (!overview) {
@@ -192,12 +195,12 @@ export function OperationsPage() {
   return (
     <div className="stack-xl operations-page">
       <PageIntro
-        eyebrow="Operations"
-        title="Control room for data, memory, workers, and LLM state"
-        description="A read-only admin view of what is actually running, indexed, missing, stale, queued, or ready. Use it before making infra or data changes."
+        eyebrow={t('Operations', 'Operasyonlar')}
+        title={t('Control room for data, memory, workers, and LLM state', 'Veri, hafıza, çalışanlar ve LLM durumu için kontrol odası')}
+        description={t('A read-only admin view of what is actually running, indexed, missing, stale, queued, or ready. Use it before making infrastructure or data changes.', 'Çalışan, indekslenen, eksik, eski, sırada veya hazır durumların salt okunur yönetici görünümü. Altyapı veya veri değişikliklerinden önce kullanın.')}
         actions={
           <button type="button" className="secondary-button" onClick={() => void loadOverview()} disabled={isRefreshing || !session?.token}>
-            {isRefreshing ? 'Refreshing…' : 'Refresh'}
+            {isRefreshing ? t('Refreshing…', 'Yenileniyor…') : t('Refresh', 'Yenile')}
           </button>
         }
       />
@@ -206,14 +209,14 @@ export function OperationsPage() {
 
       {overview ? (
         <>
-          <section className="metric-grid" aria-label="Operations status">
-            <MetricCard label="Overall status" value={severityLabel(overview.overall_status)} detail={`${warningCount} sections need attention`} />
-            <MetricCard label="Health score" value={formatPercent(overview.health_score)} detail="Derived from read-only checks; warnings lower the score." />
-            <MetricCard label="Workspace" value={overview.workspace_id.slice(0, 14)} detail="Single-company data boundary for this deployment." />
-            <MetricCard label="Generated" value={formatDateTime(overview.generated_at)} detail={overview.schema_version} />
+          <section className="metric-grid" aria-label={t('Operations status', 'Operasyon durumu')}>
+            <MetricCard label={t('Overall status', 'Genel durum')} value={severityLabel(overview.overall_status)} detail={`${warningCount} ${t('sections need attention', 'bölüm dikkat gerektiriyor')}`} />
+            <MetricCard label={t('Health score', 'Sağlık puanı')} value={formatPercent(overview.health_score)} detail={t('Derived from read-only checks; warnings lower the score.', 'Salt okunur kontrollerden hesaplanır; uyarılar puanı düşürür.')} />
+            <MetricCard label={t('Workspace', 'Çalışma alanı')} value={overview.workspace_id.slice(0, 14)} detail={t('Single-company data boundary for this deployment.', 'Bu kurulumun tek şirket veri sınırı.')} />
+            <MetricCard label={t('Generated', 'Oluşturuldu')} value={formatDateTime(overview.generated_at)} detail={overview.schema_version} />
           </section>
 
-          <Panel title="Operator next actions" description="These are the actions Izge recommends before deployment or further memory work.">
+          <Panel title={t('Operator next actions', 'Operatör için sonraki adımlar')} description={t('These are the actions Izge recommends before deployment or further memory work.', 'İzge’nin kurulum veya sonraki hafıza çalışmasından önce önerdiği eylemler.')}>
             <div className="operations-action-list">
               {overview.next_actions.map((action) => (
                 <article key={`${action.title}-${action.route}`} className={`panel-subtle operations-action operations-action-${action.severity}`}>
@@ -222,13 +225,13 @@ export function OperationsPage() {
                     <p className="table-primary">{action.title}</p>
                     <p className="table-secondary">{action.description}</p>
                   </div>
-                  <Link className="secondary-button" to={action.route}>Open</Link>
+                  <Link className="secondary-button" to={action.route}>{t('Open', 'Aç')}</Link>
                 </article>
               ))}
             </div>
           </Panel>
 
-          <Panel title="System sections" description="Each section is derived from existing database/runtime state. Critical and warning states should be resolved before shipping.">
+          <Panel title={t('System sections', 'Sistem bölümleri')} description={t('Each section is derived from existing database and runtime state. Resolve critical and warning states before release.', 'Her bölüm mevcut veritabanı ve çalışma durumundan üretilir. Yayından önce kritik durumları ve uyarıları çözün.')}>
             <div className="operations-section-list">
               {orderedSections(overview).map(([sectionKey, section]) => (
                 <article key={sectionKey} className="panel-subtle operations-section">
@@ -246,10 +249,10 @@ export function OperationsPage() {
                       <table className="data-table operations-issue-table">
                         <thead>
                           <tr>
-                            <th>Issue</th>
-                            <th>Status</th>
-                            <th>Coverage</th>
-                            <th>Updated</th>
+                            <th>{t('Issue', 'Sorun')}</th>
+                            <th>{t('Status', 'Durum')}</th>
+                            <th>{t('Coverage', 'Kapsam')}</th>
+                            <th>{t('Updated', 'Güncellendi')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -260,10 +263,10 @@ export function OperationsPage() {
                                 <p className="table-secondary">{issue.reason}</p>
                               </td>
                               <td>
-                                <StatusBadge value={formatLabel(issue.ingestion_status)} />
+                                <StatusBadge value={issue.ingestion_status} />
                                 <p className="table-secondary">{formatLabel(issue.review_status)}</p>
                               </td>
-                              <td>{issue.memory_object_count ?? '—'} memory / {issue.chunk_count ?? '—'} chunks</td>
+                              <td>{issue.memory_object_count ?? '—'} {t('memory', 'hafıza')} / {issue.chunk_count ?? '—'} {t('chunks', 'bölüm')}</td>
                               <td>{formatDateTime(issue.updated_at)}</td>
                             </tr>
                           ))}
@@ -276,10 +279,10 @@ export function OperationsPage() {
                       <table className="data-table operations-issue-table">
                         <thead>
                           <tr>
-                            <th>Job</th>
-                            <th>Status</th>
-                            <th>Lease</th>
-                            <th>Updated</th>
+                            <th>{t('Job', 'İş')}</th>
+                            <th>{t('Status', 'Durum')}</th>
+                            <th>{t('Lease', 'Kiralama')}</th>
+                            <th>{t('Updated', 'Güncellendi')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -289,8 +292,8 @@ export function OperationsPage() {
                                 <p className="table-primary">{job.stage_key ? formatLabel(job.stage_key) : formatLabel(job.job_kind)}</p>
                                 <p className="table-secondary">{job.job_id}</p>
                               </td>
-                              <td><StatusBadge value={formatLabel(job.status)} /></td>
-                              <td>{job.lease_owner ?? 'not claimed'}</td>
+                              <td><StatusBadge value={job.status} /></td>
+                              <td>{job.lease_owner ?? t('not claimed', 'atanmadı')}</td>
                               <td>{formatDateTime(job.updated_at)}</td>
                             </tr>
                           ))}
@@ -303,7 +306,7 @@ export function OperationsPage() {
             </div>
           </Panel>
 
-          <Panel title="Where to act" description="This page does not edit raw data. Use the supported surfaces below for the next safe action.">
+          <Panel title={t('Where to act', 'Nereden işlem yapılır')} description={t('This page does not edit raw data. Use the supported surfaces below for the next safe action.', 'Bu sayfa ham veriyi düzenlemez. Sonraki güvenli eylem için aşağıdaki desteklenen alanları kullanın.')}>
             <div className="operations-link-grid">
               {overview.links.map((link) => (
                 <Link key={link.route} to={link.route} className="record-link panel-subtle">
@@ -315,7 +318,7 @@ export function OperationsPage() {
           </Panel>
         </>
       ) : !error ? (
-        <EmptyState title="Loading operations overview" description="Izge is reading database, storage, worker, LLM, trace, graph, and memory state." />
+        <EmptyState title={t('Loading operations overview', 'Operasyon özeti yükleniyor')} description={t('Izge is reading database, storage, worker, LLM, trace, graph, and memory state.', 'İzge veritabanı, depolama, çalışan, LLM, iz, grafik ve hafıza durumunu okuyor.')} />
       ) : null}
     </div>
   )

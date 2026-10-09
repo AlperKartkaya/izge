@@ -43,6 +43,7 @@ def enqueue_automation(db: Session, automation: Automation, actor: User, *, now:
             thread_title=automation.title,
             thread_kind="direct",
             participant_user_ids=[actor.user_id],
+            response_language=automation.response_language,
         )
     if scheduled:
         automation.last_run_at = (now if now.tzinfo else now.replace(tzinfo=UTC)).astimezone(UTC).replace(tzinfo=None)

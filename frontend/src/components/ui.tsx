@@ -1,4 +1,6 @@
 import type { PropsWithChildren, ReactNode } from 'react'
+import { useLanguage } from '../lib/i18n'
+import { formatStatus } from '../lib/format'
 
 export function PageIntro({ title, description, eyebrow, actions }: { title: string; description: string; eyebrow?: string; actions?: ReactNode }) {
   return (
@@ -39,11 +41,12 @@ export function MetricCard({ label, value, detail }: { label: string; value: str
 }
 
 export function StatusBadge({ value }: { value: string }) {
+  useLanguage()
   const normalizedValue = value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
   return (
     <span className="status-badge" data-status={normalizedValue}>
-      {value}
+      {formatStatus(value)}
     </span>
   )
 }

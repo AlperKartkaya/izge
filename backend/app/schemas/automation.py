@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -7,6 +8,7 @@ class AutomationCreate(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     prompt: str = Field(min_length=1, max_length=4000)
     schedule_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    response_language: Literal["tr", "en"] = "tr"
     enabled: bool = True
 
     @field_validator("title", "prompt")
@@ -21,6 +23,7 @@ class AutomationUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=120)
     prompt: str | None = Field(default=None, min_length=1, max_length=4000)
     schedule_time: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    response_language: Literal["tr", "en"] | None = None
     enabled: bool | None = None
 
     @field_validator("title", "prompt")
@@ -38,6 +41,7 @@ class AutomationRead(BaseModel):
     title: str
     prompt: str
     schedule_time: str
+    response_language: Literal["tr", "en"]
     enabled: bool
     timezone: str = "Europe/Istanbul"
     last_run_at: datetime | None

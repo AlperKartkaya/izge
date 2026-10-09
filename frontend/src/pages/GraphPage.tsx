@@ -1,3 +1,4 @@
+import { translate } from '../lib/language'
 import { SourcePreviewButton } from '../components/SourcePreviewButton'
 import {
   useEffect,
@@ -6,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from 'react'
+import { useLanguage } from '../lib/i18n'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -104,12 +106,12 @@ const GRAPH_CLUSTER_ANCHORS: Record<
   GraphClusterKey,
   { x: number; y: number; label: string }
 > = {
-  launch: { x: 260, y: 210, label: 'Launch cluster' },
-  security: { x: 675, y: 190, label: 'Security cluster' },
-  customer: { x: 690, y: 430, label: 'Customer cluster' },
-  engineering: { x: 455, y: 315, label: 'Engineering cluster' },
-  operations: { x: 265, y: 455, label: 'Operations cluster' },
-  general: { x: 500, y: 520, label: 'Company memory' },
+  launch: { x: 260, y: 210, label: "Launch cluster" },
+  security: { x: 675, y: 190, label: "Security cluster" },
+  customer: { x: 690, y: 430, label: "Customer cluster" },
+  engineering: { x: 455, y: 315, label: "Engineering cluster" },
+  operations: { x: 265, y: 455, label: "Operations cluster" },
+  general: { x: 500, y: 520, label: "Company memory" },
 }
 
 function graphClusterKey(title: string): GraphClusterKey {
@@ -314,6 +316,7 @@ function buildInteractiveGraph(
 }
 
 export function GraphPage() {
+  const { t } = useLanguage()
   const { session } = useAuth()
   const [summary, setSummary] = useState<GraphSummary | null>(null)
   const [timelineItems, setTimelineItems] = useState<GraphTimelineItem[]>([])
@@ -392,7 +395,7 @@ export function GraphPage() {
           setError(
             caughtError instanceof ApiError
               ? caughtError.message
-              : 'Unable to load graph overview.',
+              : t('Unable to load graph overview.', 'Grafik özeti yüklenemedi.'),
           )
         }
       }
@@ -403,7 +406,7 @@ export function GraphPage() {
     return () => {
       cancelled = true
     }
-  }, [session?.token])
+  }, [session?.token, t])
 
   const selectedTimelineItem = useMemo(
     () =>
@@ -543,7 +546,7 @@ export function GraphPage() {
           setError(
             caughtError instanceof ApiError
               ? caughtError.message
-              : 'Unable to load graph neighborhood.',
+              : t('Unable to load graph neighborhood.', 'Grafik bağlantıları yüklenemedi.'),
           )
         }
       } finally {
@@ -558,78 +561,72 @@ export function GraphPage() {
     return () => {
       cancelled = true
     }
-  }, [selectedTimelineItem, session?.token])
+  }, [selectedTimelineItem, session?.token, t])
 
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Knowledge graph"
-        title="Company knowledge graph"
-        description="Explore how artifacts, memory records, contradictions, drift signals, and follow-up actions connect."
+        eyebrow={t('Knowledge graph', 'Bilgi grafiği')}
+        title={t('Company knowledge graph', 'Şirket bilgi grafiği')}
+        description={t('Explore how sources, memory records, contradictions, drift signals, and follow-up actions connect.', 'Kaynakların, hafıza kayıtlarının, çelişkilerin, değişim sinyallerinin ve takip eylemlerinin nasıl bağlandığını keşfedin.')}
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <section className="metric-grid">
         <MetricCard
-          label="Trusted sources"
+          label={t('Trusted sources', 'Güvenilir kaynaklar')}
           value={summary?.artifact_count ?? '—'}
         />
         <MetricCard
-          label="Timeline cards"
+          label={t('Timeline cards', 'Zaman çizelgesi kartları')}
           value={timelineItems.length || '—'}
         />
         <MetricCard
-          label="Relationship types"
+          label={t('Relationship types', 'İlişki türleri')}
           value={Object.keys(summary?.edge_counts ?? {}).length || '—'}
         />
         <MetricCard
-          label="Contradictions surfaced"
+          label={t('Contradictions surfaced', 'Bulunan çelişkiler')}
           value={contradictions.length}
         />
         <MetricCard
-          label="Persisted signals"
+          label={t('Persisted signals', 'Kaydedilen sinyaller')}
           value={persistedSignals.length || nextActions.length}
         />
         <MetricCard
-          label="Temporal claims"
+          label={t('Temporal claims', 'Zamansal ifadeler')}
           value={temporalGraph?.occurrences.length ?? '—'}
-          detail={`${temporalGraph?.families.length ?? 0} persisted families`}
+          detail={t(`${temporalGraph?.families.length ?? 0} persisted families`, `${temporalGraph?.families.length ?? 0} kayıtlı grup`)}
         />
       </section>
 
       <Panel
-        title="Interactive evidence graph"
-        description="Pan, zoom, hover, and select nodes to inspect source artifacts and memory records."
+        title={t('Interactive evidence graph', 'Etkileşimli kanıt grafiği')}
+        description={t('Pan, zoom, hover, and select nodes to inspect sources and memory records.', 'Kaynakları ve hafıza kayıtlarını incelemek için grafiği kaydırın, yakınlaştırın ve düğümleri seçin.')}
       >
         {interactiveGraph.nodes.length > 0 ? (
           <div className="graph-interactive-shell">
             <div
               className="graph-svg-panel"
-              aria-label="Interactive artifact and memory graph"
+              aria-label={t('Interactive artifact and memory graph', 'Etkileşimli kaynak ve hafıza grafiği')}
             >
-              <div className="graph-toolbar" aria-label="Graph controls">
+              <div className="graph-toolbar" aria-label={t('Graph controls', 'Grafik kontrolleri')}>
                 <button
                   type="button"
                   className="secondary-button graph-toolbar-button"
                   onClick={() => zoomGraph(1.2)}
-                >
-                  Zoom in
-                </button>
+                >{t("Zoom in", "Yakınlaştır")}</button>
                 <button
                   type="button"
                   className="secondary-button graph-toolbar-button"
                   onClick={() => zoomGraph(0.84)}
-                >
-                  Zoom out
-                </button>
+                >{t("Zoom out", "Uzaklaştır")}</button>
                 <button
                   type="button"
                   className="secondary-button graph-toolbar-button"
                   onClick={resetGraphViewport}
-                >
-                  Reset
-                </button>
+                >{t("Reset", "Sıfırla")}</button>
               </div>
               <svg
                 className="graph-svg-canvas"
@@ -644,13 +641,8 @@ export function GraphPage() {
                 onPointerCancel={handleGraphPointerEnd}
                 onPointerLeave={handleGraphPointerEnd}
               >
-                <title id="interactive-graph-title">
-                  Izge artifact and memory graph
-                </title>
-                <desc id="interactive-graph-description">
-                  Source artifacts connect to extracted memory and relationship
-                  edges.
-                </desc>
+                <title id="interactive-graph-title">{t("Izge artifact and memory graph", "İzge kaynak ve hafıza grafiği")}</title>
+                <desc id="interactive-graph-description">{t("Source artifacts connect to extracted memory and relationship edges.", "Kaynaklar, çıkarılan hafıza kayıtları ve ilişki bağlantılarıyla birleşir.")}</desc>
                 <defs>
                   <marker
                     id="graph-arrow"
@@ -713,7 +705,7 @@ export function GraphPage() {
                         }
                         role="button"
                         tabIndex={0}
-                        aria-label={`${node.kind === 'artifact' ? 'Artifact' : 'Memory'} node: ${node.label}`}
+                        aria-label={t(`${node.kind === 'artifact' ? 'Artifact' : 'Memory'} node: ${node.label}`, `${node.kind === 'artifact' ? 'Kaynak' : 'Hafıza'} düğümü: ${node.label}`)}
                         transform={`translate(${node.x} ${node.y})`}
                         onPointerEnter={() => setHoveredGraphNodeId(node.id)}
                         onPointerLeave={() =>
@@ -767,7 +759,7 @@ export function GraphPage() {
                               x={node.kind === 'artifact' ? 26 : 20}
                               y="14"
                             >
-                              {truncateGraphLabel(node.subtitle, 24)}
+                              {truncateGraphLabel(formatLabel(node.subtitle), 24)}
                             </text>
                           </g>
                         ) : null}
@@ -780,74 +772,67 @@ export function GraphPage() {
 
             <aside
               className="graph-detail-panel panel-subtle"
-              aria-label="Selected graph item detail"
+              aria-label={t('Selected graph item detail', 'Seçilen grafik öğesi ayrıntısı')}
             >
               {selectedGraphEdge ? (
                 <div className="stack-md">
                   <div>
-                    <p className="section-label">Selected edge</p>
+                    <p className="section-label">{t('Selected edge', 'Seçilen bağlantı')}</p>
                     <h4 className="section-title">
                       {formatLabel(selectedGraphEdge.edgeType)}
                     </h4>
-                    <p className="table-secondary">
-                      Confidence{' '}
+                    <p className="table-secondary">{t("Confidence", "Güven")}{' '}
                       {formatPercent(selectedGraphEdge.confidenceScore)}
                     </p>
                   </div>
                   <dl className="meta-list compact-meta-list">
                     <div>
-                      <dt>From</dt>
+                      <dt>{t('From', 'Başlangıç')}</dt>
                       <dd>
                         {nodeById.get(selectedGraphEdge.fromId)?.label ??
                           selectedGraphEdge.fromId}
                       </dd>
                     </div>
                     <div>
-                      <dt>To</dt>
+                      <dt>{t('To', 'Bitiş')}</dt>
                       <dd>
                         {nodeById.get(selectedGraphEdge.toId)?.label ??
                           selectedGraphEdge.toId}
                       </dd>
                     </div>
                     <div>
-                      <dt>Evidence artifact</dt>
+                      <dt>{t('Evidence artifact', 'Kanıt kaynağı')}</dt>
                       <dd>
                         {selectedGraphEdge.sourceLink?.evidence_artifact_id ??
-                          'Source projection'}
+                          t('Source projection', 'Kaynak yansıtması')}
                       </dd>
                     </div>
                   </dl>
-                  <p className="muted-copy">
-                    Edges show how Izge's graph context lets orchestration
-                    compare claims, detect contradictions, and carry evidence
-                    into answer synthesis.
-                  </p>
+                  <p className="muted-copy">{t("Edges show how Izge's graph context lets orchestration compare claims, detect contradictions, and carry evidence into answer synthesis.", "Bağlantılar, İzge’nin iddiaları karşılaştırmak, çelişkileri tespit etmek ve yanıtları kaynaklandırmak için kullandığı grafiği gösterir.")}</p>
                 </div>
               ) : selectedGraphNode ? (
                 <div className="stack-md">
                   <div>
                     <p className="section-label">
                       {selectedGraphNode.kind === 'artifact'
-                        ? 'Source artifact'
-                        : 'Memory node'}
+                        ? translate("Source artifact", "Kaynak dosya")
+                        : translate("Memory node", "Hafıza düğümü")}
                     </p>
                     <h4 className="section-title">{selectedGraphNode.label}</h4>
                     <p className="table-secondary">
-                      {selectedGraphNode.subtitle}
+                      {formatLabel(selectedGraphNode.subtitle)}
                     </p>
                   </div>
                   {selectedGraphNode.kind === 'artifact' &&
                   selectedGraphNode.artifactId ? (
                     <div className="graph-detail-actions inline-actions">
-                      <SourcePreviewButton artifactId={selectedGraphNode.artifactId} title={selectedGraphNode.label} className="primary-button">Preview artifact</SourcePreviewButton>
+                      <SourcePreviewButton artifactId={selectedGraphNode.artifactId} title={selectedGraphNode.label} className="primary-button">{t('Preview artifact', 'Kaynağı önizle')}</SourcePreviewButton>
                       <a
                         className="secondary-button"
                         href={api.artifactDownloadUrl(
                           selectedGraphNode.artifactId,
                         )}
-                      >
-                        Download
-                      </a>
+                      >{t("Download", "İndir")}</a>
                     </div>
                   ) : null}
                   {selectedGraphNode.kind === 'memory' &&
@@ -856,15 +841,15 @@ export function GraphPage() {
                     <div className="stack-sm">
                       <p className="muted-copy">
                         {selectedGraphNode.occurrence?.evidence_span ??
-                          'No evidence span recorded for this occurrence.'}
+                          translate("No evidence span recorded for this occurrence.", "Bu kayıt için kaynak alıntısı yok.")}
                       </p>
                       <dl className="meta-list compact-meta-list">
                         <div>
-                          <dt>Source</dt>
+                          <dt>{t('Source', 'Kaynak')}</dt>
                           <dd>{selectedGraphNode.artifactTitle}</dd>
                         </div>
                         <div>
-                          <dt>Observed</dt>
+                          <dt>{t('Observed', 'Gözlemlendi')}</dt>
                           <dd>
                             {formatDateTime(
                               selectedGraphNode.occurrence?.observed_at,
@@ -872,7 +857,7 @@ export function GraphPage() {
                           </dd>
                         </div>
                         <div>
-                          <dt>Confidence</dt>
+                          <dt>{t('Confidence', 'Güven')}</dt>
                           <dd>
                             {formatPercent(
                               selectedGraphNode.confidenceScore ?? 0,
@@ -884,11 +869,9 @@ export function GraphPage() {
                         <Link
                           className="primary-button"
                           to={`/memory/${selectedGraphNode.memoryType}/${selectedGraphNode.memoryId}`}
-                        >
-                          Open memory
-                        </Link>
+                        >{t("Open memory", "Hafızayı aç")}</Link>
                         {selectedGraphNode.artifactId ? (
-                          <SourcePreviewButton artifactId={selectedGraphNode.artifactId} title={selectedGraphNode.label} className="secondary-button">Preview source</SourcePreviewButton>
+                          <SourcePreviewButton artifactId={selectedGraphNode.artifactId} title={selectedGraphNode.label} className="secondary-button">{t('Preview source', 'Kaynağı önizle')}</SourcePreviewButton>
                         ) : null}
                       </div>
                     </div>
@@ -896,41 +879,41 @@ export function GraphPage() {
                 </div>
               ) : (
                 <EmptyState
-                  title="Select a node"
-                  description="Hover nodes to enlarge them, then click to inspect artifact and memory details."
+                  title={t('Select a node', 'Bir düğüm seçin')}
+                  description={t('Hover nodes to enlarge them, then click to inspect source and memory details.', 'Düğümleri büyütmek için üzerine gelin; kaynak ve hafıza ayrıntılarını incelemek için tıklayın.')}
                 />
               )}
             </aside>
           </div>
         ) : (
           <EmptyState
-            title="No graph projection yet"
-            description="Run ingestion on company artifacts to create source nodes, extracted memory nodes, and orchestration-ready relationships."
+            title={t('No graph projection yet', 'Henüz grafik yansıtması yok')}
+            description={t('Process company sources to create source nodes, extracted memory nodes, and orchestration-ready relationships.', 'Kaynak düğümleri, çıkarılmış hafıza düğümleri ve orkestrasyona hazır ilişkiler oluşturmak için şirket kaynaklarını işleyin.')}
           />
         )}
       </Panel>
 
       <Panel
-        title="Temporal knowledge graph"
-        description="Claim occurrences are grouped across time so a company can see first-seen, active, contested, stale, and superseded memory instead of a flat document search result."
+        title={t('Temporal knowledge graph', 'Zamansal bilgi grafiği')}
+        description={t('Claims are grouped across time so a company can see first-seen, active, contested, stale, and superseded memory.', 'İfadeler zaman boyunca gruplanır; şirket ilk görülen, etkin, tartışmalı, eski ve yerine geçen hafızayı görebilir.')}
       >
         {temporalGraph && temporalGraph.occurrences.length > 0 ? (
           <div className="stack-sm">
             <dl className="meta-list compact-meta-list">
               <div>
-                <dt>Persisted families</dt>
+                <dt>{t('Persisted families', 'Kaydedilen aileler')}</dt>
                 <dd>{temporalGraph.families.length}</dd>
               </div>
               <div>
-                <dt>Visible occurrences</dt>
+                <dt>{t('Visible occurrences', 'Görünür kayıtlar')}</dt>
                 <dd>{temporalGraph.occurrences.length}</dd>
               </div>
               <div>
-                <dt>Temporal links</dt>
+                <dt>{t('Temporal links', 'Zamansal bağlantılar')}</dt>
                 <dd>{temporalGraph.links.length}</dd>
               </div>
               <div>
-                <dt>Projection sync</dt>
+                <dt>{t('Projection sync', 'Yansıtma eşitlemesi')}</dt>
                 <dd>{String(temporalGraph.sync_summary.synced ?? '—')}</dd>
               </div>
             </dl>
@@ -942,16 +925,14 @@ export function GraphPage() {
                 >
                   <div className="timeline-card-head">
                     <div>
-                      <p className="section-label">
-                        Claim family · {family.memory_type}
+                      <p className="section-label">{t("Claim family ·", "İddia grubu ·")}{family.memory_type}
                       </p>
                       <p className="table-primary">{family.title_or_label}</p>
                     </div>
-                    <StatusBadge value={formatLabel(family.status)} />
+                    <StatusBadge value={family.status} />
                   </div>
                   <p className="table-secondary">
-                    {family.claim_family_key} · {family.occurrence_count}{' '}
-                    occurrence(s) · latest{' '}
+                    {family.claim_family_key} · {family.occurrence_count}{' '}{t("occurrence(s) · latest", "kayıt · en güncel")}{' '}
                     {formatDateTime(family.latest_seen_at)}
                   </p>
                 </article>
@@ -970,37 +951,36 @@ export function GraphPage() {
                     · {formatDateTime(occurrence.observed_at)}
                   </p>
                   <p className="muted-copy">
-                    {occurrence.source_artifact_title} · family{' '}
-                    {occurrence.claim_family_key} · valid{' '}
+                    {occurrence.source_artifact_title}{t(" · family", " · grup")}{' '}
+                    {occurrence.claim_family_key}{t(" · valid", " · geçerli")}{' '}
                     {formatDateTime(occurrence.valid_from)}
                     {occurrence.valid_to
                       ? ` → ${formatDateTime(occurrence.valid_to)}`
                       : ' → now'}
                   </p>
                 </div>
-                <span className="table-secondary">
-                  Confidence {formatPercent(occurrence.confidence_score)}
+                <span className="table-secondary">{t("Confidence", "Güven")}{formatPercent(occurrence.confidence_score)}
                 </span>
               </Link>
             ))}
           </div>
         ) : (
           <EmptyState
-            title="No temporal claim occurrences"
-            description="Run ingestion on company artifacts to populate time-aware decisions, assumptions, constraints, outcomes, and commitments."
+            title={t('No temporal claim occurrences', 'Zamansal ifade kaydı yok')}
+            description={t('Process company sources to populate time-aware decisions, assumptions, constraints, outcomes, and commitments.', 'Zamana duyarlı kararları, varsayımları, kısıtları, sonuçları ve taahhütleri oluşturmak için şirket kaynaklarını işleyin.')}
           />
         )}
       </Panel>
 
       <div className="two-column-layout wide-right-column">
         <Panel
-          title="Timeline of remembered changes"
-          description="Ordered memory cards make the product read like historical reconstruction, not graph wallpaper."
+          title={t('Timeline of remembered changes', 'Hatırlanan değişikliklerin zaman çizelgesi')}
+          description={t('Ordered memory cards present a historical reconstruction rather than graph decoration.', 'Sıralı hafıza kartları grafik süsü yerine geçmişin yeniden kurulmasını sunar.')}
         >
           {timelineItems.length === 0 ? (
             <EmptyState
-              title="No timeline entries yet"
-              description="Run ingestion on roadmap artifacts to populate the explicit institutional memory timeline."
+              title={t('No timeline entries yet', 'Henüz zaman çizelgesi kaydı yok')}
+              description={t('Process roadmap sources to populate the institutional memory timeline.', 'Kurumsal hafıza zaman çizelgesini oluşturmak için yol haritası kaynaklarını işleyin.')}
             />
           ) : (
             <div className="timeline-list">
@@ -1019,17 +999,17 @@ export function GraphPage() {
                     <p className="section-label">
                       {formatDate(item.event_timestamp)}
                     </p>
-                    <StatusBadge value={formatLabel(item.timeline_status)} />
+                    <StatusBadge value={item.timeline_status} />
                   </div>
                   <p className="table-primary">{item.title_or_label}</p>
                   <p className="table-secondary">
-                    {item.memory_type} · topic {item.topic_key}
+                    {item.memory_type}{t(" · topic ", " · konu ")}{item.topic_key}
                   </p>
                   <p className="muted-copy">{item.source_artifact_title}</p>
                   <div className="timeline-stats">
-                    <span>{item.related_count} linked</span>
-                    <span>{item.contradiction_count} contradictions</span>
-                    <span>{item.supersedes_count} supersessions</span>
+                    <span>{item.related_count}{t(" linked", " bağlantılı")}</span>
+                    <span>{item.contradiction_count}{t(" contradictions", " çelişki")}</span>
+                    <span>{item.supersedes_count}{t(" supersessions", " güncellenen karar")}</span>
                   </div>
                 </button>
               ))}
@@ -1040,26 +1020,26 @@ export function GraphPage() {
         <Panel
           title={
             selectedTimelineItem
-              ? 'Selected historical detail'
-              : 'Timeline detail'
+              ? translate("Selected historical detail", "Seçilen geçmiş ayrıntısı")
+              : translate("Timeline detail", "Zaman çizelgesi ayrıntısı")
           }
           description={
             selectedTimelineItem
-              ? 'Inspect evidence-bearing memory details and jump directly into the dedicated memory page.'
-              : 'Select a timeline card to inspect its evidence context.'
+              ? translate("Inspect evidence-bearing memory details and jump directly into the dedicated memory page.", "Kaynaklı hafıza ayrıntılarını inceleyin ve ilgili hafıza sayfasını açın.")
+              : translate("Select a timeline card to inspect its evidence context.", "Kaynak bağlamını incelemek için bir zaman çizelgesi kartı seçin.")
           }
         >
           {selectedTimelineItem ? (
             <div className="stack-md">
               <div className="detail-grid">
                 <article className="panel-subtle detail-card">
-                  <p className="section-label">Kind</p>
+                  <p className="section-label">{t('Kind', 'Tür')}</p>
                   <p className="table-primary">
                     {selectedTimelineItem.memory_type}
                   </p>
                 </article>
                 <article className="panel-subtle detail-card">
-                  <p className="section-label">Observed</p>
+                  <p className="section-label">{t('Observed', 'Gözlemlendi')}</p>
                   <p className="table-primary">
                     {formatDateTime(selectedTimelineItem.event_timestamp)}
                   </p>
@@ -1067,45 +1047,43 @@ export function GraphPage() {
               </div>
 
               <div className="panel-subtle stack-sm">
-                <p className="section-label">Historical reading</p>
+                <p className="section-label">{t('Historical reading', 'Geçmiş okuması')}</p>
                 <p className="table-primary">
                   {selectedTimelineItem.title_or_label}
                 </p>
                 <p className="table-secondary">
-                  {selectedTimelineItem.source_artifact_title} · status{' '}
+                  {selectedTimelineItem.source_artifact_title}{t(" · status", " · durum")}{' '}
                   {formatLabel(selectedTimelineItem.timeline_status)}
                 </p>
                 {selectedTimelineItem.owner_label ? (
-                  <p className="table-secondary">
-                    Owner: {selectedTimelineItem.owner_label}
+                  <p className="table-secondary">{t("Owner:", "Sorumlu:")}{selectedTimelineItem.owner_label}
                   </p>
                 ) : null}
                 {selectedTimelineItem.due_date ? (
-                  <p className="table-secondary">
-                    Due: {formatDate(selectedTimelineItem.due_date)}
+                  <p className="table-secondary">{t("Due:", "Son tarih:")}{formatDate(selectedTimelineItem.due_date)}
                   </p>
                 ) : null}
                 <p className="muted-copy">
                   {selectedTimelineItem.evidence_span ??
-                    'No explicit evidence span recorded for this timeline item.'}
+                    translate("No explicit evidence span recorded for this timeline item.", "Bu zaman çizelgesi kaydı için kaynak alıntısı yok.")}
                 </p>
               </div>
 
               <dl className="meta-list compact-meta-list">
                 <div>
-                  <dt>Related links</dt>
+                  <dt>{t('Related links', 'İlgili bağlantılar')}</dt>
                   <dd>{selectedTimelineItem.related_count}</dd>
                 </div>
                 <div>
-                  <dt>Contradictions</dt>
+                  <dt>{t('Contradictions', 'Çelişkiler')}</dt>
                   <dd>{selectedTimelineItem.contradiction_count}</dd>
                 </div>
                 <div>
-                  <dt>Supersessions</dt>
+                  <dt>{t('Supersessions', 'Yerine geçmeler')}</dt>
                   <dd>{selectedTimelineItem.supersedes_count}</dd>
                 </div>
                 <div>
-                  <dt>Source chunk</dt>
+                  <dt>{t('Source chunk', 'Kaynak bölümü')}</dt>
                   <dd>
                     {selectedTimelineItem.source_chunk_id ?? 'Unavailable'}
                   </dd>
@@ -1115,31 +1093,29 @@ export function GraphPage() {
               <Link
                 className="secondary-button"
                 to={`/memory/${selectedTimelineItem.memory_type}/${selectedTimelineItem.memory_id}`}
-              >
-                Open full historical detail
-              </Link>
+              >{t("Open full historical detail", "Geçmişin tüm ayrıntılarını aç")}</Link>
             </div>
           ) : (
             <EmptyState
-              title="Nothing selected"
-              description="Choose a timeline card to inspect its evidence-bearing memory details."
+              title={t('Nothing selected', 'Seçim yapılmadı')}
+              description={t('Choose a timeline card to inspect its evidence-bearing memory details.', 'Kanıt taşıyan hafıza ayrıntılarını incelemek için bir zaman çizelgesi kartı seçin.')}
             />
           )}
         </Panel>
       </div>
 
       <Panel
-        title="Graph neighborhood"
-        description="Immediate neighbors show what this memory object was based on, constrained by, contradicted by, or linked to — with evidence attached to each edge."
+        title={t('Graph neighborhood', 'Grafik komşuluğu')}
+        description={t('Immediate neighbors show what this memory object was based on, constrained by, contradicted by, or linked to, with evidence on each edge.', 'Yakın komşular bu hafıza nesnesinin neye dayandığını, neyle kısıtlandığını, çeliştiğini veya bağlandığını her bağlantının kanıtıyla gösterir.')}
       >
         {isNeighborhoodLoading ? (
-          <p className="muted-copy">Loading neighborhood…</p>
+          <p className="muted-copy">{t('Loading neighborhood…', 'Bağlantılar yükleniyor…')}</p>
         ) : null}
         {!isNeighborhoodLoading &&
         (!neighborhood || neighborhood.neighbors.length === 0) ? (
           <EmptyState
-            title="No neighboring memory objects"
-            description="This timeline item has no visible immediate graph neighbors in the current permission scope."
+            title={t('No neighboring memory objects', 'Komşu hafıza nesnesi yok')}
+            description={t('This timeline item has no visible immediate graph neighbors in the current permission scope.', 'Bu zaman çizelgesi öğesinin mevcut izin alanında görünür yakın komşusu yok.')}
           />
         ) : null}
         {neighborhood && neighborhood.neighbors.length > 0 ? (
@@ -1150,11 +1126,10 @@ export function GraphPage() {
                   <p className="table-primary">
                     {formatLabel(neighbor.edge_type)} ·{' '}
                     {neighbor.direction === 'outgoing'
-                      ? 'from selected item'
-                      : 'into selected item'}
+                      ? translate("from selected item", "seçilen kayıttan")
+                      : translate("into selected item", "seçilen kayda")}
                   </p>
-                  <p className="table-secondary">
-                    Confidence {formatPercent(neighbor.confidence_score)}
+                  <p className="table-secondary">{t("Confidence", "Güven")}{formatPercent(neighbor.confidence_score)}
                   </p>
                 </div>
                 <Link
@@ -1166,12 +1141,11 @@ export function GraphPage() {
                       {neighbor.related_title_or_label}
                     </p>
                     <p className="table-secondary">
-                      {neighbor.related_memory_type} · topic{' '}
+                      {neighbor.related_memory_type}{t(" · topic", " · konu")}{' '}
                       {neighbor.related_topic_key}
                     </p>
                     {neighbor.related_status ? (
-                      <p className="table-secondary">
-                        Status {formatLabel(neighbor.related_status)}
+                      <p className="table-secondary">{t("Status", "Durum")}{formatLabel(neighbor.related_status)}
                       </p>
                     ) : null}
                   </div>
@@ -1197,8 +1171,8 @@ export function GraphPage() {
 
       <div className="two-column-layout">
         <Panel
-          title="Memory composition"
-          description="Counts of persisted memory objects across the explicit graph model."
+          title={t('Memory composition', 'Hafıza bileşimi')}
+          description={t('Counts of persisted memory objects across the graph model.', 'Grafik modelindeki kayıtlı hafıza nesnelerinin sayıları.')}
         >
           {summary ? (
             <div className="stack-sm">
@@ -1211,15 +1185,15 @@ export function GraphPage() {
             </div>
           ) : (
             <EmptyState
-              title="Awaiting graph summary"
-              description="Summary counts will appear once the backend response resolves."
+              title={t('Awaiting graph summary', 'Grafik özeti bekleniyor')}
+              description={t('Summary counts will appear when the system responds.', 'Sistem yanıt verdiğinde özet sayılar görünür.')}
             />
           )}
         </Panel>
 
         <Panel
-          title="Relationship composition"
-          description="Relationship coverage persisted in the explicit decision graph."
+          title={t('Relationship composition', 'İlişki bileşimi')}
+          description={t('Relationship coverage persisted in the decision graph.', 'Karar grafiğinde kaydedilen ilişki kapsamı.')}
         >
           {summary ? (
             <div className="stack-sm">
@@ -1232,16 +1206,16 @@ export function GraphPage() {
             </div>
           ) : (
             <EmptyState
-              title="Awaiting edge counts"
-              description="Edge-family counts will populate once the backend returns graph summary data."
+              title={t('Awaiting edge counts', 'Bağlantı sayıları bekleniyor')}
+              description={t('Edge-family counts will appear when graph summary data arrives.', 'Grafik özeti geldiğinde bağlantı ailesi sayıları görünür.')}
             />
           )}
         </Panel>
       </div>
 
       <Panel
-        title="Persisted signal composition"
-        description="Durable proactive signal records created by ingestion-time intelligence. Counts remain permission-aware through source artifact visibility."
+        title={t('Persisted signal composition', 'Kaydedilen sinyal bileşimi')}
+        description={t('Durable proactive signal records created during processing. Counts remain permission-aware through source visibility.', 'İşleme sırasında oluşturulan kalıcı proaktif sinyal kayıtları. Sayılar kaynak görünürlüğüne göre izinleri korur.')}
       >
         {summary && Object.keys(summary.signal_counts).length > 0 ? (
           <div className="two-column-layout">
@@ -1266,39 +1240,35 @@ export function GraphPage() {
                       {formatLabel(signal.signal_type)} ·{' '}
                       {signal.source_artifact_title ??
                         signal.source_artifact_id ??
-                        'unknown source'}
+                        translate("unknown source", "bilinmeyen kaynak")}
                     </p>
                   </div>
-                  <span className="table-secondary">
-                    Urgency {formatPercent(signal.urgency_score)}
+                  <span className="table-secondary">{t("Urgency", "Aciliyet")}{formatPercent(signal.urgency_score)}
                   </span>
                 </Link>
               ))}
               {persistedSignals.length === 0 ? (
-                <p className="muted-copy">
-                  Counts exist, but no signal rows are visible in this
-                  permission scope.
-                </p>
+                <p className="muted-copy">{t("Counts exist, but no signal rows are visible in this permission scope.", "Kayıt sayıları mevcut, ancak bu erişim kapsamında görünen sinyal yok.")}</p>
               ) : null}
             </div>
           </div>
         ) : (
           <EmptyState
-            title="No persisted signals yet"
-            description="Run ingestion on artifacts that interact with existing memory to persist contradiction, drift, supersession, and next-action signals."
+            title={t('No persisted signals yet', 'Henüz kayıtlı sinyal yok')}
+            description={t('Process sources that interact with existing memory to persist contradiction, drift, supersession, and next-action signals.', 'Çelişki, değişim, yerine geçme ve sonraki eylem sinyallerini kaydetmek için mevcut hafızayla ilişkili kaynakları işleyin.')}
           />
         )}
       </Panel>
 
       <div className="two-column-layout">
         <Panel
-          title="Contradictions"
-          description="Visible contradiction relationships surfaced from the explicit memory graph. These conflicts are first-class product events."
+          title={t('Contradictions', 'Çelişkiler')}
+          description={t('Visible contradiction relationships surfaced from the memory graph.', 'Hafıza grafiğinde bulunan görünür çelişki ilişkileri.')}
         >
           {contradictions.length === 0 ? (
             <EmptyState
-              title="No contradiction edges"
-              description="No contradiction records are currently visible in your scope."
+              title={t('No contradiction edges', 'Çelişki bağlantısı yok')}
+              description={t('No contradiction records are currently visible in your scope.', 'Alanınızda şu anda görünür çelişki kaydı yok.')}
             />
           ) : (
             <div className="stack-sm">
@@ -1311,12 +1281,11 @@ export function GraphPage() {
                     {item.from_title} → {item.to_title}
                   </p>
                   <p className="table-secondary">
-                    {item.from_type} {item.relation_label} {item.to_type} ·
-                    topic {item.topic_key}
+                    {item.from_type} {item.relation_label} {item.to_type}{t("· topic", "· konu")}{item.topic_key}
                   </p>
                   <div className="stack-sm">
                     <div className="panel-subtle stack-sm">
-                      <p className="section-label">Later claim evidence</p>
+                      <p className="section-label">{t('Later claim evidence', 'Sonraki ifade kanıtı')}</p>
                       <p className="table-secondary">
                         {item.from_evidence.artifact_title}
                       </p>
@@ -1326,7 +1295,7 @@ export function GraphPage() {
                       </p>
                     </div>
                     <div className="panel-subtle stack-sm">
-                      <p className="section-label">Earlier claim evidence</p>
+                      <p className="section-label">{t('Earlier claim evidence', 'Önceki ifade kanıtı')}</p>
                       <p className="table-secondary">
                         {item.to_evidence.artifact_title}
                       </p>
@@ -1337,15 +1306,13 @@ export function GraphPage() {
                     </div>
                   </div>
                   {item.ranking_basis.length > 0 ? (
-                    <p className="table-secondary">
-                      Ranked for: {item.ranking_basis.join(', ')}
+                    <p className="table-secondary">{t("Ranked for:", "Öncelik gerekçesi:")}{item.ranking_basis.join(', ')}
                     </p>
                   ) : null}
                   {item.uncertainty_note ? (
                     <p className="muted-copy">{item.uncertainty_note}</p>
                   ) : null}
-                  <p className="muted-copy">
-                    Confidence {formatPercent(item.confidence_score)}
+                  <p className="muted-copy">{t("Confidence", "Güven")}{formatPercent(item.confidence_score)}
                   </p>
                 </article>
               ))}
@@ -1354,13 +1321,13 @@ export function GraphPage() {
         </Panel>
 
         <Panel
-          title="Assumption drift"
-          description="Assumptions marked stale, reversed, or weakening by the memory-analysis surface."
+          title={t('Assumption drift', 'Varsayım değişimi')}
+          description={t('Assumptions marked stale, reversed, or weakening by memory analysis.', 'Hafıza analiziyle eski, tersine dönmüş veya zayıflamış olarak işaretlenen varsayımlar.')}
         >
           {assumptionDrift.length === 0 ? (
             <EmptyState
-              title="No drift signals"
-              description="No visible assumption drift items are currently available."
+              title={t('No drift signals', 'Değişim sinyali yok')}
+              description={t('No visible assumption drift items are currently available.', 'Şu anda görünür varsayım değişimi öğesi yok.')}
             />
           ) : (
             <div className="stack-sm">
@@ -1371,15 +1338,14 @@ export function GraphPage() {
                 >
                   <p className="table-primary">{item.title_or_label}</p>
                   <p className="table-secondary">
-                    {item.status} · {item.assumption_id} · topic{' '}
+                    {item.status} · {item.assumption_id}{t(" · topic", " · konu")}{' '}
                     {item.topic_key}
                   </p>
                   <p className="muted-copy">
-                    {item.validity_notes || 'No validity notes recorded.'}
+                    {item.validity_notes || translate("No validity notes recorded.", "Geçerlilik notu yok.")}
                   </p>
                   {item.supporting_signal_title ? (
-                    <p className="table-secondary">
-                      Compared with: {item.supporting_signal_type} ·{' '}
+                    <p className="table-secondary">{t("Compared with:", "Karşılaştırılan:")}{item.supporting_signal_type} ·{' '}
                       {item.supporting_signal_title}
                     </p>
                   ) : null}
@@ -1392,8 +1358,7 @@ export function GraphPage() {
                     </p>
                   ) : null}
                   {item.ranking_basis.length > 0 ? (
-                    <p className="table-secondary">
-                      Ranked for: {item.ranking_basis.join(', ')}
+                    <p className="table-secondary">{t("Ranked for:", "Öncelik gerekçesi:")}{item.ranking_basis.join(', ')}
                     </p>
                   ) : null}
                   {item.uncertainty_note ? (
@@ -1407,13 +1372,13 @@ export function GraphPage() {
       </div>
 
       <Panel
-        title="Recommended next actions"
-        description="Guidance derived from active contradiction, drift, and open-commitment signals. This is the path forward layer, not a generic task list."
+        title={t('Recommended next actions', 'Önerilen sonraki adımlar')}
+        description={t('Guidance derived from active contradiction, drift, and open-commitment signals.', 'Etkin çelişki, değişim ve açık taahhüt sinyallerinden üretilen yönlendirme.')}
       >
         {nextActions.length === 0 ? (
           <EmptyState
-            title="No next-action signals"
-            description="No visible guidance can be grounded from the current memory graph yet."
+            title={t('No next-action signals', 'Sonraki eylem sinyali yok')}
+            description={t('No visible guidance can be grounded from the current memory graph yet.', 'Mevcut hafıza grafiğinden henüz görünür bir öneri temellendirilemiyor.')}
           />
         ) : (
           <div className="stack-sm">
@@ -1424,13 +1389,11 @@ export function GraphPage() {
               >
                 <div className="timeline-card-head">
                   <div>
-                    <p className="section-label">
-                      Next action · topic {item.related_topic}
+                    <p className="section-label">{t("Next action · topic", "Sonraki iş · konu")}{item.related_topic}
                     </p>
                     <p className="table-primary">{item.title}</p>
                   </div>
-                  <p className="table-secondary">
-                    Urgency {formatPercent(item.urgency_score)} · uncertainty{' '}
+                  <p className="table-secondary">{t("Urgency", "Aciliyet")}{formatPercent(item.urgency_score)}{t(" · uncertainty", " · belirsizlik")}{' '}
                     {formatPercent(item.uncertainty_score)}
                   </p>
                 </div>
@@ -1438,7 +1401,7 @@ export function GraphPage() {
                 <p className="muted-copy">{item.grounded_reasoning}</p>
                 {item.supporting_evidence.length > 0 ? (
                   <div className="stack-sm">
-                    <p className="section-label">Evidence behind the action</p>
+                    <p className="section-label">{t('Evidence behind the action', 'Eylemin arkasındaki kanıt')}</p>
                     {item.supporting_evidence.slice(0, 2).map((evidence) => (
                       <article
                         key={`${item.signal_id}-${evidence.artifact_id}-${evidence.chunk_id ?? 'root'}`}
@@ -1453,8 +1416,7 @@ export function GraphPage() {
                   </div>
                 ) : null}
                 {item.supporting_memory_objects.length > 0 ? (
-                  <p className="table-secondary">
-                    Memory support:{' '}
+                  <p className="table-secondary">{t("Memory support:", "Destekleyen hafıza:")}{' '}
                     {item.supporting_memory_objects
                       .map(
                         (memory) =>
@@ -1464,8 +1426,7 @@ export function GraphPage() {
                   </p>
                 ) : null}
                 {item.ranking_basis.length > 0 ? (
-                  <p className="table-secondary">
-                    Ranked for: {item.ranking_basis.join(', ')}
+                  <p className="table-secondary">{t("Ranked for:", "Öncelik gerekçesi:")}{item.ranking_basis.join(', ')}
                   </p>
                 ) : null}
               </article>

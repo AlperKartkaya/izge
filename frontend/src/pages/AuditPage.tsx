@@ -4,8 +4,10 @@ import { Callout, EmptyState, PageIntro, Panel } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import type { AuditEventRead } from '../lib/types'
+import { useLanguage } from '../lib/i18n'
 
 export function AuditPage() {
+  const { t } = useLanguage()
   const { session } = useAuth()
   const isAdmin = session?.user.role === 'Admin'
   const [events, setEvents] = useState<AuditEventRead[]>([])
@@ -26,7 +28,7 @@ export function AuditPage() {
         }
       } catch (caughtError) {
         if (!cancelled) {
-          setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load audit events.')
+          setError(caughtError instanceof ApiError ? caughtError.message : t('Unable to load audit events.', 'Denetim olayları yüklenemedi.'))
         }
       }
     }
@@ -36,17 +38,17 @@ export function AuditPage() {
     return () => {
       cancelled = true
     }
-  }, [isAdmin, session?.token])
+  }, [isAdmin, session?.token, t])
 
   if (!isAdmin) {
     return (
       <div className="stack-xl">
         <PageIntro
-          eyebrow="Audit log"
-          title="Restricted audit surface"
-          description="Audit retrieval is admin-only in the current backend and remains scoped that way in the frontend."
+          eyebrow={t('Audit log', 'Denetim kaydı')}
+          title={t('Restricted audit surface', 'Kısıtlı denetim alanı')}
+          description={t('Audit retrieval is admin-only in the current backend and remains scoped that way in the frontend.', 'Mevcut sistemde denetim kayıtlarına yalnızca yöneticiler erişebilir; arayüz de bu sınırı korur.')}
         />
-        <Callout tone="warning">Only Admin users can inspect audit events for the workspace.</Callout>
+        <Callout tone="warning">{t('Only Admin users can inspect audit events for the workspace.', 'Çalışma alanındaki denetim olaylarını yalnızca yöneticiler inceleyebilir.')}</Callout>
       </div>
     )
   }
@@ -54,26 +56,26 @@ export function AuditPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Audit log"
-        title="Inspect system events"
-        description="A chronological record of sign-in, ingestion, query, and permission events sourced from `/api/audit/events`."
+        eyebrow={t('Audit log', 'Denetim kaydı')}
+        title={t('Inspect system events', 'Sistem olaylarını inceleyin')}
+        description={t('A chronological record of sign-in, ingestion, query, and permission events.', 'Giriş, veri işleme, sorgu ve izin olaylarının kronolojik kaydı.')}
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
-      <Panel title="Event stream" description="Recent events ordered from newest to oldest.">
+      <Panel title={t('Event stream', 'Olay akışı')} description={t('Recent events ordered from newest to oldest.', 'Son olaylar yeniden eskiye sıralanır.')}>
         {events.length === 0 ? (
-          <EmptyState title="No audit events returned" description="Events will appear here after backend actions create audit entries." />
+          <EmptyState title={t('No audit events returned', 'Denetim olayı bulunamadı')} description={t('Events will appear here after system actions create audit entries.', 'Sistem işlemleri denetim kayıtları oluşturduğunda olaylar burada görünür.')} />
         ) : (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Timestamp</th>
-                  <th>Event</th>
-                  <th>Target</th>
-                  <th>Actor</th>
-                  <th>Metadata</th>
+                  <th>{t('Timestamp', 'Zaman')}</th>
+                  <th>{t('Event', 'Olay')}</th>
+                  <th>{t('Target', 'Hedef')}</th>
+                  <th>{t('Actor', 'Gerçekleştiren')}</th>
+                  <th>{t('Metadata', 'Üst veri')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -88,10 +90,10 @@ export function AuditPage() {
                       <p className="table-primary">{event.target_type}</p>
                       <p className="table-secondary">{event.target_id}</p>
                     </td>
-                    <td className="break-anywhere">{event.actor_user_id ?? 'System'}</td>
+                    <td className="break-anywhere">{event.actor_user_id ?? t('System', 'Sistem')}</td>
                     <td>
                       <details className="metadata-details">
-                        <summary>View metadata</summary>
+                        <summary>{t('View metadata', 'Üst veriyi görüntüle')}</summary>
                         <pre className="metadata-code audit-metadata">{JSON.stringify(event.event_metadata, null, 2)}</pre>
                       </details>
                     </td>

@@ -1,3 +1,4 @@
+import { translate } from '../lib/language'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
@@ -5,6 +6,7 @@ import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../component
 import { api, ApiError } from '../lib/api'
 import { formatDate, formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { QueryResult, QueryTraceRead, QueryTraceStepRead } from '../lib/types'
+import { useLanguage } from '../lib/i18n'
 
 function readRecordField(record: Record<string, unknown>, field: string): string {
   const value = record[field]
@@ -31,15 +33,15 @@ function stepTitle(stepKind: string): string {
     case 'route_decision':
       return 'Grounding'
     case 'seed_selection':
-      return 'Seed selection'
+      return translate("Seed selection", "Başlangıç seçimi")
     case 'bounded_orchestration':
-      return 'Bounded orchestration'
+      return translate("Bounded orchestration", "Sınırlı iş akışı")
     case 'context_assembly':
-      return 'Typed context packet'
+      return translate("Typed context packet", "Yapılandırılmış bağlam paketi")
     case 'provenance_verification':
-      return 'Provenance verification'
+      return translate("Provenance verification", "Kaynak doğrulama")
     case 'evidence_selection':
-      return 'Evidence selection'
+      return translate("Evidence selection", "Kanıt seçimi")
     case 'answer_composition':
       return 'Synthesis'
     case 'uncertainty_note':
@@ -51,21 +53,21 @@ function stepTitle(stepKind: string): string {
 
 function modePlainEnglish(queryClass: string): string {
   switch (queryClass) {
-    case 'Decision lineage':
-      return 'Reconstruct the decision timeline before making any recommendation.'
-    case 'Contradiction analysis':
-      return 'Compare later claims against earlier commitments and surface the collision.'
-    case 'Assumption drift':
-      return 'Find assumptions whose operating basis weakened, reversed, or went stale.'
-    case 'Next-action guidance':
-      return 'Promote an action only after conflict, drift, commitments, and evidence are visible.'
+    case translate("Decision lineage", "Karar geçmişi"):
+      return translate("Reconstruct the decision timeline before making any recommendation.", "Öneride bulunmadan önce karar zaman çizelgesini oluşturun.")
+    case translate("Contradiction analysis", "Çelişki analizi"):
+      return translate("Compare later claims against earlier commitments and surface the collision.", "Yeni iddiaları önceki taahhütlerle karşılaştırarak çelişkileri ortaya çıkarın.")
+    case translate("Assumption drift", "Varsayım değişimi"):
+      return translate("Find assumptions whose operating basis weakened, reversed, or went stale.", "Dayanağı zayıflayan, tersine dönen veya geçerliliğini yitiren varsayımları bulun.")
+    case translate("Next-action guidance", "Sonraki iş önerisi"):
+      return translate("Promote an action only after conflict, drift, commitments, and evidence are visible.", "Yalnız çelişkiler, değişimler, taahhütler ve kanıtlar görüldükten sonra iş önerin.")
     default:
-      return 'Route the question into a bounded institutional-memory operation.'
+      return translate("Route the question into a bounded institutional-memory operation.", "Soruyu sınırlı bir kurumsal hafıza işlemine yönlendirin.")
   }
 }
 
 function firstAvailable(...values: string[]): string {
-  return values.find((value) => value && value !== 'Unavailable') ?? 'No explicit signal returned.'
+  return values.find((value) => value && value !== 'Unavailable') ?? translate("No explicit signal returned.", "Belirgin bir sinyal dönmedi.")
 }
 
 function findTracePayload(trace: QueryTraceRead | null, stepKind: string): Record<string, unknown> | null {
@@ -76,11 +78,11 @@ function findTracePayload(trace: QueryTraceRead | null, stepKind: string): Recor
 function routeSourceLabel(routeSource: string): string {
   switch (routeSource) {
     case 'local_llm_intent':
-      return 'Local LLM intent routing'
+      return translate("Local LLM intent routing", "Yerel LLM niyet yönlendirmesi")
     case 'keyword_after_llm_fallback':
-      return 'Keyword routing after LLM fallback'
+      return translate("Keyword routing after LLM fallback", "LLM sonrası anahtar sözcük yönlendirmesi")
     case 'keyword':
-      return 'Deterministic keyword routing'
+      return translate("Deterministic keyword routing", "Belirleyici anahtar sözcük yönlendirmesi")
     default:
       return formatLabel(routeSource)
   }
@@ -89,17 +91,18 @@ function routeSourceLabel(routeSource: string): string {
 function synthesisStatusLabel(status: string): string {
   switch (status) {
     case 'applied':
-      return 'LLM-assisted answer wording'
+      return translate("LLM-assisted answer wording", "LLM destekli yanıt metni")
     case 'fallback':
-      return 'Deterministic answer after LLM fallback'
+      return translate("Deterministic answer after LLM fallback", "LLM sonrası belirleyici yanıt")
     case 'disabled':
-      return 'Deterministic answer only'
+      return translate("Deterministic answer only", "Yalnız belirleyici yanıt")
     default:
       return formatLabel(status)
   }
 }
 
 export function QueryResultPage() {
+  const { t } = useLanguage()
   const { queryRunId = '' } = useParams()
   const location = useLocation()
   const { session } = useAuth()
@@ -131,7 +134,7 @@ export function QueryResultPage() {
         }
       } catch (caughtError) {
         if (!cancelled) {
-          setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load query result.')
+          setError(caughtError instanceof ApiError ? caughtError.message : t('Unable to load query result.', 'Sorgu sonucu yüklenemedi.'))
         }
       } finally {
         if (!cancelled) {
@@ -145,7 +148,7 @@ export function QueryResultPage() {
     return () => {
       cancelled = true
     }
-  }, [queryRunId, routedResult, session?.token])
+  }, [queryRunId, routedResult, session?.token, t])
 
   const activeResult = routedResult?.query_run_id === queryRunId ? routedResult : result
   const topContradiction = activeResult?.contradictions[0]
@@ -167,58 +170,56 @@ export function QueryResultPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Evidence-backed historical reading"
-        title="The answer is only credible because the record is visible"
-        description="This is the inspectable reasoning view behind a chat answer, with evidence, memory objects, contradictions, drift, next actions, and uncertainty kept visible."
+        eyebrow={translate("Evidence-backed historical reading", "Kaynak destekli geçmiş incelemesi")}
+        title={t('The answer is only credible because the record is visible', 'Yanıt, kayıt görünür olduğu için güvenilirdir')}
+        description={t('This is the inspectable reasoning view behind a chat answer, with evidence, memory objects, contradictions, drift, next actions, and uncertainty kept visible.', 'Bu, sohbet yanıtının arkasındaki incelenebilir akıl yürütme görünümüdür; kanıtlar, hafıza nesneleri, çelişkiler, değişimler, sonraki adımlar ve belirsizlik görünür kalır.')}
         actions={
-          <Link className="secondary-button" to="/query">
-            Back to chat
-          </Link>
+          <Link className="secondary-button" to="/query">{t("Back to chat", "Sohbete dön")}</Link>
         }
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {activeResult?.permissions_limited ? (
-        <Callout tone="warning">Some relevant evidence may be unavailable due to artifact permissions.</Callout>
+        <Callout tone="warning">{t('Some relevant evidence may be unavailable due to source permissions.', 'Bazı ilgili kanıtlar kaynak izinleri nedeniyle kullanılamayabilir.')}</Callout>
       ) : null}
 
-      {isLoading ? <p className="muted-copy">Loading query result…</p> : null}
+      {isLoading ? <p className="muted-copy">{t('Loading query result…', 'Sorgu sonucu yükleniyor…')}</p> : null}
 
       {!isLoading && !activeResult ? (
-        <EmptyState title="Result not available" description="Submit a new query or verify that the requested query run ID still exists." />
+        <EmptyState title={t('Result not available', 'Sonuç kullanılamıyor')} description={t('Submit a new query or verify that the requested query run still exists.', 'Yeni bir sorgu gönderin veya istenen sorgu çalışmasının hâlâ bulunduğunu doğrulayın.')} />
       ) : null}
 
       {activeResult ? (
         <>
-          <Panel title="Result overview" description={activeResult.query_text} aside={<StatusBadge value={activeResult.status} />}>
+          <Panel title={t('Result overview', 'Sonuç özeti')} description={activeResult.query_text} aside={<StatusBadge value={activeResult.status} />}>
             <div className="detail-grid">
               <article className="panel-subtle detail-card">
-                <p className="section-label">Mode</p>
+                <p className="section-label">{t('Mode', 'Mod')}</p>
                 <p className="table-primary">{activeResult.query_class}</p>
               </article>
               <article className="panel-subtle detail-card">
-                <p className="section-label">Generated</p>
+                <p className="section-label">{t('Generated', 'Oluşturuldu')}</p>
                 <p className="table-primary">{formatDateTime(activeResult.created_at)}</p>
               </article>
               <article className="panel-subtle detail-card">
-                <p className="section-label">Historical support</p>
-                <p className="table-primary">{activeResult.supporting_nodes.length + activeResult.supporting_evidence.length} linked items</p>
+                <p className="section-label">{t('Historical support', 'Geçmiş desteği')}</p>
+                <p className="table-primary">{activeResult.supporting_nodes.length + activeResult.supporting_evidence.length}{t(" linked items", " bağlantılı kayıt")}</p>
               </article>
             </div>
           </Panel>
 
           <Panel
-            title="Local LLM output"
-            description="Shows what the private model helped with and the exact answer wording it produced, while deterministic evidence selection remains inspectable."
-            aside={<StatusBadge value={llmApplied ? 'LLM applied' : 'Deterministic'} />}
+            title={t('Local LLM output', 'Yerel LLM çıktısı')}
+            description={t('Shows what the private model helped with and its exact answer wording, while deterministic evidence selection remains inspectable.', 'Özel modelin neye yardım ettiğini ve ürettiği yanıtı gösterir; belirleyici kanıt seçimi incelenebilir kalır.')}
+            aside={<StatusBadge value={llmApplied ? translate("LLM applied", "LLM kullanıldı") : 'Deterministic'} />}
           >
             <article className={synthesisStatus === 'applied' ? 'panel-subtle llm-output-card action-card' : 'panel-subtle llm-output-card'}>
               <div className="timeline-card-head">
                 <div>
-                  <p className="section-label">LLM-written answer</p>
+                  <p className="section-label">{t('LLM-written answer', 'LLM tarafından yazılan yanıt')}</p>
                   <p className="table-secondary">{synthesisStatusLabel(synthesisStatus)}</p>
                 </div>
-                <StatusBadge value={synthesisStatus !== 'Unavailable' ? formatLabel(synthesisStatus) : 'Trace loading'} />
+                <StatusBadge value={synthesisStatus !== 'Unavailable' ? formatLabel(synthesisStatus) : translate("Trace loading", "İz yükleniyor")} />
               </div>
               <p className="llm-answer-text">{activeResult.answer_text}</p>
               <p className="llm-rationale-text">{activeResult.why_this_answer}</p>
@@ -226,67 +227,66 @@ export function QueryResultPage() {
 
             <div className="detail-grid compact-boundary-grid">
               <article className="panel-subtle detail-card">
-                <p className="section-label">Intent routing</p>
-                <p className="table-primary">{routeSource !== 'Unavailable' ? routeSourceLabel(routeSource) : 'Trace loading'}</p>
+                <p className="section-label">{t('Intent routing', 'Niyet yönlendirmesi')}</p>
+                <p className="table-primary">{routeSource !== 'Unavailable' ? routeSourceLabel(routeSource) : translate("Trace loading", "İz yükleniyor")}</p>
                 <p className="muted-copy">
                   {routeSource === 'local_llm_intent'
                     ? 'The LLM classified the question; deterministic execution kept authority over evidence and reasoning.'
                     : routeSource === 'keyword_after_llm_fallback'
-                      ? 'LLM routing was attempted, then deterministic keyword routing carried the query.'
-                      : 'Deterministic routing selected the query mode.'}
+                      ? translate("LLM routing was attempted, then deterministic keyword routing carried the query.", "LLM yönlendirmesi denendi; ardından anahtar sözcük yönlendirmesi soruyu işledi.")
+                      : translate("Deterministic routing selected the query mode.", "Belirleyici yönlendirme soru türünü seçti.")}
                 </p>
-                {llmTopicTerms.length > 0 ? <p className="table-secondary">Terms: {llmTopicTerms.join(', ')}</p> : null}
+                {llmTopicTerms.length > 0 ? <p className="table-secondary">{t("Terms: ", "Terimler: ")}{llmTopicTerms.join(', ')}</p> : null}
               </article>
 
               <article className="panel-subtle detail-card">
-                <p className="section-label">Citations accepted</p>
-                <p className="table-primary">{llmCitedEvidenceCount} evidence · {llmCitedMemoryCount} memory</p>
-                <p className="muted-copy">The LLM can only cite IDs already selected by the deterministic packet.</p>
+                <p className="section-label">{t('Citations accepted', 'Kabul edilen kaynaklar')}</p>
+                <p className="table-primary">{llmCitedEvidenceCount}{t(" evidence · ", " kanıt · ")}{llmCitedMemoryCount}{t(" memory", " hafıza")}</p>
+                <p className="muted-copy">{t('The LLM can only cite IDs already selected by the deterministic packet.', 'LLM yalnızca belirleyici paket tarafından seçilmiş kimlikleri kaynak gösterebilir.')}</p>
               </article>
 
               <article className="panel-subtle detail-card">
-                <p className="section-label">Deterministic authority</p>
-                <p className="table-primary">{activeResult.supporting_evidence.length} excerpts · {activeResult.supporting_nodes.length} objects</p>
-                <p className="muted-copy">Permissions, evidence selection, contradiction/drift checks, and next-action promotion remain backend-controlled.</p>
+                <p className="section-label">{t('Deterministic authority', 'Belirleyici yetki')}</p>
+                <p className="table-primary">{activeResult.supporting_evidence.length}{t(" excerpts · ", " alıntı · ")}{activeResult.supporting_nodes.length}{t(" objects", " nesne")}</p>
+                <p className="muted-copy">{t('Permissions, evidence selection, contradiction and drift checks, and next-action promotion remain system-controlled.', 'İzinler, kanıt seçimi, çelişki ve değişim kontrolleri ile sonraki eylemin öne çıkarılması sistemin kontrolünde kalır.')}</p>
               </article>
             </div>
           </Panel>
 
           <details className="reasoning-disclosure panel section-panel">
-            <summary>Inference and authority boundary details</summary>
+            <summary>{t('Inference and authority boundary details', 'Çıkarım ve yetki sınırı ayrıntıları')}</summary>
             <div className="detail-grid">
               <article className="panel-subtle detail-card">
-                <p className="section-label">Query routing</p>
-                <p className="table-primary">{routeSource !== 'Unavailable' ? routeSourceLabel(routeSource) : 'Trace loading'}</p>
-                {llmIntentStatus !== 'Unavailable' ? <p className="table-secondary">LLM intent status: {formatLabel(llmIntentStatus)}</p> : null}
+                <p className="section-label">{t('Query routing', 'Sorgu yönlendirmesi')}</p>
+                <p className="table-primary">{routeSource !== 'Unavailable' ? routeSourceLabel(routeSource) : translate("Trace loading", "İz yükleniyor")}</p>
+                {llmIntentStatus !== 'Unavailable' ? <p className="table-secondary">{t("LLM intent status: ", "LLM niyet durumu: ")}{formatLabel(llmIntentStatus)}</p> : null}
               </article>
 
               <article className={synthesisStatus === 'applied' ? 'panel-subtle detail-card action-card' : 'panel-subtle detail-card'}>
-                <p className="section-label">Answer wording</p>
-                <p className="table-primary">{synthesisStatus !== 'Unavailable' ? synthesisStatusLabel(synthesisStatus) : 'Trace loading'}</p>
+                <p className="section-label">{t('Answer wording', 'Yanıt yazımı')}</p>
+                <p className="table-primary">{synthesisStatus !== 'Unavailable' ? synthesisStatusLabel(synthesisStatus) : translate("Trace loading", "İz yükleniyor")}</p>
                 {readRecordField(answerSynthesis ?? {}, 'confidence_rationale') !== 'Unavailable' ? (
                   <p className="muted-copy">{readRecordField(answerSynthesis ?? {}, 'confidence_rationale')}</p>
                 ) : null}
               </article>
 
               <article className="panel-subtle detail-card">
-                <p className="section-label">Evidence authority</p>
+                <p className="section-label">{t('Evidence authority', 'Kanıt yetkisi')}</p>
                 <p className="table-primary">
-                  {activeResult.supporting_evidence.length} evidence excerpts · {activeResult.supporting_nodes.length} memory objects
-                </p>
-                <p className="muted-copy">Permission filtering, evidence selection, contradiction/drift analysis, and next-action generation remain backend-deterministic.</p>
+                  {activeResult.supporting_evidence.length}{t(" evidence excerpts · ", " kaynak alıntısı · ")}{activeResult.supporting_nodes.length}{t("memory objects", "hafıza nesnesi")}</p>
+                <p className="muted-copy">{t('Permission filtering, evidence selection, contradiction and drift analysis, and next-action generation remain deterministic.', 'İzin filtreleme, kanıt seçimi, çelişki ve değişim analizi ile sonraki eylem üretimi belirleyici kalır.')}</p>
               </article>
             </div>
           </details>
 
           <Panel
-            title="Decision intelligence packet"
-            description="Read this as the product's core output: answer, tension, drift, evidence strength, and next move in one inspectable packet."
+            title={t('Decision intelligence packet', 'Karar zekâsı paketi')}
+            description={t("Read this as the product's core output: answer, tension, drift, evidence strength, and next move in one inspectable packet.", 'Bunu ürünün temel çıktısı olarak okuyun: yanıt, gerilim, değişim, kanıt gücü ve sonraki adım tek bir incelenebilir pakette.')}
           >
             <div className="stack-lg">
               <article className="panel-subtle stack-sm action-card">
                 <div className="timeline-card-head">
-                  <p className="section-label">Direct reading</p>
+                  <p className="section-label">{t('Direct reading', 'Doğrudan okuma')}</p>
                   <p className="table-secondary">{modePlainEnglish(activeResult.query_class)}</p>
                 </div>
                 <p className="evidence-block">{activeResult.answer_text}</p>
@@ -295,45 +295,43 @@ export function QueryResultPage() {
 
               <div className="detail-grid">
                 <article className={topContradiction ? 'panel-subtle detail-card critical-card' : 'panel-subtle detail-card'}>
-                  <p className="section-label">Contradiction state</p>
+                  <p className="section-label">{t('Contradiction state', 'Çelişki durumu')}</p>
                   <p className="table-primary">
                     {topContradiction
                       ? `${readRecordField(topContradiction, 'from_title')} ↔ ${readRecordField(topContradiction, 'to_title')}`
-                      : 'No visible contradiction returned'}
+                      : translate("No visible contradiction returned", "Görünen çelişki yok")}
                   </p>
                   <p className="muted-copy">
                     {topContradiction
                       ? firstAvailable(readRecordField(topContradiction, 'evidence_provenance'), readRecordField(topContradiction, 'evidence_span'))
-                      : 'The answer did not need a conflict edge in the current permitted scope.'}
+                      : translate("The answer did not need a conflict edge in the current permitted scope.", "Yanıt için mevcut izin kapsamında çelişki bağlantısı gerekmedi.")}
                   </p>
                 </article>
                 <article className={topDrift ? 'panel-subtle detail-card drift-card' : 'panel-subtle detail-card'}>
-                  <p className="section-label">Assumption drift</p>
+                  <p className="section-label">{t('Assumption drift', 'Varsayım değişimi')}</p>
                   <p className="table-primary">
-                    {topDrift ? `${readRecordField(topDrift, 'title_or_label')} · ${formatLabel(readRecordField(topDrift, 'status'))}` : 'No visible drift returned'}
+                    {topDrift ? `${readRecordField(topDrift, 'title_or_label')} · ${formatLabel(readRecordField(topDrift, 'status'))}` : translate("No visible drift returned", "Görünen değişim yok")}
                   </p>
                   <p className="muted-copy">
                     {topDrift
                       ? firstAvailable(readRecordField(topDrift, 'evidence_provenance'), readRecordField(topDrift, 'validity_notes'))
-                      : 'No stale, weakening, or reversed assumption was attached to this answer.'}
+                      : translate("No stale, weakening, or reversed assumption was attached to this answer.", "Bu yanıta geçersiz, zayıflayan veya tersine dönen varsayım eklenmedi.")}
                   </p>
                 </article>
                 <article className="panel-subtle detail-card">
-                  <p className="section-label">Evidence strength</p>
+                  <p className="section-label">{t('Evidence strength', 'Kanıt gücü')}</p>
                   <p className="table-primary">
-                    {activeResult.supporting_evidence.length} evidence excerpts · {graphEvidenceCount} graph-linked
-                  </p>
+                    {activeResult.supporting_evidence.length}{t(" evidence excerpts · ", " kaynak alıntısı · ")}{graphEvidenceCount}{t("graph-linked", "grafik bağlantılı")}</p>
                   <p className="muted-copy">
-                    {activeResult.supporting_nodes.length} structured memory objects and {activeResult.related_signals.length} persisted signal links support this review-aware packet.
-                  </p>
+                    {activeResult.supporting_nodes.length}{t(" structured memory objects and ", " yapılandırılmış hafıza nesnesi ve ")}{activeResult.related_signals.length}{t("persisted signal links support this review-aware packet.", "kayıtlı sinyal bağlantısı bu inceleme paketini destekler.")}</p>
                 </article>
                 <article className={topAction ? 'panel-subtle detail-card action-card' : 'panel-subtle detail-card'}>
-                  <p className="section-label">Next justified move</p>
-                  <p className="table-primary">{topAction ?? 'No next action promoted'}</p>
+                  <p className="section-label">{t('Next justified move', 'Gerekçeli sonraki adım')}</p>
+                  <p className="table-primary">{topAction ?? translate("No next action promoted", "Sonraki iş önerilmedi")}</p>
                   <p className="muted-copy">
                     {topAction
-                      ? 'Recommendation is downstream of the visible memory objects, conflict/drift checks, and evidence excerpts.'
-                      : 'Izge did not promote a recommendation without enough visible support.'}
+                      ? translate("Recommendation is downstream of the visible memory objects, conflict/drift checks, and evidence excerpts.", "Öneri, görünen hafıza nesneleri, çelişki/değişim kontrolleri ve kaynak alıntılarına dayanır.")
+                      : translate("Izge did not promote a recommendation without enough visible support.", "İzge yeterli görünür kaynak olmadan öneri sunmadı.")}
                   </p>
                 </article>
               </div>
@@ -341,18 +339,18 @@ export function QueryResultPage() {
           </Panel>
 
           <div className="result-grid">
-            <Panel title="Evidence chain" description="Permitted evidence excerpts surfaced in the response. This is the proof surface, not background citation decoration.">
+            <Panel title={t('Evidence chain', 'Kanıt zinciri')} description={t('Permitted evidence excerpts surfaced in the response. This is the proof surface, not citation decoration.', 'Yanıtta gösterilen izinli kanıt alıntıları. Bu, kaynak süsü değil kanıt yüzeyidir.')}>
               {activeResult.supporting_evidence.length === 0 ? (
-                <EmptyState title="No evidence references" description="The backend did not return any visible evidence excerpts for this query." />
+                <EmptyState title={t('No evidence references', 'Kanıt kaynağı yok')} description={t('The system did not return visible evidence excerpts for this query.', 'Sistem bu sorgu için görünür kanıt alıntısı döndürmedi.')} />
               ) : (
                 <div className="stack-md">
                   {activeResult.supporting_evidence.map((item) => (
                     <article key={`${item.artifact_id}-${item.chunk_id ?? 'root'}`} className="panel-subtle stack-sm">
                       <div className="timeline-card-head">
                         <p className="table-primary">{item.artifact_title}</p>
-                        <StatusBadge value={formatLabel(item.artifact_review_status)} />
+                        <StatusBadge value={item.artifact_review_status} />
                       </div>
-                      <p className="table-secondary">{item.evidence_kind === 'graph' ? 'Graph-linked evidence' : 'Search fallback evidence'} · chunk {item.chunk_id ?? 'root'}</p>
+                      <p className="table-secondary">{item.evidence_kind === 'graph' ? translate("Graph-linked evidence", "Grafik bağlantılı kanıt") : translate("Search fallback evidence", "Arama yedek kanıtı")}{t(" · chunk ", " · parça ")}{item.chunk_id ?? 'root'}</p>
                       <p className="evidence-block">{item.excerpt}</p>
                     </article>
                   ))}
@@ -360,9 +358,9 @@ export function QueryResultPage() {
               )}
             </Panel>
 
-            <Panel title="Related Memory Objects" description="Structured memory references included with the response.">
+            <Panel title={t('Related Memory Objects', 'İlgili hafıza nesneleri')} description={t('Structured memory references included with the response.', 'Yanıta eklenen yapılandırılmış hafıza kaynakları.')}>
               {activeResult.supporting_nodes.length === 0 ? (
-                <EmptyState title="No supporting memory objects" description="No linked memory objects are currently visible in scope." />
+                <EmptyState title={t('No supporting memory objects', 'Destekleyici hafıza nesnesi yok')} description={t('No linked memory objects are currently visible in scope.', 'Kapsamda şu anda görünür bağlantılı hafıza nesnesi yok.')} />
               ) : (
                 <div className="stack-sm">
                   {activeResult.supporting_nodes.map((item) => (
@@ -374,47 +372,47 @@ export function QueryResultPage() {
                       <div>
                         <p className="table-primary">{item.title_or_label}</p>
                         <p className="table-secondary">
-                          {formatLabel(item.memory_type)} · topic {item.topic_key} · source {formatLabel(item.source_artifact_review_status)}
+                          {formatLabel(item.memory_type)}{t(" · topic ", " · konu ")}{item.topic_key}{t(" · source ", " · kaynak ")}{formatLabel(item.source_artifact_review_status)}
                         </p>
                         {item.memory_type === 'commitment' ? (
                           <p className="table-secondary">
                             {item.status ? `Status ${formatLabel(item.status)} · ` : ''}
                             {item.owner_label ? `Owner ${item.owner_label} · ` : ''}
-                            {item.due_date ? `Due ${formatDate(item.due_date)}` : 'No due date captured'}
+                            {item.due_date ? `Due ${formatDate(item.due_date)}` : translate("No due date captured", "Son tarih kaydedilmedi")}
                           </p>
                         ) : null}
                       </div>
-                      <span className="table-secondary">Confidence {formatPercent(item.confidence_score)}</span>
+                      <span className="table-secondary">{t('Confidence', 'Güven')} {formatPercent(item.confidence_score)}</span>
                     </Link>
                   ))}
                 </div>
               )}
             </Panel>
 
-            <Panel title="Contradictions / Tensions" description="Conflict signals are preserved as a dedicated section so a later claim visibly collides with the earlier record.">
+            <Panel title={t('Contradictions / Tensions', 'Çelişkiler / Gerilimler')} description={t('Conflict signals are preserved so a later claim visibly collides with the earlier record.', 'Sonraki bir ifadenin önceki kayıtla çelişkisi görünür olsun diye çelişki sinyalleri korunur.')}>
               {activeResult.contradictions.length === 0 ? (
-                <EmptyState title="No contradictions returned" description="This result did not surface contradiction edges in the current permitted scope." />
+                <EmptyState title={t('No contradictions returned', 'Çelişki bulunamadı')} description={t('This result did not surface contradiction edges in the current permitted scope.', 'Bu sonuç mevcut izinli kapsamda çelişki bağlantısı göstermedi.')} />
               ) : (
                 <div className="stack-sm">
                   {activeResult.contradictions.map((item) => (
                     <article key={readRecordField(item, 'edge_id')} className="panel-subtle stack-sm critical-card">
                       <p className="table-primary">{readRecordField(item, 'from_title')} → {readRecordField(item, 'to_title')}</p>
-                      <p className="table-secondary">{readRecordField(item, 'from_type')} {readRecordField(item, 'relation_label')} {readRecordField(item, 'to_type')} · topic {readRecordField(item, 'topic_key')}</p>
+                      <p className="table-secondary">{readRecordField(item, 'from_type')} {readRecordField(item, 'relation_label')} {readRecordField(item, 'to_type')}{t(" · topic ", " · konu ")}{readRecordField(item, 'topic_key')}</p>
                       <div className="stack-sm">
                         <div className="panel-subtle stack-sm">
-                          <p className="section-label">Later claim evidence</p>
+                          <p className="section-label">{t('Later claim evidence', 'Sonraki ifade kanıtı')}</p>
                           <p className="table-secondary">{readRecordField(item.from_evidence as Record<string, unknown>, 'artifact_title')}</p>
                           <p className="muted-copy">{readRecordField(item.from_evidence as Record<string, unknown>, 'excerpt')}</p>
                           <p className="table-secondary">{readRecordField(item.from_evidence as Record<string, unknown>, 'provenance')}</p>
                         </div>
                         <div className="panel-subtle stack-sm">
-                          <p className="section-label">Earlier claim evidence</p>
+                          <p className="section-label">{t('Earlier claim evidence', 'Önceki ifade kanıtı')}</p>
                           <p className="table-secondary">{readRecordField(item.to_evidence as Record<string, unknown>, 'artifact_title')}</p>
                           <p className="muted-copy">{readRecordField(item.to_evidence as Record<string, unknown>, 'excerpt')}</p>
                           <p className="table-secondary">{readRecordField(item.to_evidence as Record<string, unknown>, 'provenance')}</p>
                         </div>
                       </div>
-                      {readStringArray(item, 'ranking_basis').length > 0 ? <p className="table-secondary">Ranked for: {readStringArray(item, 'ranking_basis').join(', ')}</p> : null}
+                      {readStringArray(item, 'ranking_basis').length > 0 ? <p className="table-secondary">{t("Ranked for: ", "Öncelik gerekçesi: ")}{readStringArray(item, 'ranking_basis').join(', ')}</p> : null}
                       {readRecordField(item, 'uncertainty_note') !== 'Unavailable' ? <p className="muted-copy">{readRecordField(item, 'uncertainty_note')}</p> : null}
                     </article>
                   ))}
@@ -422,20 +420,20 @@ export function QueryResultPage() {
               )}
             </Panel>
 
-            <Panel title="Assumption Drift" description="Assumptions flagged as stale, weakened, or reversed.">
+            <Panel title={t('Assumption Drift', 'Varsayım değişimi')} description={t('Assumptions flagged as stale, weakened, or reversed.', 'Eski, zayıflamış veya tersine dönmüş olarak işaretlenen varsayımlar.')}>
               {activeResult.stale_assumptions.length === 0 ? (
-                <EmptyState title="No drift returned" description="No visible stale assumptions were attached to this response." />
+                <EmptyState title={t('No drift returned', 'Değişim bulunamadı')} description={t('No visible stale assumptions were attached to this response.', 'Bu yanıta görünür eski varsayım eklenmedi.')} />
               ) : (
                 <div className="stack-sm">
                   {activeResult.stale_assumptions.map((item) => (
                     <article key={readRecordField(item, 'assumption_id')} className="panel-subtle stack-sm drift-card">
                       <p className="table-primary">{readRecordField(item, 'title_or_label')}</p>
-                      <p className="table-secondary">Status: {formatLabel(readRecordField(item, 'status'))} · topic {readRecordField(item, 'topic_key')}</p>
+                      <p className="table-secondary">{t("Status: ", "Durum: ")}{formatLabel(readRecordField(item, 'status'))}{t(" · topic ", " · konu ")}{readRecordField(item, 'topic_key')}</p>
                       <p className="muted-copy">{readRecordField(item, 'validity_notes')}</p>
-                      {readRecordField(item, 'supporting_signal_title') !== 'Unavailable' ? <p className="table-secondary">Compared with: {readRecordField(item, 'supporting_signal_type')} · {readRecordField(item, 'supporting_signal_title')}</p> : null}
+                      {readRecordField(item, 'supporting_signal_title') !== 'Unavailable' ? <p className="table-secondary">{t("Compared with: ", "Karşılaştırılan: ")}{readRecordField(item, 'supporting_signal_type')} · {readRecordField(item, 'supporting_signal_title')}</p> : null}
                       {readRecordField(item, 'evidence_span') !== 'Unavailable' ? <p className="muted-copy">{readRecordField(item, 'evidence_span')}</p> : null}
                       {readRecordField(item, 'evidence_provenance') !== 'Unavailable' ? <p className="table-secondary">{readRecordField(item, 'evidence_provenance')}</p> : null}
-                      {readStringArray(item, 'ranking_basis').length > 0 ? <p className="table-secondary">Ranked for: {readStringArray(item, 'ranking_basis').join(', ')}</p> : null}
+                      {readStringArray(item, 'ranking_basis').length > 0 ? <p className="table-secondary">{t("Ranked for: ", "Öncelik gerekçesi: ")}{readStringArray(item, 'ranking_basis').join(', ')}</p> : null}
                       {readRecordField(item, 'uncertainty_note') !== 'Unavailable' ? <p className="muted-copy">{readRecordField(item, 'uncertainty_note')}</p> : null}
                     </article>
                   ))}
@@ -443,9 +441,9 @@ export function QueryResultPage() {
               )}
             </Panel>
 
-            <Panel title="Recommended Next Actions" description="Action guidance remains explicit, grounded, and downstream of the visible evidence.">
+            <Panel title={t('Recommended Next Actions', 'Önerilen sonraki adımlar')} description={t('Action guidance remains explicit, grounded, and downstream of visible evidence.', 'Eylem yönlendirmesi açık, kaynaklı ve görünür kanıtlara bağlı kalır.')}>
               {activeResult.recommended_next_actions.length === 0 ? (
-                <EmptyState title="No next actions returned" description="This result did not require recommendation output from the current analysis path." />
+                <EmptyState title={t('No next actions returned', 'Sonraki adım bulunamadı')} description={t('This result did not require a recommendation from the current analysis path.', 'Bu sonuç mevcut analiz yolundan bir öneri gerektirmedi.')} />
               ) : (
                 <ul className="bullet-list action-list">
                   {activeResult.recommended_next_actions.map((item) => (
@@ -455,9 +453,9 @@ export function QueryResultPage() {
               )}
             </Panel>
 
-            <Panel title="Related persisted signals" description="Query answers link back to durable contradiction, drift, supersession, or next-action records created during ingestion.">
+            <Panel title={t('Related persisted signals', 'İlgili kayıtlı sinyaller')} description={t('Query answers link to durable contradiction, drift, supersession, or next-action records created during processing.', 'Sorgu yanıtları işleme sırasında oluşturulan kalıcı çelişki, değişim, yerine geçme veya sonraki eylem kayıtlarına bağlanır.')}>
               {activeResult.related_signals.length === 0 ? (
-                <EmptyState title="No persisted signal links" description="This query result did not overlap with persisted proactive signals in the current permission scope." />
+                <EmptyState title={t('No persisted signal links', 'Kayıtlı sinyal bağlantısı yok')} description={t('This query result did not overlap with persisted proactive signals in the current permission scope.', 'Bu sorgu sonucu mevcut izin alanındaki kayıtlı proaktif sinyallerle örtüşmedi.')} />
               ) : (
                 <div className="stack-sm">
                   {activeResult.related_signals.map((signal) => (
@@ -465,37 +463,37 @@ export function QueryResultPage() {
                       <div>
                         <p className="table-primary">{signal.title}</p>
                         <p className="table-secondary">
-                          {formatLabel(signal.signal_type)} · {signal.source_artifact_title ?? signal.source_artifact_id ?? 'unknown source'}
+                          {formatLabel(signal.signal_type)} · {signal.source_artifact_title ?? signal.source_artifact_id ?? translate("unknown source", "bilinmeyen kaynak")}
                         </p>
                       </div>
-                      <span className="table-secondary">Urgency {formatPercent(signal.urgency_score)}</span>
+                      <span className="table-secondary">{t("Urgency ", "Aciliyet ")}{formatPercent(signal.urgency_score)}</span>
                     </Link>
                   ))}
                 </div>
               )}
             </Panel>
 
-            <Panel title="Uncertainty or Missing Context" description="Required caveats and limits surfaced alongside the answer.">
+            <Panel title={t('Uncertainty or Missing Context', 'Belirsizlik veya eksik bağlam')} description={t('Required caveats and limits surfaced alongside the answer.', 'Gerekli uyarılar ve sınırlar yanıtla birlikte gösterilir.')}>
               <ul className="bullet-list">
                 {activeResult.uncertainty_notes.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
-                {activeResult.permissions_limited ? <li>Some relevant evidence may be hidden by artifact permissions.</li> : null}
+                {activeResult.permissions_limited ? <li>{t('Some relevant evidence may be hidden by source permissions.', 'Bazı ilgili kanıtlar kaynak izinleri nedeniyle gizli olabilir.')}</li> : null}
               </ul>
             </Panel>
 
             <details className="reasoning-disclosure panel section-panel">
-              <summary>Inspectable reasoning path</summary>
-              <p className="section-description">Trace details remain available for trust and audit, but stay collapsed so the main answer stays readable during normal use.</p>
+              <summary>{t('Inspectable reasoning path', 'İncelenebilir akıl yürütme yolu')}</summary>
+              <p className="section-description">{t('Trace details remain available for trust and audit, but stay collapsed so the main answer remains readable.', 'İz ayrıntıları güven ve denetim için kullanılabilir kalır ancak ana yanıtın okunabilirliği için kapalı tutulur.')}</p>
               {!trace ? (
-                <EmptyState title="Trace not loaded" description="The query result is visible, but the inspectable reasoning path could not be loaded." />
+                <EmptyState title={t('Trace not loaded', 'İz yüklenmedi')} description={t('The query result is visible, but the inspectable reasoning path could not be loaded.', 'Sorgu sonucu görünür ancak incelenebilir akıl yürütme yolu yüklenemedi.')} />
               ) : (
                 <div className="stack-md">
                   <article className="panel-subtle stack-sm">
-                    <p className="section-label">Route confidence</p>
+                    <p className="section-label">{t('Route confidence', 'Yönlendirme güveni')}</p>
                     <p className="table-primary">{formatPercent(trace.route_confidence)}</p>
                     <p className="table-secondary">{trace.query_class}</p>
-                    {trace.permissions_limited ? <p className="muted-copy">Some trace items may be reduced because artifact permissions hide part of the reasoning path.</p> : null}
+                    {trace.permissions_limited ? <p className="muted-copy">{t('Some trace items may be reduced because source permissions hide part of the reasoning path.', 'Kaynak izinleri akıl yürütme yolunun bir bölümünü gizlediği için bazı iz öğeleri azaltılmış olabilir.')}</p> : null}
                   </article>
 
                   {trace.steps.map((step: QueryTraceStepRead) => {
@@ -522,16 +520,16 @@ export function QueryResultPage() {
                         </div>
 
                         {readRecordField(payload, 'route_rationale') !== 'Unavailable' ? <p className="muted-copy">{readRecordField(payload, 'route_rationale')}</p> : null}
-                        {readRecordField(payload, 'route_source') !== 'Unavailable' ? <p className="table-secondary">Route source: {routeSourceLabel(readRecordField(payload, 'route_source'))}</p> : null}
-                        {readStringArray(payload, 'topic_terms').length > 0 ? <p className="table-secondary">Topic terms: {readStringArray(payload, 'topic_terms').join(', ')}</p> : null}
-                        {readStringArray(payload, 'secondary_signals').length > 0 ? <p className="table-secondary">Secondary signals: {readStringArray(payload, 'secondary_signals').join(', ')}</p> : null}
-                        {readRecordField(payload, 'schema_version') !== 'Unavailable' ? <p className="table-secondary">Trace schema: {readRecordField(payload, 'schema_version')}</p> : null}
-                        {readRecordField(payload, 'context_packet_id') !== 'Unavailable' ? <p className="table-secondary">Context packet: {readRecordField(payload, 'context_packet_id')}</p> : null}
-                        {readRecordField(payload, 'verifier_status') !== 'Unavailable' ? <p className="table-secondary">Verifier status: {formatLabel(readRecordField(payload, 'verifier_status'))}</p> : null}
+                        {readRecordField(payload, 'route_source') !== 'Unavailable' ? <p className="table-secondary">{t("Route source: ", "Yönlendirme kaynağı: ")}{routeSourceLabel(readRecordField(payload, 'route_source'))}</p> : null}
+                        {readStringArray(payload, 'topic_terms').length > 0 ? <p className="table-secondary">{t("Topic terms: ", "Konu terimleri: ")}{readStringArray(payload, 'topic_terms').join(', ')}</p> : null}
+                        {readStringArray(payload, 'secondary_signals').length > 0 ? <p className="table-secondary">{t("Secondary signals: ", "İkincil sinyaller: ")}{readStringArray(payload, 'secondary_signals').join(', ')}</p> : null}
+                        {readRecordField(payload, 'schema_version') !== 'Unavailable' ? <p className="table-secondary">{t("Trace schema: ", "İz şeması: ")}{readRecordField(payload, 'schema_version')}</p> : null}
+                        {readRecordField(payload, 'context_packet_id') !== 'Unavailable' ? <p className="table-secondary">{t("Context packet: ", "Bağlam paketi: ")}{readRecordField(payload, 'context_packet_id')}</p> : null}
+                        {readRecordField(payload, 'verifier_status') !== 'Unavailable' ? <p className="table-secondary">{t("Verifier status: ", "Doğrulayıcı durumu: ")}{formatLabel(readRecordField(payload, 'verifier_status'))}</p> : null}
 
                         {orchestrationStages.length > 0 ? (
                           <div className="stack-sm">
-                            <p className="section-label">Bounded stage plan</p>
+                            <p className="section-label">{t('Bounded stage plan', 'Sınırlı aşama planı')}</p>
                             {orchestrationStages.map((item) => (
                               <article key={readRecordField(item, 'stage_key')} className="panel-subtle stack-sm">
                                 <div className="timeline-card-head">
@@ -539,7 +537,7 @@ export function QueryResultPage() {
                                   <StatusBadge value={formatLabel(readRecordField(item, 'status'))} />
                                 </div>
                                 <p className="muted-copy">{readRecordField(item, 'reason')}</p>
-                                <p className="table-secondary">Authority: {formatLabel(readRecordField(item, 'authority_level'))} · Outputs: {String(item.output_count ?? 0)}</p>
+                                <p className="table-secondary">{t("Authority: ", "Yetki: ")}{formatLabel(readRecordField(item, 'authority_level'))}{t(" · Outputs: ", " · Çıktılar: ")}{String(item.output_count ?? 0)}</p>
                               </article>
                             ))}
                           </div>
@@ -547,20 +545,18 @@ export function QueryResultPage() {
 
                         {retrievalRecipe.length > 0 ? (
                           <div className="stack-sm">
-                            <p className="section-label">Retrieval recipe</p>
+                            <p className="section-label">{t('Retrieval recipe', 'Erişim yöntemi')}</p>
                             {retrievalRecipe.map((item) => (
                               <p key={readRecordField(item, 'stage')} className="table-secondary">
-                                {formatLabel(readRecordField(item, 'stage'))}: {String(item.selected_count ?? 0)} / {String(item.candidate_count ?? 0)} selected · omitted {String(item.omitted_count ?? 0)}
+                                {formatLabel(readRecordField(item, 'stage'))}: {String(item.selected_count ?? 0)} / {String(item.candidate_count ?? 0)}{t(" selected · omitted ", " seçilen · dışlanan ")}{String(item.omitted_count ?? 0)}
                               </p>
                             ))}
                             {evidenceBudget ? (
-                              <p className="table-secondary">
-                                Evidence budget: {String(evidenceBudget.selected_evidence_count ?? 0)} / {String(evidenceBudget.max_selected_evidence ?? 0)} selected · {evidenceBudget.within_budget === true ? 'within budget' : 'outside budget'}
+                              <p className="table-secondary">{t("Evidence budget:", "Kanıt bütçesi:")}{String(evidenceBudget.selected_evidence_count ?? 0)} / {String(evidenceBudget.max_selected_evidence ?? 0)}{t(" selected · ", " seçilen · ")}{evidenceBudget.within_budget === true ? translate("within budget", "bütçe içinde") : translate("outside budget", "bütçe dışında")}
                               </p>
                             ) : null}
                             {metrics ? (
-                              <p className="table-secondary">
-                                Trace payload: {String(metrics.trace_payload_bytes ?? 0)} bytes · assembly {String(metrics.context_assembly_ms ?? 0)} ms
+                              <p className="table-secondary">{t("Trace payload:", "İz verisi:")}{String(metrics.trace_payload_bytes ?? 0)}{t(" bytes · assembly ", " bayt · birleştirme ")}{String(metrics.context_assembly_ms ?? 0)} ms
                               </p>
                             ) : null}
                           </div>
@@ -568,11 +564,10 @@ export function QueryResultPage() {
 
                         {selectedMemory.length > 0 || selectedEvidencePacket.length > 0 ? (
                           <div className="stack-sm">
-                            <p className="section-label">Typed packet contents</p>
-                            {selectedMemory.length > 0 ? <p className="table-secondary">Memory objects: {selectedMemory.map((item) => readRecordField(item, 'title_or_label')).join(', ')}</p> : null}
+                            <p className="section-label">{t('Typed packet contents', 'Türlenmiş paket içeriği')}</p>
+                            {selectedMemory.length > 0 ? <p className="table-secondary">{t("Memory objects: ", "Hafıza nesneleri: ")}{selectedMemory.map((item) => readRecordField(item, 'title_or_label')).join(', ')}</p> : null}
                             {selectedEvidencePacket.length > 0 ? (
-                              <p className="table-secondary">
-                                Evidence IDs: {selectedEvidencePacket.map((item) => firstAvailable(readRecordField(item, 'chunk_id'), readRecordField(item, 'artifact_id'))).join(', ')}
+                              <p className="table-secondary">{t("Evidence IDs:", "Kanıt kimlikleri:")}{selectedEvidencePacket.map((item) => firstAvailable(readRecordField(item, 'chunk_id'), readRecordField(item, 'artifact_id'))).join(', ')}
                               </p>
                             ) : null}
                           </div>
@@ -580,8 +575,8 @@ export function QueryResultPage() {
 
                         {verifierChecks ? (
                           <div className="stack-sm">
-                            <p className="section-label">Verifier checks</p>
-                            <p className="table-secondary">Status: {formatLabel(readRecordField(payload, 'status'))}</p>
+                            <p className="section-label">{t('Verifier checks', 'Doğrulayıcı kontrolleri')}</p>
+                            <p className="table-secondary">{t("Status: ", "Durum: ")}{formatLabel(readRecordField(payload, 'status'))}</p>
                             <p className="table-secondary">
                               {Object.entries(verifierChecks)
                                 .map(([key, value]) => `${formatLabel(key)}: ${value === true ? 'pass' : 'check'}`)
@@ -593,7 +588,7 @@ export function QueryResultPage() {
 
                         {supportingNodes.length > 0 ? (
                           <div className="stack-sm">
-                            <p className="section-label">Selected memory seeds</p>
+                            <p className="section-label">{t('Selected memory seeds', 'Seçilen hafıza başlangıçları')}</p>
                             {supportingNodes.map((item) => (
                               <p key={`${readRecordField(item, 'memory_type')}-${readRecordField(item, 'memory_id')}`} className="table-secondary">
                                 {readRecordField(item, 'memory_type')} · {readRecordField(item, 'title_or_label')}
@@ -604,7 +599,7 @@ export function QueryResultPage() {
 
                         {contradictionPairs.length > 0 ? (
                           <div className="stack-sm">
-                            <p className="section-label">Compared contradiction pairs</p>
+                            <p className="section-label">{t('Compared contradiction pairs', 'Karşılaştırılan çelişki çiftleri')}</p>
                             {contradictionPairs.map((item) => (
                               <p key={`${readRecordField(item, 'from_title')}-${readRecordField(item, 'to_title')}`} className="table-secondary">
                                 {readRecordField(item, 'from_title')} → {readRecordField(item, 'to_title')}
@@ -615,7 +610,7 @@ export function QueryResultPage() {
 
                         {staleAssumptions.length > 0 ? (
                           <div className="stack-sm">
-                            <p className="section-label">Drift candidates</p>
+                            <p className="section-label">{t('Drift candidates', 'Değişim adayları')}</p>
                             {staleAssumptions.map((item) => (
                               <p key={readRecordField(item, 'title_or_label')} className="table-secondary">
                                 {readRecordField(item, 'title_or_label')} · {formatLabel(readRecordField(item, 'status'))}
@@ -626,7 +621,7 @@ export function QueryResultPage() {
 
                         {supportingEvidence.length > 0 ? (
                           <div className="stack-sm">
-                            <p className="section-label">Selected evidence</p>
+                            <p className="section-label">{t('Selected evidence', 'Seçilen kanıt')}</p>
                             {supportingEvidence.map((item) => (
                               <article key={`${readRecordField(item, 'artifact_id')}-${readRecordField(item, 'chunk_id')}`} className="panel-subtle stack-sm">
                                 <p className="table-secondary">{readRecordField(item, 'artifact_title')} · {readRecordField(item, 'evidence_kind')}</p>
@@ -639,16 +634,15 @@ export function QueryResultPage() {
 
                         {sectionCounts ? (
                           <div className="stack-sm">
-                            <p className="section-label">Answer composition</p>
-                            <p className="table-secondary">
-                              Nodes {String(sectionCounts.supporting_nodes ?? 0)} · Evidence {String(sectionCounts.supporting_evidence ?? 0)} · Contradictions {String(sectionCounts.contradictions ?? 0)} · Drift {String(sectionCounts.assumption_drift ?? 0)} · Actions {String(sectionCounts.recommended_next_actions ?? 0)}
+                            <p className="section-label">{t('Answer composition', 'Yanıt bileşimi')}</p>
+                            <p className="table-secondary">{t("Nodes", "Düğümler")}{String(sectionCounts.supporting_nodes ?? 0)}{t(" · Evidence ", " · Kanıt ")}{String(sectionCounts.supporting_evidence ?? 0)}{t(" · Contradictions ", " · Çelişkiler ")}{String(sectionCounts.contradictions ?? 0)}{t(" · Drift ", " · Değişim ")}{String(sectionCounts.assumption_drift ?? 0)}{t(" · Actions ", " · İşler ")}{String(sectionCounts.recommended_next_actions ?? 0)}
                             </p>
                           </div>
                         ) : null}
 
                         {stepAnswerSynthesis ? (
                           <div className="stack-sm">
-                            <p className="section-label">Answer synthesis boundary</p>
+                            <p className="section-label">{t('Answer synthesis boundary', 'Yanıt sentezi sınırı')}</p>
                             <p className="table-secondary">{synthesisStatusLabel(stepSynthesisStatus)}</p>
                             {readRecordField(stepAnswerSynthesis, 'confidence_rationale') !== 'Unavailable' ? (
                               <p className="muted-copy">{readRecordField(stepAnswerSynthesis, 'confidence_rationale')}</p>
@@ -657,7 +651,7 @@ export function QueryResultPage() {
                               <p className="muted-copy">{readRecordField(stepAnswerSynthesis, 'fallback_reason')}</p>
                             ) : null}
                             {readStringArray(stepAnswerSynthesis, 'cited_memory_ids').length > 0 ? (
-                              <p className="table-secondary">Validated memory citations: {readStringArray(stepAnswerSynthesis, 'cited_memory_ids').join(', ')}</p>
+                              <p className="table-secondary">{t("Validated memory citations: ", "Doğrulanan hafıza referansları: ")}{readStringArray(stepAnswerSynthesis, 'cited_memory_ids').join(', ')}</p>
                             ) : null}
                           </div>
                         ) : null}
@@ -670,7 +664,7 @@ export function QueryResultPage() {
                             ))}
                           </ul>
                         ) : null}
-                        {typeof payload.omitted_items === 'number' && payload.omitted_items > 0 ? <p className="table-secondary">Hidden by current permissions: {String(payload.omitted_items)} trace item(s)</p> : null}
+                        {typeof payload.omitted_items === 'number' && payload.omitted_items > 0 ? <p className="table-secondary">{t("Hidden by current permissions: ", "Mevcut izinlere göre gizlenen: ")}{String(payload.omitted_items)}{t(" trace item(s)", " iz kaydı")}</p> : null}
                       </article>
                     )
                   })}

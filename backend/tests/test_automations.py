@@ -12,6 +12,7 @@ from app.db import Base
 from app.models import ColleagueRun, User, Workspace
 from app.models.automation import Automation
 from app.routers.automations import create_automation, delete_automation, list_automations, run_automation, update_automation
+from app.schema import ensure_legacy_schema_compatibility
 from app.schemas.automation import AutomationCreate, AutomationUpdate
 from app.services.automations import dispatch_due_automations, next_run_at
 
@@ -44,6 +45,20 @@ class AutomationsTest(unittest.TestCase):
                 AutomationCreate(title="Test", prompt="Özet", schedule_time=time)
         with self.assertRaises(ValidationError):
             AutomationCreate(title=" ", prompt="Özet", schedule_time="16:00")
+        with self.assertRaises(ValidationError):
+            AutomationCreate(title="Test", prompt="Özet", schedule_time="16:00", response_language="de")
+
+    def test_selected_language_is_persisted_and_passed_to_manual_run(self):
+        item = create_automation(
+            AutomationCreate(title="Daily recap", prompt="Summarise open work.", schedule_time="16:00", response_language="en"),
+            self.alice,
+            self.db,
+        )
+        self.assertEqual("en", item.response_language)
+        accepted = run_automation(item.automation_id, self.alice, self.db)
+        run = self.db.get(ColleagueRun, accepted.run_id)
+        assert run is not None
+        self.assertEqual("en", run.response_language)
 
     def test_owner_boundary_and_crud(self):
         item = self.create()
@@ -105,9 +120,29 @@ class AutomationsTest(unittest.TestCase):
         assert automation is not None
         automation.last_run_at = None  # Simulate crash between enqueue and the schedule checkpoint.
         automation.prompt = "Yeni günlük özet isteği."
+        automation.response_language = "en"
         self.db.commit()
         self.assertEqual(dispatch_due_automations(self.db, due), 1)
-        self.assertEqual(len(self.db.scalars(select(ColleagueRun)).all()), 1)
+        runs = self.db.scalars(select(ColleagueRun)).all()
+        self.assertEqual(len(runs), 1)
+        self.assertEqual("tr", runs[0].response_language)
+
+    def test_legacy_schema_adds_language_columns_without_changing_existing_rows(self):
+        item = self.create()
+        accepted = run_automation(item.automation_id, self.alice, self.db)
+        self.db.close()
+        with self.engine.begin() as connection:
+            connection.exec_driver_sql("ALTER TABLE automations DROP COLUMN response_language")
+            connection.exec_driver_sql("ALTER TABLE colleague_runs DROP COLUMN response_language")
+        ensure_legacy_schema_compatibility(self.engine)
+        with self.engine.connect() as connection:
+            self.assertEqual("tr", connection.exec_driver_sql(
+                "SELECT response_language FROM automations WHERE automation_id = ?", (item.automation_id,)
+            ).scalar_one())
+            self.assertEqual("tr", connection.exec_driver_sql(
+                "SELECT response_language FROM colleague_runs WHERE run_id = ?", (accepted.run_id,)
+            ).scalar_one())
+        self.db = Session(self.engine, expire_on_commit=False)
 
 
 if __name__ == "__main__":

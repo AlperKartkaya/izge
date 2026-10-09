@@ -27,7 +27,8 @@ def _owned(db: Session, actor: User, automation_id: str) -> Automation:
 def _read(item: Automation) -> AutomationRead:
     return AutomationRead.model_validate({
         "automation_id": item.automation_id, "title": item.title, "prompt": item.prompt,
-        "schedule_time": item.schedule_time, "enabled": item.enabled, "last_run_at": item.last_run_at,
+        "schedule_time": item.schedule_time, "response_language": item.response_language,
+        "enabled": item.enabled, "last_run_at": item.last_run_at,
         "next_run_at": next_run_at(item, datetime.now(UTC)), "created_at": item.created_at, "updated_at": item.updated_at,
     })
 

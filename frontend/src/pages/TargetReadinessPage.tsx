@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
+import { formatDateTime, formatPercent } from '../lib/format'
 import type { ReadinessAreaStatus, TargetReadinessAreaRead, TargetReadinessRead } from '../lib/types'
+import { useLanguage } from '../lib/i18n'
 
 function areaCardClass(status: ReadinessAreaStatus): string {
   if (status === 'implemented') {
@@ -36,6 +37,7 @@ function topGaps(areas: TargetReadinessAreaRead[]) {
 }
 
 export function TargetReadinessPage() {
+  const { t } = useLanguage()
   const { session } = useAuth()
   const [readiness, setReadiness] = useState<TargetReadinessRead | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -57,7 +59,7 @@ export function TargetReadinessPage() {
         }
       } catch (caughtError) {
         if (!cancelled) {
-          setError(caughtError instanceof ApiError ? caughtError.message : 'Unable to load target readiness.')
+          setError(caughtError instanceof ApiError ? caughtError.message : t('Unable to load target readiness.', 'Hedef hazırlık durumu yüklenemedi.'))
         }
       } finally {
         if (!cancelled) {
@@ -70,7 +72,7 @@ export function TargetReadinessPage() {
     return () => {
       cancelled = true
     }
-  }, [session?.token])
+  }, [session?.token, t])
 
   const gaps = useMemo(() => topGaps(readiness?.areas ?? []), [readiness?.areas])
   const snapshot = readiness?.current_workspace_snapshot
@@ -78,17 +80,13 @@ export function TargetReadinessPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow="Operational readiness"
-        title="Check company-portable memory-system coverage"
-        description="This page maps product and PRD requirements to current workspace proof: evidence substrate, temporal graph, typed context packets, bounded orchestration, private AI discipline, scenario support, and Docker portability."
+        eyebrow={t('Operational readiness', 'Operasyonel hazırlık')}
+        title={t('Check company-portable memory-system coverage', 'Şirketler arası taşınabilir hafıza sistemi kapsamını kontrol edin')}
+        description={t('This page maps product requirements to current workspace proof: evidence substrate, temporal graph, typed context packets, bounded orchestration, private AI discipline, scenario support, and Docker portability.', 'Bu sayfa ürün gereksinimlerini mevcut çalışma alanı kanıtlarıyla eşler: kanıt altyapısı, zamansal grafik, türlenmiş bağlam paketleri, sınırlı orkestrasyon, özel yapay zekâ disiplini, senaryo desteği ve Docker taşınabilirliği.')}
         actions={
           <div className="inline-actions">
-            <Link className="secondary-button" to="/memory-filesystem">
-              Inspect memory FS
-            </Link>
-            <Link className="primary-button" to="/orchestration">
-              Inspect orchestration
-            </Link>
+            <Link className="secondary-button" to="/memory-filesystem">{t("Inspect memory FS", "Hafıza dosya sistemini incele")}</Link>
+            <Link className="primary-button" to="/orchestration">{t("Inspect orchestration", "İş akışını incele")}</Link>
           </div>
         }
       />
@@ -96,80 +94,80 @@ export function TargetReadinessPage() {
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
       <section className="metric-grid">
-        <MetricCard label="Target score" value={readiness ? formatPercent(readiness.target_score) : '—'} detail="Average of implemented, partial, and planned target areas." />
-        <MetricCard label="Implemented" value={readiness ? statusCount(readiness, 'implemented') : '—'} detail="Requirements reflected in the current product surface with proof routes." />
-        <MetricCard label="Partial" value={readiness ? statusCount(readiness, 'partial') : '—'} detail="Visible foundations exist, but stronger persistence/runtime/eval remains." />
-        <MetricCard label="Planned" value={readiness ? statusCount(readiness, 'planned') : '—'} detail="Known target work not yet ready to claim." />
-        <MetricCard label="Workspace proof" value={snapshotValue(snapshot, 'memory_object_count')} detail="Typed memory objects currently visible in this workspace." />
+        <MetricCard label={t('Target score', 'Hedef puanı')} value={readiness ? formatPercent(readiness.target_score) : '—'} detail={t('Average of implemented, partial, and planned target areas.', 'Tamamlanan, kısmi ve planlanan hedef alanlarının ortalaması.')} />
+        <MetricCard label={t('Implemented', 'Tamamlandı')} value={readiness ? statusCount(readiness, 'implemented') : '—'} detail={t('Requirements reflected in the current product surface with proof routes.', 'Kanıt yollarıyla mevcut ürün yüzeyine yansıyan gereksinimler.')} />
+        <MetricCard label={t('Partial', 'Kısmi')} value={readiness ? statusCount(readiness, 'partial') : '—'} detail={t('Visible foundations exist, but stronger persistence, runtime, and evaluation remain.', 'Görünür temeller var ancak daha güçlü kalıcılık, çalışma zamanı ve değerlendirme gerekiyor.')} />
+        <MetricCard label={t('Planned', 'Planlandı')} value={readiness ? statusCount(readiness, 'planned') : '—'} detail={t('Known target work not yet ready to claim.', 'Henüz tamamlandığı söylenemeyen bilinen hedef işleri.')} />
+        <MetricCard label={t('Workspace proof', 'Çalışma alanı kanıtı')} value={snapshotValue(snapshot, 'memory_object_count')} detail={t('Typed memory objects currently visible in this workspace.', 'Bu çalışma alanında görünen türlenmiş hafıza nesneleri.')} />
       </section>
 
-      <Panel title="Current workspace evidence snapshot" description="Fast proof that the readiness score is grounded in real workspace state, not static copy.">
+      <Panel title={t('Current workspace evidence snapshot', 'Mevcut çalışma alanı kanıt özeti')} description={t('Fast proof that the readiness score is grounded in real workspace state, not static copy.', 'Hazırlık puanının sabit metne değil gerçek çalışma alanı durumuna dayandığının hızlı kanıtı.')}>
         {readiness ? (
           <div className="detail-grid">
             <article className="panel-subtle detail-card">
-              <p className="section-label">Artifacts</p>
+              <p className="section-label">{t('Artifacts', 'Kaynaklar')}</p>
               <p className="table-primary">{snapshotValue(snapshot, 'visible_artifact_count')}</p>
-              <p className="muted-copy">Visible sources in the current permission scope.</p>
+              <p className="muted-copy">{t('Visible sources in the current permission scope.', 'Mevcut izin alanındaki görünür kaynaklar.')}</p>
             </article>
             <article className="panel-subtle detail-card">
-              <p className="section-label">Chunks</p>
+              <p className="section-label">{t('Chunks', 'Bölümler')}</p>
               <p className="table-primary">{snapshotValue(snapshot, 'indexed_chunk_count')}</p>
-              <p className="muted-copy">Retrieval leaves under the internal memory file-system.</p>
+              <p className="muted-copy">{t('Retrieval leaves under the internal memory file-system.', 'Dahili hafıza dosya sistemi altındaki erişim bölümleri.')}</p>
             </article>
             <article className="panel-subtle detail-card">
-              <p className="section-label">Stage runs</p>
+              <p className="section-label">{t('Stage runs', 'Aşama çalışmaları')}</p>
               <p className="table-primary">{snapshotValue(snapshot, 'stage_run_count')}</p>
-              <p className="muted-copy">Persisted bounded orchestration ledger rows.</p>
+              <p className="muted-copy">{t('Persisted bounded orchestration ledger rows.', 'Kaydedilen sınırlı orkestrasyon kayıtları.')}</p>
             </article>
             <article className="panel-subtle detail-card">
-              <p className="section-label">Stage packet traces</p>
+              <p className="section-label">{t('Stage packet traces', 'Aşama paketi izleri')}</p>
               <p className="table-primary">{snapshotValue(snapshot, 'stage_packet_trace_count')}</p>
-              <p className="muted-copy">Bounded local sub-agent packet executions.</p>
+              <p className="muted-copy">{t('Bounded local sub-agent packet executions.', 'Sınırlı yerel alt ajan paketi çalışmaları.')}</p>
             </article>
             <article className="panel-subtle detail-card">
-              <p className="section-label">Temporal families</p>
+              <p className="section-label">{t('Temporal families', 'Zamansal aileler')}</p>
               <p className="table-primary">{snapshotValue(snapshot, 'claim_family_count')}</p>
-              <p className="muted-copy">Persisted claim-family projection rows.</p>
+              <p className="muted-copy">{t('Persisted claim-family projection rows.', 'Kaydedilen ifade ailesi yansıtma kayıtları.')}</p>
             </article>
             <article className="panel-subtle detail-card">
-              <p className="section-label">Scenario runs</p>
+              <p className="section-label">{t('Scenario runs', 'Senaryo çalışmaları')}</p>
               <p className="table-primary">{snapshotValue(snapshot, 'scenario_run_count')}</p>
-              <p className="muted-copy">Stored scenario packets available for replay.</p>
+              <p className="muted-copy">{t('Stored scenario packets available for replay.', 'Yeniden oynatılabilir kayıtlı senaryo paketleri.')}</p>
             </article>
             <article className="panel-subtle detail-card">
-              <p className="section-label">LLM gateway</p>
+              <p className="section-label">{t('LLM gateway', 'LLM geçidi')}</p>
               <p className="table-primary">{snapshotValue(snapshot, 'local_llm_gateway_status')}</p>
-              <p className="muted-copy">Live readiness when local/private AI flags are enabled.</p>
+              <p className="muted-copy">{t('Live readiness when local/private AI flags are enabled.', 'Yerel/özel yapay zekâ etkinleştirildiğinde canlı hazırlık durumu.')}</p>
             </article>
             <article className="panel-subtle detail-card">
-              <p className="section-label">Signals</p>
+              <p className="section-label">{t('Signals', 'Sinyaller')}</p>
               <p className="table-primary">{snapshotValue(snapshot, 'active_signal_count')}</p>
-              <p className="muted-copy">Evidence-backed contradiction, drift, continuity, or next-action outputs.</p>
+              <p className="muted-copy">{t('Evidence-backed contradiction, drift, continuity, or next-action outputs.', 'Kanıt destekli çelişki, değişim, süreklilik veya sonraki eylem çıktıları.')}</p>
             </article>
           </div>
         ) : (
-          <EmptyState title={isLoading ? 'Loading readiness' : 'No readiness payload'} description="Izge is reading the current workspace proof state." />
+          <EmptyState title={isLoading ? t('Loading readiness', 'Hazırlık durumu yükleniyor') : t('No readiness payload', 'Hazırlık verisi yok')} description={t('Izge is reading the current workspace proof state.', 'İzge mevcut çalışma alanı kanıt durumunu okuyor.')} />
         )}
       </Panel>
 
-      <Panel title="Requirement coverage" description="Each area states the requirement, current product reflection, proof routes, and remaining work before we should call the target fully done.">
+      <Panel title={t('Requirement coverage', 'Gereksinim kapsamı')} description={t('Each area states the requirement, current product reflection, proof routes, and remaining work before the target is complete.', 'Her alan hedef tamamlanmadan önce gereksinimi, mevcut ürün karşılığını, kanıt yollarını ve kalan işi gösterir.')}>
         {readiness ? (
           <div className="stack-sm">
             {readiness.areas.map((area) => (
               <article key={area.area_key} className={areaCardClass(area.status)}>
                 <div className="timeline-card-head">
                   <div>
-                    <p className="section-label">{formatPercent(area.score)} complete</p>
+                    <p className="section-label">{formatPercent(area.score)} {t('complete', 'tamamlandı')}</p>
                     <p className="table-primary">{area.title}</p>
                   </div>
-                  <StatusBadge value={formatLabel(area.status)} />
+                  <StatusBadge value={area.status} />
                 </div>
                 <p className="muted-copy">{area.promise}</p>
-                <p className="evidence-block">Current product state: {area.demo_reflection}</p>
+                <p className="evidence-block">{t('Current product state', 'Mevcut ürün durumu')}: {area.demo_reflection}</p>
 
                 <div className="two-column-layout">
                   <div className="panel-subtle stack-sm">
-                    <p className="section-label">Proof signals</p>
+                    <p className="section-label">{t('Proof signals', 'Kanıt sinyalleri')}</p>
                     {area.proof_signals.map((signal) => (
                       <p key={`${area.area_key}-${signal.label}`} className="table-secondary">
                         {signal.label}: <strong>{signal.value}</strong>{signal.route ? ` · ${signal.route}` : ''}
@@ -177,7 +175,7 @@ export function TargetReadinessPage() {
                     ))}
                   </div>
                   <div className="panel-subtle stack-sm">
-                    <p className="section-label">Product surfaces</p>
+                    <p className="section-label">{t('Product surfaces', 'Ürün yüzeyleri')}</p>
                     {area.demo_surfaces.map((surface) => (
                       <p key={`${area.area_key}-${surface}`} className="table-secondary">{surface}</p>
                     ))}
@@ -185,7 +183,7 @@ export function TargetReadinessPage() {
                 </div>
 
                 <div className="panel-subtle stack-sm">
-                  <p className="section-label">Remaining work</p>
+                  <p className="section-label">{t('Remaining work', 'Kalan iş')}</p>
                   {area.remaining_work.map((item) => <p key={item} className="muted-copy">{item}</p>)}
                 </div>
               </article>
@@ -195,7 +193,7 @@ export function TargetReadinessPage() {
       </Panel>
 
       <div className="two-column-layout">
-        <Panel title="Closest gaps" description="The lowest-scored or still-active gaps that define the next implementation passes.">
+        <Panel title={t('Closest gaps', 'En yakın eksikler')} description={t('The lowest-scored or still-active gaps that define the next implementation passes.', 'Sonraki uygulama adımlarını belirleyen düşük puanlı veya hâlâ etkin eksikler.')}>
           {gaps.length > 0 ? (
             <div className="stack-sm">
               {gaps.map((area) => (
@@ -209,21 +207,21 @@ export function TargetReadinessPage() {
               ))}
             </div>
           ) : (
-            <EmptyState title="No gaps ranked yet" description="Readiness gaps appear after the backend returns target areas." />
+            <EmptyState title={t('No gaps ranked yet', 'Henüz sıralanmış eksik yok')} description={t('Readiness gaps appear after the system returns target areas.', 'Sistem hedef alanlarını döndürdüğünde hazırlık eksikleri görünür.')} />
           )}
         </Panel>
 
-        <Panel title="Next best passes" description="Implementation order that preserves the evidence-first architecture instead of jumping into agent theater.">
+        <Panel title={t('Next best passes', 'Sonraki en iyi adımlar')} description={t('Implementation order that preserves the evidence-first architecture.', 'Kanıt öncelikli mimariyi koruyan uygulama sırası.')}>
           {readiness ? (
             <div className="stack-sm">
               {readiness.next_best_passes.map((item, index) => (
                 <article key={item} className="panel-subtle stack-sm">
-                  <p className="section-label">Pass {index + 1}</p>
+                  <p className="section-label">{t('Pass', 'Adım')} {index + 1}</p>
                   <p className="muted-copy">{item}</p>
                 </article>
               ))}
-              <p className="table-secondary">Gate: {readiness.evaluator_gate.name}</p>
-              <p className="evidence-block">Updated {formatDateTime(readiness.generated_at)} · schema {readiness.schema_version}</p>
+              <p className="table-secondary">{t('Gate', 'Kontrol')}: {readiness.evaluator_gate.name}</p>
+              <p className="evidence-block">{t('Updated', 'Güncellendi')} {formatDateTime(readiness.generated_at)} · {t('schema', 'şema')} {readiness.schema_version}</p>
             </div>
           ) : null}
         </Panel>

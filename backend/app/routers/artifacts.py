@@ -238,6 +238,9 @@ def update_artifact_permissions(
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
     if artifact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
+    require_artifact_access(db, artifact, current_user)
+    if artifact.source_type == "team_chat_attachment":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Sohbet ekinin erişimi konuşma katılımcıları tarafından belirlenir.")
     artifact.visibility_scope = payload.visibility_scope
     db.commit()
     set_artifact_permissions(db, artifact=artifact, actor=current_user, permitted_user_ids=payload.permitted_user_ids)
@@ -264,6 +267,7 @@ def update_artifact_metadata(
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
     if artifact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
+    require_artifact_access(db, artifact, current_user)
     old_title = artifact.title
     artifact.title = payload.title
     db.commit()
@@ -290,6 +294,7 @@ def update_artifact_review_status(
     artifact = db.scalar(select(Artifact).where(Artifact.artifact_id == artifact_id, Artifact.workspace_id == current_user.workspace_id))
     if artifact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaynak bulunamadı.")
+    require_artifact_access(db, artifact, current_user)
     artifact.review_status = payload.review_status
     artifact.review_notes = payload.review_notes
     artifact.reviewed_by = current_user.user_id

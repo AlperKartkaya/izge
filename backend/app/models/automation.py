@@ -18,5 +18,6 @@ class Automation(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(120))
     prompt: Mapped[str] = mapped_column(Text)
     schedule_time: Mapped[str] = mapped_column(String(5))
+    response_language: Mapped[str] = mapped_column(String(2), default="tr", server_default="tr", nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime)
