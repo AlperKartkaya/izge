@@ -12,6 +12,7 @@ from app.dependencies import get_current_user
 from app.models import Artifact, CompanyChatMessage, User
 from app.schemas.api import TeamChatMessageCreate, TeamChatMessageRead, TeamChatThreadRead, TeamChatTypingCreate, TeamChatTypingRead, TeamChatTypingUserRead
 from app.services.audit import log_event
+from app.services.notifications import notify_team_chat_recipients
 from app.services.permissions import artifact_is_visible_to_user
 
 router = APIRouter(prefix="/team-chat", tags=["team-chat"])
@@ -128,6 +129,8 @@ def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, Use
         if visible_ids != source_ids:
             body = "Bu yanıtın dayandığı kaynaklara erişiminiz değiştiği için içerik gizlendi."
             metadata["source_refs"] = []
+            metadata["follow_ups"] = []
+            metadata["thread_title"] = "İzge ile çalışma"
             metadata["source_access_changed"] = True
     return TeamChatMessageRead(
         message_id=message.message_id,
@@ -282,4 +285,14 @@ def create_team_chat_message(
         target_id=message.message_id,
         event_metadata={"channel": thread_id, "thread_id": thread_id, "thread_title": thread_title, "thread_kind": payload.thread_kind, "body_length": len(body)},
     )
+    notify_team_chat_recipients(
+        db,
+        author=current_user,
+        message_id=message.message_id,
+        body=body,
+        thread_id=thread_id,
+        thread_title=thread_title,
+        participant_user_ids=participant_user_ids,
+    )
+    db.commit()
     return _message_read_model(message, {current_user.user_id: current_user}, db, current_user)

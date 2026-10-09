@@ -113,3 +113,12 @@ Recommended employee copy:
 - Evidence opens in a centered native modal, not a new tab: roughly 620×440px maximum, responsive on small screens, scrollable content, top-right close button, Escape and focus return. Render text safely and PDFs as authenticated blob previews; permission errors remain visible and unsupported binary is never rendered as text. Browsers without a native PDF viewer show a clearly labeled 500-character extracted-text preview and a download link rather than a blank frame.
 - The memory source directory has a bounded scroll region. Daily evaluation keeps its complete answer and source quotes available without expanding an unbounded card stack.
 - Website content, backend behavior and administration features remain outside this UI change. Existing admin source-preview links also reuse the same modal; downloads remain unchanged.
+
+## Demo communication and proactive work (2026-10-09)
+
+- Team Chat lists conversations that contain messages plus explicit Şirket geneli/İzge threads; the colleague directory appears only while starting a new direct or group conversation.
+- `@izge` is visually distinct in the composer and sent messages. Selecting its accessible autocomplete inserts text but does not send. A message containing the mention invokes İzge in the same thread.
+- Agent answers render only safe text structure (paragraphs, lists and bold), turn validated numeric citations into source-title preview chips, show compact evidence context cards, and offer follow-up choices that fill/focus the composer with `@izge` for editing.
+- Notifications combine unread team messages and proactive İzge findings. Opening one marks it read and routes to its exact Team Chat or İzge thread; the navigation badge polls the persisted unread count.
+- Artifact-review findings open as İzge-started conversations: the internal review prompt is not presented as a user message. Query history is thread-scoped instead of mixing independent conversations.
+- Automations expose real persisted daily İzge jobs with a minimal create/pause/run flow. Scenario templates only prefill the form. Mailbox control is visibly disabled until a connector exists; the UI never simulates external mailbox access.

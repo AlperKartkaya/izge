@@ -20,6 +20,8 @@ import { TargetReadinessPage } from './pages/TargetReadinessPage'
 import { TeamChatPage } from './pages/TeamChatPage'
 import { MemoryPage } from './pages/MemoryPage'
 import { TasksPage } from './pages/TasksPage'
+import { AutomationsPage } from './pages/AutomationsPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -68,6 +70,8 @@ function App() {
           />
           <Route path="team-chat" element={<TeamChatPage />} />
           <Route path="tasks" element={<TasksPage />} />
+          <Route path="automations" element={<AutomationsPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
           <Route path="query" element={<QueryPage />} />
           <Route path="query/:queryRunId" element={<AdminOnlyRoute><QueryResultPage /></AdminOnlyRoute>} />
           <Route path="signals/:signalId" element={<SignalDetailPage />} />

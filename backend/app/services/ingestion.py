@@ -28,7 +28,7 @@ from app.models import (
 from app.services import LocalLLMError, run_structured_local_prompt
 from app.services.audit import log_event
 from app.services.storage import resolve_artifact_source_path
-from app.services.turkish_text import matching_tokens, normalize_for_match, word_tokens
+from app.services.turkish_text import normalize_for_match, relation_token_overlap, word_tokens
 
 MEMORY_MODELS = {
     "decision": (Decision, "decision_id"),
@@ -87,6 +87,21 @@ STOPWORDS = {
     "ve",
 }
 MEMORY_TYPE_TERMS = {"decision", "assumption", "constraint", "outcome", "commitment", "decisions", "assumptions", "constraints", "outcomes", "commitments", "karar", "kararlar", "varsayım", "varsayımlar", "kısıt", "kısıtlar", "sonuç", "sonuçlar", "taahhüt", "taahhütler"}
+RELATION_NOISE_TERMS = {
+    "henüz",
+    "ocak",
+    "şubat",
+    "mart",
+    "nisan",
+    "mayıs",
+    "haziran",
+    "temmuz",
+    "ağustos",
+    "eylül",
+    "ekim",
+    "kasım",
+    "aralık",
+}
 
 DECISION_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
@@ -370,9 +385,11 @@ def _topic_key(value: str) -> str:
 
 
 def _token_overlap(left: str, right: str) -> int:
-    left_tokens = matching_tokens(" ".join(_topic_tokens(left)))
-    right_tokens = matching_tokens(" ".join(_topic_tokens(right)))
-    return len(left_tokens & right_tokens)
+    return relation_token_overlap(
+        " ".join(_topic_tokens(left)),
+        " ".join(_topic_tokens(right)),
+        ignored_terms=RELATION_NOISE_TERMS,
+    )
 
 
 def _clean_sentence_for_extraction(text: str) -> str:
@@ -949,7 +966,7 @@ def _update_assumption_drift(db: Session, memories: list[PersistedMemory], artif
             for memory in current_artifact_memories
             if memory.memory_type in {"outcome", "decision", "constraint", "commitment"}
             and memory.event_timestamp >= assumption_memory.event_timestamp
-            and _token_overlap(memory.title_or_label, assumption_memory.title_or_label) >= 1
+            and _token_overlap(memory.title_or_label, assumption_memory.title_or_label) >= 2
         ]
         if not related_signals:
             continue
@@ -958,7 +975,15 @@ def _update_assumption_drift(db: Session, memories: list[PersistedMemory], artif
         if any(pattern.search(combined_text) for pattern in NEGATIVE_OUTCOME_PATTERNS):
             assumption_row.status = "stale"
             assumption_row.validity_notes = f"Daha yeni kanıt bu varsayımı zayıflattı: {strongest_signal.title_or_label}"
-        if any(term in combined_text for term in ("reintroduce", "revert", "instead", "launch in q2", "delay to q3", "yeniden", "yerine", "vazgeç", "q2'de yayın", "q3'e ertele")):
+        reversal_text = " ".join(
+            normalize_for_match(signal.normalized_text)
+            for signal in related_signals
+            if signal.memory_type == "decision"
+        )
+        if any(
+            term in reversal_text
+            for term in ("reintroduce", "revert", "instead", "launch in q2", "delay to q3", "yeniden yayın", "yerine", "vazgeç", "q2'de yayın", "q3'e ertele")
+        ):
             assumption_row.status = "reversed"
             assumption_row.validity_notes = f"Daha yeni karar çalışma dayanağını değiştirdi: {strongest_signal.title_or_label}"
         for signal in related_signals:

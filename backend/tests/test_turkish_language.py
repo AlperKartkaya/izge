@@ -1,7 +1,7 @@
 from datetime import datetime
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from sqlalchemy import create_engine, event, func, select, text
 from sqlalchemy.orm import Session
@@ -19,11 +19,12 @@ from app.services.ingestion import (
     _infer_memory_type,
     _is_contradiction_relationship,
     _is_supersede_relationship,
+    _update_assumption_drift,
     _topic_tokens,
     run_ingestion,
 )
-from app.services.turkish_text import status_label
-from app.services.querying import _classify_query_with_keywords, _query_terms, _text_overlap
+from app.services.turkish_text import relation_token_overlap, status_label
+from app.services.querying import MemoryRecord, _classify_query_with_keywords, _memory_overlap_score, _query_terms, _text_overlap
 
 
 class TurkishLanguageTests(unittest.TestCase):
@@ -81,6 +82,136 @@ class TurkishLanguageTests(unittest.TestCase):
         )
         self.assertTrue(_is_supersede_relationship(earlier, later))
         self.assertTrue(_is_contradiction_relationship(earlier, later))
+
+    def test_unrelated_calendar_and_memory_type_words_do_not_create_continuity(self) -> None:
+        common = {
+            "confidence_score": 0.9,
+            "event_timestamp": datetime(2026, 10, 7),
+            "source_artifact_review_status": "reviewed",
+            "source_chunk_id": None,
+            "evidence_span": None,
+            "status": None,
+        }
+        staging = MemoryRecord(
+            **common,
+            memory_type="outcome",
+            memory_id="staging",
+            title_or_label="Ece erişim talebini 7 Ekim'de iletti; operasyon onayı henüz yoktur",
+            normalized_text="Sonuç: Ece erişim talebini 7 Ekim'de iletti; operasyon onayı henüz yoktur.",
+            source_artifact_id="atlas-staging",
+            topic_key="ece erişim talebini ekim",
+        )
+        tender = MemoryRecord(
+            **common,
+            memory_type="outcome",
+            memory_id="tender",
+            title_or_label="Paket, 6 Ekim tarihli şartnamedeki beş kaleme göre eksiksiz görünmektedir",
+            normalized_text="Sonuç: Paket, 6 Ekim tarihli şartnamedeki beş kaleme göre eksiksiz görünmektedir.",
+            source_artifact_id="koru-tender",
+            topic_key="paket ekim tarihli şartname",
+        )
+        genuine = MemoryRecord(
+            **common,
+            memory_type="outcome",
+            memory_id="genuine",
+            title_or_label="Atlas staging erişim talebi operasyon onayı bekliyor",
+            normalized_text="Sonuç: Atlas staging erişim talebi operasyon onayı bekliyor.",
+            source_artifact_id="atlas-follow-up",
+            topic_key="atlas staging erişim",
+        )
+
+        self.assertEqual((0.0, []), _memory_overlap_score(staging, tender))
+        self.assertGreaterEqual(_memory_overlap_score(staging, genuine)[0], 4.0)
+
+        atlas_invoice = MemoryRecord(
+            **common,
+            memory_type="outcome",
+            memory_id="invoice",
+            title_or_label="Atlas müşteri faturası kesildi",
+            normalized_text="Sonuç: Atlas müşteri faturası kesildi; müşterinin faturası kesildi.",
+            source_artifact_id="atlas-invoice",
+            topic_key="atlas müşteri faturası",
+        )
+        koru_server = MemoryRecord(
+            **common,
+            memory_type="outcome",
+            memory_id="server",
+            title_or_label="Koru müşteri sunucusu ayrıldı",
+            normalized_text="Sonuç: Koru müşteri sunucusu ayrıldı; müşterinin sunucusu ayrıldı.",
+            source_artifact_id="koru-server",
+            topic_key="koru müşteri sunucusu",
+        )
+        self.assertEqual(1, relation_token_overlap("müşteri", "müşteri"))
+        self.assertEqual((0.0, []), _memory_overlap_score(atlas_invoice, koru_server))
+
+    def test_relation_overlap_deduplicates_inflection_families(self) -> None:
+        self.assertEqual(1, relation_token_overlap("müşteri müşterinin", "müşteri müşterinin"))
+        self.assertEqual(1, relation_token_overlap(
+            "atlas müşteri faturası müşterinin faturası",
+            "koru müşteri sunucusu müşterinin sunucusu",
+        ))
+        self.assertEqual(2, relation_token_overlap("müşteri portalı müşterinin portalı", "müşteri portalı"))
+
+    def test_assumption_drift_requires_shared_topic_and_explicit_later_decision(self) -> None:
+        db = Mock(spec=Session)
+        assumption_row = SimpleNamespace(status="active", validity_notes=None)
+        db.scalar.return_value = assumption_row
+        assumption = PersistedMemory(
+            memory_type="assumption",
+            memory_id="assumption",
+            node_id="assumption-node",
+            title_or_label="Atlas müşteri portalı müşterinin Q3 planında yayınlanacak",
+            normalized_text="Varsayım: Atlas müşteri portalı Q3'te yayınlanacak.",
+            source_artifact_id="source",
+            source_chunk_id=None,
+            event_timestamp=datetime(2026, 10, 1),
+            confidence_score=0.8,
+            topic_key="atlas müşteri portalı yayın",
+        )
+        unrelated_restart = PersistedMemory(
+            memory_type="outcome",
+            memory_id="unrelated-outcome",
+            node_id="unrelated-node",
+            title_or_label="Operasyon onayı henüz yoktur",
+            normalized_text="Servis yeniden başlatıldı; operasyon onayı henüz yoktur.",
+            source_artifact_id="update",
+            source_chunk_id=None,
+            event_timestamp=datetime(2026, 10, 2),
+            confidence_score=0.8,
+            topic_key="operasyon onayı",
+        )
+        genuine_change = PersistedMemory(
+            memory_type="decision",
+            memory_id="later-decision",
+            node_id="decision-node",
+            title_or_label="Atlas müşteri portalı Q2'de yeniden yayınlanacak",
+            normalized_text="Karar: Atlas müşteri portalı Q2'de yeniden yayınlanacak.",
+            source_artifact_id="update",
+            source_chunk_id=None,
+            event_timestamp=datetime(2026, 10, 2),
+            confidence_score=0.8,
+            topic_key="atlas müşteri portalı yayın",
+        )
+        one_word_change = PersistedMemory(
+            memory_type="decision",
+            memory_id="unrelated-decision",
+            node_id="unrelated-decision-node",
+            title_or_label="Müşteri yerine müşterinin sunucu kapasitesi artırılacak",
+            normalized_text="Karar: Müşteri yerine sunucu kapasitesi artırılacak.",
+            source_artifact_id="update",
+            source_chunk_id=None,
+            event_timestamp=datetime(2026, 10, 2),
+            confidence_score=0.8,
+            topic_key="sunucu kapasitesi",
+        )
+
+        with patch("app.services.ingestion._create_edge_if_missing"):
+            _update_assumption_drift(db, [assumption, unrelated_restart], "update", "workspace")
+            self.assertEqual("active", assumption_row.status)
+            _update_assumption_drift(db, [assumption, one_word_change], "update", "workspace")
+            self.assertEqual("active", assumption_row.status)
+            _update_assumption_drift(db, [assumption, genuine_change], "update", "workspace")
+            self.assertEqual("reversed", assumption_row.status)
 
     def test_demo_seed_is_opt_in_and_default_model_is_qwen_9b(self) -> None:
         settings = Settings(_env_file=None)

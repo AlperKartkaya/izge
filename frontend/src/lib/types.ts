@@ -85,7 +85,7 @@ export interface AgentRunStageRead {
 
 export interface AgentRunRead {
   run_id: string
-  kind: 'ask' | 'evening_review'
+  kind: 'ask' | 'evening_review' | 'artifact_review'
   thread_id: string
   thread_title: string
   thread_kind: 'channel' | 'direct' | 'group'
@@ -95,7 +95,33 @@ export interface AgentRunRead {
   answer: string | null
   error: string | null
   sources: AgentSourceRead[]
+  follow_ups: string[]
   stages: AgentRunStageRead[]
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationRead {
+  notification_id: string
+  kind: 'message' | 'agent'
+  title: string
+  body: string
+  thread_id: string | null
+  run_id: string | null
+  message_id: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export interface AutomationRead {
+  automation_id: string
+  title: string
+  prompt: string
+  schedule_time: string
+  timezone: 'Europe/Istanbul'
+  enabled: boolean
+  last_run_at: string | null
+  next_run_at: string | null
   created_at: string
   updated_at: string
 }

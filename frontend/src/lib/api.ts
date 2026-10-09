@@ -40,6 +40,8 @@ import type {
   WorkTaskStatus,
   AgentRunCreated,
   AgentRunRead,
+  AutomationRead,
+  NotificationRead,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() || '/api'
@@ -323,8 +325,9 @@ export const api = {
     })
   },
 
-  listAgentRuns(token: string) {
-    return request<{ items: AgentRunRead[] }>('/work/runs', { token }).then((response) => response.items)
+  listAgentRuns(token: string, threadId?: string) {
+    const query = threadId ? `?thread_id=${encodeURIComponent(threadId)}` : ''
+    return request<{ items: AgentRunRead[] }>(`/work/runs${query}`, { token }).then((response) => response.items)
   },
 
   getAgentRun(token: string, runId: string) {
@@ -340,6 +343,34 @@ export const api = {
 
   agentRunEventsUrl(runId: string) {
     return `${API_BASE}/work/runs/${encodeURIComponent(runId)}/events`
+  },
+
+  listNotifications(token: string, unreadOnly = false) {
+    return request<{ items: NotificationRead[]; unread_count: number }>(`/notifications?limit=50&unread_only=${unreadOnly}`, { token })
+  },
+
+  markNotificationRead(token: string, notificationId: string) {
+    return request<NotificationRead>(`/notifications/${notificationId}/read`, { method: 'PATCH', token })
+  },
+
+  listAutomations(token: string) {
+    return request<{ items: AutomationRead[] }>('/automations', { token }).then((response) => response.items)
+  },
+
+  createAutomation(token: string, payload: { title: string; prompt: string; schedule_time: string; enabled?: boolean }) {
+    return request<AutomationRead>('/automations', { method: 'POST', token, body: JSON.stringify(payload) })
+  },
+
+  updateAutomation(token: string, automationId: string, payload: Partial<Pick<AutomationRead, 'title' | 'prompt' | 'schedule_time' | 'enabled'>>) {
+    return request<AutomationRead>(`/automations/${automationId}`, { method: 'PATCH', token, body: JSON.stringify(payload) })
+  },
+
+  runAutomation(token: string, automationId: string) {
+    return request<AgentRunCreated>(`/automations/${automationId}/run`, { method: 'POST', token })
+  },
+
+  deleteAutomation(token: string, automationId: string) {
+    return request<void>(`/automations/${automationId}`, { method: 'DELETE', token })
   },
 
   getGraphSummary(token: string) {

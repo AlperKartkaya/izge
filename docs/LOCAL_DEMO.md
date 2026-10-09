@@ -14,6 +14,17 @@ kurulu `qwen3.5:9b` modelini kullanır. Ücretli sunucu/domain kurulmadı.
 
 ## Sunum
 
+Güncel sunum şirketi **Pusula Yazılım ve IT Danışmanlık**. Altı senaryonun
+sırası, beklenen bulguları ve canlı sorular [DEMO_FLOW.md](DEMO_FLOW.md)
+dosyasında. Deniz hesabı `deniz@pusula.demo`, Ece hesabı `ece@pusula.demo`;
+önceki Deniz/Ece parolaları korunmuştur.
+
+Başlangıçta 10 kaynak, 26 çalışan mesajı, 4 iş, 3 günlük otomasyon ve gerçek
+yerel modelin mesai başlamadan ürettiği okunmamış talep bildirimi bulunur.
+`docs/demo/live-upload/koru-ihale-zeyilname-2.md` **önceden yüklenmez**;
+sunum sırasında Hafıza'dan yüklenerek eksik ihale belgesi bildirimi tetiklenir.
+Prova için kullanılan ayrı veritabanı ve canlı yükleme kayıtları sunuma taşınmaz.
+
 Çalışan hesapları ve parolaları yalnız bu makinedeki
 `~/.local/share/izge/demo-credentials.json` dosyasındadır. Parolaları repoya
 veya ekran görüntüsüne koymayın. Çalışan hesabıyla giriş yapın:
@@ -78,9 +89,10 @@ cd backend
 .venv/bin/python -m unittest discover -s tests -v
 .venv/bin/python -m manual_eval.run_isolated_seed_eval
 .venv/bin/python -m manual_eval.run_isolated_synthetic_company_workflow
-# Gerçek model + mevcut çalışan demo ortamı; kalıcı sunum kayıtları oluşturur:
-IZGE_EVAL_ADMIN_CREDENTIALS_PATH="$HOME/.local/share/izge/demo-admin-credentials.json" \
-  .venv/bin/python -m manual_eval.run_turkish_colleague_smoke
+# Pusula canlı dosya testini yalnız ayrı bir QA kopyasında çalıştırın:
+IZGE_DEMO_QA_BASE_URL=http://127.0.0.1:18080 \
+IZGE_DEMO_QA_CREDENTIALS_PATH="$HOME/.local/share/izge/pusula-qa-credentials.json" \
+  .venv/bin/python -m manual_eval.run_pusula_demo_smoke
 ```
 
 Frontend için `cd frontend && npm test && npm run lint && npm run build` çalışır
@@ -89,7 +101,7 @@ Frontend için `cd frontend && npm test && npm run lint && npm run build` çalı
 Otomatik test/build geçmesi gerçek modelin veya deployment'ın çalıştığını
 tek başına kanıtlamaz; gerçek HTTP/Ollama smoke raporu ayrıca tutulur.
 
-### Bu makinede doğrulananlar — 9 Ekim 2026
+### İlk MVP provasında doğrulananlar — önceki veri seti, 9 Ekim 2026
 
 - 27 backend testi; 308 izole kaynak/izin kontrolü ve 67 şirket iş akışı
   kontrolü geçti. Frontend lint, build ve Türkçe saat regresyon testi geçti.
@@ -150,3 +162,45 @@ incelenmelidir; model yanıtı şirket adına kesin karar değildir.
 Sınır: bu kontrol tarayıcısında yerel PDF görüntüleyicisi yoktur; native PDF
 sayfa çizimi burada doğrulanamadı. Desteksiz tarayıcılar için metin/indirme
 alternatifi bulunur. Website kaynakları ve backend iş davranışı değiştirilmedi.
+
+### Güncel Pusula sunum doğrulaması — 9 Ekim 2026
+
+- 53 backend ve 9 frontend regresyon testi geçti; frontend ESLint,
+  TypeScript/build ve değişen servis/router hedeflerinin Pyright kontrolü temiz.
+  Eski Türkçe test yardımcılarının tip uyarıları ve kapsam öncesi tüm-backend
+  tip borcu bu sonuçtan ayrı tutulur.
+- Ayrı QA kopyasında gerçek `qwen3.5:9b` ile altı senaryo, kaynaklar/takip
+  soruları, canlı zeyilname bildirimi, bildirimin konuşmada sürdürülmesi ve
+  ilgisiz dosyada bildirim üretilmemesi dahil 11 kontrol geçti.
+  Rapor: `~/.local/share/izge/pusula-demo-smoke-report.json`.
+- Gerçek Team Chat `@izge` yanıtı aynı grupta göründü; çalışan mesajı ve
+  agent yanıtı diğer katılımcıya bildirim gönderdi. Takip sorusu gönderilmeden
+  `@izge` taslağına yerleşti. Otomasyon oluşturma, duraklatma/kalıcılık ve
+  gerçek modelle manuel çalıştırma ayrıca kontrol edildi.
+- Son incelemede ay/generic kelime ve aynı Türkçe kelimenin çekim tekrarından
+  doğan yanlış kaynak ilişkileri düzeltildi. Mevcut 10 kaynağın türetilmiş
+  hafıza/sinyalleri yeniden hesaplandı; kaynak kimlikleri, çalışan mesajları
+  ve gerçek **07:26** okunmamış başlangıç bildirimi korunmuştur.
+- Son image ile gerçek günlük değerlendirme, bağlantı havuzunu kesin neden
+  değil doğrulanmamış hipotez olarak anlattı; kaynaklar, takip soruları ve yeni
+  okunmamış bildirim üretildi. Canlı KVKK zeyilnamesi hâlâ yüklenmemiştir.
+  Rapor: `~/.local/share/izge/pusula-presentation-review-report.json`.
+- Coolify yayını sonrası backend, colleague, frontend ve website container'ları
+  doğru image ile healthy; üç yerel HTTP adresi 200 döndü. Website kaynakları
+  değişmedi ve sunulan index'in SHA-256 değeri kaynak dosyayla eşleşti.
+
+- Son model provasında onay bekleyen 36.000 TL’nin özet içinde kesinleşmiş
+  alacak diye etiketlenmesi reddedildi; yanıt talimatı ve gerçek-LLM test
+  koşulu güçlendirildi. Son image ile yeni yanıt, 18 saat × 2.000 TL
+  potansiyel ücret/onay ayrımını ve doğrulanmamış kök neden ayrımını korudu.
+  Kaynaklar ve takip soruları üretildi; bu prova sunuma mesaj eklemedi.
+  Rapor: `~/.local/share/izge/pusula-final-source-model-report.json`.
+- Son tarayıcı turunda 10 kontrol daha geçti: masaüstü/mobil sabit sohbet
+  sayfası, seçilen `@izge` vurgusu, polling sırasında okuma konumunun korunması,
+  gerçek günlük kartları/kalın metin/kaynak çipleri, ortalanmış kaynak önizlemesi
+  ve Hafıza kaynak listesinin ayrı kayması. Mesaj gönderilmedi, başlangıç
+  bildirimleri okunmadı. Rapor: `~/.local/share/izge/pusula-delivery-ui-checks.json`.
+
+Yedek konumu: `~/.local/share/izge/pusula-final-derived-backup-path`.
+Bunlar kaynaklı demo/MVP kanıtıdır; hatasız LLM, 40 sayfalık her şartnamenin
+eksiksiz taranması, yüksek eşzamanlı yük veya kesintisiz 7/24 sunucu garantisi değildir.

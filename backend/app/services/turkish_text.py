@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 
 
 _TURKISH_CASE_TRANSLATION = str.maketrans({"I": "ı", "İ": "i"})
@@ -60,6 +61,36 @@ def matching_tokens(value: str) -> set[str]:
                     break
         frontier = next_frontier
     return variants
+
+
+def relation_token_overlap(left: str, right: str, *, ignored_terms: Collection[str] = ()) -> int:
+    """Count each shared inflection family once, including repeated surface forms."""
+    ignored = set(ignored_terms)
+
+    def families(value: str) -> list[set[str]]:
+        groups: list[set[str]] = []
+        for word in dict.fromkeys(word_tokens(value)):
+            if word in ignored or word.isdigit():
+                continue
+            variants = matching_tokens(word)
+            separate = []
+            for group in groups:
+                if variants & group:
+                    variants |= group
+                else:
+                    separate.append(group)
+            groups = separate + [variants]
+        return groups
+
+    unmatched_right = families(right)
+    overlap = 0
+    for left_variants in families(left):
+        for index, right_variants in enumerate(unmatched_right):
+            if left_variants & right_variants:
+                overlap += 1
+                unmatched_right.pop(index)
+                break
+    return overlap
 
 
 def status_label(value: str) -> str:

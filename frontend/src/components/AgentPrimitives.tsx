@@ -1,6 +1,8 @@
-import { useEffect, useState, type FormEventHandler, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEventHandler, type ReactNode, type RefObject } from 'react'
 import { Link } from 'react-router-dom'
-import type { AgentRunStageRead, WorkTaskRead, WorkTaskStatus } from '../lib/types'
+import { insertIzgeMention, tokenizeAgentText } from '../lib/agentText'
+import type { AgentRunStageRead, AgentSourceRead, WorkTaskRead, WorkTaskStatus } from '../lib/types'
+import { SourcePreviewButton } from './SourcePreviewButton'
 
 /* Adapted from beautiful-ui primitives at 44a274e598395ab61e7c96c26fda2758780253b7.
  * Copyright (c) 2026 Shane Levine, MIT License. Animations are driven by real API state. */
@@ -33,7 +35,7 @@ export function ThinkingState({ stages, status }: { stages: AgentRunStageRead[];
     <div className="agent-thinking">
       <button type="button" className="agent-thinking-toggle" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
         <span aria-hidden="true">✦</span>
-        <span className={working ? 'agent-shimmer' : ''}>{working ? 'İzge çalışıyor' : status === 'completed' ? 'Çalışma tamamlandı' : 'Çalışma başarısız'}</span>
+        <span className={working ? 'agent-shimmer' : ''}>{working ? 'İzge düşünüyor' : status === 'completed' ? 'Çalışma tamamlandı' : 'Çalışma başarısız'}</span>
         <span aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
       </button>
       {expanded ? (
@@ -51,7 +53,49 @@ export function ThinkingState({ stages, status }: { stages: AgentRunStageRead[];
 }
 
 export function StreamingText({ children, active }: { children: string; active: boolean }) {
-  return <p className="agent-streaming-text">{children}{active ? <span className="agent-streaming-cursor" aria-label="Yanıt yazılıyor" /> : null}</p>
+  return <div className="agent-streaming-text"><AgentText text={children} />{active ? <span className="agent-streaming-cursor" aria-label="Yanıt yazılıyor" /> : null}</div>
+}
+
+function InlineText({ text, sources = [] }: { text: string; sources?: AgentSourceRead[] }) {
+  return tokenizeAgentText(text, sources.length).map((token, index) => {
+    if (token.kind === 'bold') return <strong key={index}><InlineText text={token.value} sources={sources} /></strong>
+    if (token.kind === 'mention') return <mark className="izge-mention" key={index}>{token.value}</mark>
+    if (token.kind === 'source') {
+      const source = sources[token.sourceIndex]
+      return source ? <SourcePreviewButton key={index} artifactId={source.artifact_id} title={source.title} className="agent-inline-source">{source.title}</SourcePreviewButton> : token.value
+    }
+    return token.value
+  })
+}
+
+function ComposerText({ text }: { text: string }) {
+  return text.split(/(@[iİı]zge\b)/giu).map((part, index) => /^@[iİı]zge$/iu.test(part) ? <mark className="izge-mention" key={index}>{part}</mark> : part)
+}
+
+export function AgentText({ text, sources = [] }: { text: string; sources?: AgentSourceRead[] }) {
+  const blocks: ReactNode[] = []
+  let list: string[] = []
+  const flushList = () => {
+    if (!list.length) return
+    blocks.push(<ul key={`list-${blocks.length}`}>{list.map((line, index) => <li key={index}><InlineText text={line} sources={sources} /></li>)}</ul>)
+    list = []
+  }
+  for (const line of text.split('\n')) {
+    const item = line.match(/^\s*[-*]\s+(.+)$/)
+    if (item) { list.push(item[1]); continue }
+    flushList()
+    if (line.trim()) blocks.push(<p key={`p-${blocks.length}`}><InlineText text={line} sources={sources} /></p>)
+  }
+  flushList()
+  return <>{blocks}</>
+}
+
+export function AgentAnswer({ text, sources = [], followUps = [], onFollowUp, active = false }: { text: string; sources?: AgentSourceRead[]; followUps?: string[]; onFollowUp?: (question: string) => void; active?: boolean }) {
+  return <div className="agent-answer">
+    <div className="agent-answer-copy"><AgentText text={text} sources={sources} />{active ? <span className="agent-streaming-cursor" aria-label="Yanıt yazılıyor" /> : null}</div>
+    {sources.length ? <div className="agent-context-cards" aria-label="Yanıtta kullanılan kaynaklar">{sources.map((source) => <article className="agent-context-card" key={`${source.artifact_id}-${source.chunk_id ?? ''}`}><strong>{source.title}</strong><p>{source.quote}</p><SourcePreviewButton artifactId={source.artifact_id} title={source.title} className="review-context-chip">Kaynağı aç</SourcePreviewButton></article>)}</div> : null}
+    {followUps.length && onFollowUp ? <div className="agent-follow-ups"><strong>Devam etmek ister misiniz?</strong>{followUps.map((question) => <button type="button" key={question} onClick={() => onFollowUp(question)}>{question}</button>)}</div> : null}
+  </div>
 }
 
 const taskStatusLabel: Record<WorkTaskStatus, string> = {
@@ -84,7 +128,7 @@ export function TaskRows({ tasks, onStatusChange }: { tasks: WorkTaskRead[]; onS
   )
 }
 
-export function ChatComposer({ value, onChange, onSubmit, disabled, label = 'İzge’ye mesaj gönder', placeholder = 'Bir karar, dosya, görev veya risk hakkında sor…', context = 'Şirket hafızası', leading }: {
+export function ChatComposer({ value, onChange, onSubmit, disabled, label = 'İzge’ye mesaj gönder', placeholder = 'Bir karar, dosya, görev veya risk hakkında sor…', context = 'Şirket hafızası', leading, mentionAutocomplete = false, inputRef }: {
   value: string
   onChange: (value: string) => void
   onSubmit: () => void
@@ -93,7 +137,20 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, label = 'İz
   placeholder?: string
   context?: string
   leading?: ReactNode
+  mentionAutocomplete?: boolean
+  inputRef?: RefObject<HTMLTextAreaElement | null>
 }) {
+  const localRef = useRef<HTMLTextAreaElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const mentionOpen = mentionAutocomplete && /(^|\s)@[\p{L}]*$/u.test(value)
+  const setRef = (element: HTMLTextAreaElement | null) => {
+    localRef.current = element
+    if (inputRef) inputRef.current = element
+  }
+  const selectMention = () => {
+    onChange(insertIzgeMention(value))
+    window.requestAnimationFrame(() => localRef.current?.focus())
+  }
   const submit: FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault()
     if (!disabled && value.trim()) onSubmit()
@@ -104,13 +161,23 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, label = 'İz
       {leading}
       <label>
         <span className="sr-only">{label}</span>
-        <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={2} placeholder={placeholder} disabled={disabled} onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+        <span className={mentionAutocomplete ? 'agent-composer-editor agent-composer-editor-mentions' : 'agent-composer-editor'}>
+        {mentionAutocomplete ? <div ref={overlayRef} className="agent-composer-highlight" aria-hidden="true"><ComposerText text={value || ' '} /></div> : null}
+        <textarea ref={setRef} value={value} onChange={(event) => onChange(event.target.value)} rows={2} placeholder={placeholder} disabled={disabled} onScroll={(event) => { if (overlayRef.current) overlayRef.current.scrollTop = event.currentTarget.scrollTop }} onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) return
+          if (mentionOpen && (event.key === 'Enter' || event.key === 'Tab')) {
+            event.preventDefault()
+            selectMention()
+            return
+          }
+          if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault()
             event.currentTarget.form?.requestSubmit()
           }
         }} />
+        </span>
       </label>
+      {mentionOpen ? <div className="agent-mention-menu" role="listbox" aria-label="Bahset"><button type="button" role="option" aria-selected="true" onClick={selectMention}><span className="agent-avatar">İZ</span><span><strong>@izge</strong><small>Şirket hafızasına sor</small></span></button></div> : null}
       <div className="agent-prompt-controls">
         <Link className="agent-prompt-add" to="/memory" aria-label="Dosya veya not ekle" title="Dosya veya not ekle">+</Link>
         <span className="agent-prompt-context"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m12 3 10 5-10 5L2 8l10-5Zm-10 9 10 5 10-5M2 16l10 5 10-5" /></svg>{context}</span>

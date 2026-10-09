@@ -54,7 +54,7 @@ from app.services.query_context import (
     build_provenance_verifier_result,
     stable_payload_size_bytes,
 )
-from app.services.turkish_text import matching_tokens, normalize_for_match, status_label
+from app.services.turkish_text import matching_tokens, normalize_for_match, relation_token_overlap, status_label
 
 STOPWORDS = {
     "a",
@@ -153,6 +153,45 @@ CONTRADICTION_ACTION_TERMS = {
     "plan",
     "planı",
     "yapmak",
+}
+
+MEMORY_MATCH_NOISE_TERMS = {
+    "assumption",
+    "assumptions",
+    "commitment",
+    "commitments",
+    "constraint",
+    "constraints",
+    "decision",
+    "decisions",
+    "outcome",
+    "outcomes",
+    "karar",
+    "kararlar",
+    "kısıt",
+    "kısıtlar",
+    "sonuç",
+    "sonuçlar",
+    "taahhüt",
+    "taahhütler",
+    "varsayım",
+    "varsayımlar",
+    "henüz",
+    "veya",
+    "bulunmamakta",
+    "bulunmamaktadır",
+    "ocak",
+    "şubat",
+    "mart",
+    "nisan",
+    "mayıs",
+    "haziran",
+    "temmuz",
+    "ağustos",
+    "eylül",
+    "ekim",
+    "kasım",
+    "aralık",
 }
 
 
@@ -1385,12 +1424,15 @@ def _signal_evidence_payload(db: Session, memories: list[MemoryRecord]) -> list[
 def _memory_overlap_score(left: MemoryRecord, right: MemoryRecord) -> tuple[float, list[str]]:
     left_text = f"{left.topic_key} {left.title_or_label} {left.normalized_text}"
     right_text = f"{right.topic_key} {right.title_or_label} {right.normalized_text}"
-    overlap = _text_overlap(left_text, right_text)
+    overlap = relation_token_overlap(left_text, right_text, ignored_terms=STOPWORDS | MEMORY_MATCH_NOISE_TERMS)
+    same_topic = left.topic_key != "general" and left.topic_key == right.topic_key
+    if overlap < 2 and not same_topic:
+        return 0.0, []
     basis: list[str] = []
     score = float(overlap)
     if overlap >= 2:
         basis.append(f"shared terms:{overlap}")
-    if left.topic_key != "general" and left.topic_key == right.topic_key:
+    if same_topic:
         score += 4.0
         basis.append(f"same topic:{left.topic_key}")
     elif left.topic_key != "general" and right.topic_key != "general" and _text_overlap(left.topic_key, right.topic_key) >= 1:

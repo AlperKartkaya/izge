@@ -29,7 +29,7 @@ from app.services.storage import ensure_supported_upload, persist_pasted_text, p
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 
 
-def _feed_memory_inline(db: Session, artifact: Artifact, actor: User) -> None:
+def _feed_memory_inline(db: Session, artifact: Artifact, actor: User) -> bool:
     """Index newly added source material immediately without mutating process-wide settings."""
     from app.config import get_settings
     from app.services.ingestion import run_ingestion
@@ -43,11 +43,19 @@ def _feed_memory_inline(db: Session, artifact: Artifact, actor: User) -> None:
             use_local_llm=settings.local_llm_enabled,
             use_signal_explanations=False,
         )
+        return artifact.ingestion_status == "completed"
     except Exception as exc:
         artifact.ingestion_status = "failed"
         artifact.review_status = "needs_review"
         artifact.review_notes = f"Memory ingestion failed after intake: {exc}"
         db.commit()
+        return False
+
+
+def _queue_artifact_review(db: Session, artifact: Artifact, actor: User) -> None:
+    from app.services.colleague import enqueue_artifact_review
+
+    enqueue_artifact_review(db, artifact=artifact, actor=actor)
 
 
 @router.post("/upload", response_model=ArtifactRead, status_code=status.HTTP_201_CREATED)
@@ -104,7 +112,8 @@ async def upload_artifact(
         target_id=artifact.artifact_id,
         event_metadata={"title": artifact.title, "mime_type": artifact.mime_type},
     )
-    _feed_memory_inline(db, artifact, current_user)
+    if _feed_memory_inline(db, artifact, current_user):
+        _queue_artifact_review(db, artifact, current_user)
     db.refresh(artifact)
     return ArtifactRead.model_validate(artifact)
 
@@ -144,7 +153,8 @@ def create_pasted_text_artifact(payload: PastedTextCreate, current_user: User = 
         target_id=artifact.artifact_id,
         event_metadata={"title": artifact.title},
     )
-    _feed_memory_inline(db, artifact, current_user)
+    if _feed_memory_inline(db, artifact, current_user):
+        _queue_artifact_review(db, artifact, current_user)
     db.refresh(artifact)
     return ArtifactRead.model_validate(artifact)
 

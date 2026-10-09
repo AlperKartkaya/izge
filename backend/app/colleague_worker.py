@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from app.db import SessionLocal
 from app.migration_tools import upgrade_database
+from app.services.automations import dispatch_due_automations
 from app.services.colleague import (
     claim_next_colleague_run,
     default_worker_id,
@@ -23,6 +24,7 @@ def run_worker(*, worker_id: str, poll_interval_seconds: float, once: bool, max_
             now = datetime.now(UTC)
             enqueue_due_evening_reviews(db, now)
             dispatch_due_reminders(db, now)
+            dispatch_due_automations(db, now)
             run = claim_next_colleague_run(db, worker_id=worker_id)
             if run is not None:
                 lease_owner = run.lease_owner

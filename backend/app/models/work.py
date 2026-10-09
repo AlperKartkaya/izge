@@ -48,6 +48,8 @@ class ColleagueRun(Base, TimestampMixin):
     answer: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
     sources: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
+    context_artifact_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    follow_ups: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     lease_owner: Mapped[str | None] = mapped_column(String(255), index=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -66,4 +68,22 @@ class ColleagueRunEvent(Base):
     label: Mapped[str | None] = mapped_column(String(255))
     text: Mapped[str | None] = mapped_column(Text)
     payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (UniqueConstraint("recipient_user_id", "source_key", name="uq_notification_recipient_source"),)
+
+    notification_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("ntf"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    recipient_user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    thread_id: Mapped[str | None] = mapped_column(String(80), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("colleague_runs.run_id"), index=True)
+    message_id: Mapped[str | None] = mapped_column(ForeignKey("company_chat_messages.message_id"), index=True)
+    source_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)

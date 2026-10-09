@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { ChatComposer, LoadingState, StreamingText, ThinkingState } from '../components/AgentPrimitives'
+import { AgentAnswer, AgentText, ChatComposer, LoadingState, ThinkingState } from '../components/AgentPrimitives'
 import { useChatScroll } from '../components/useChatScroll'
-import { SourcePreviewButton } from '../components/SourcePreviewButton'
 import { Callout, EmptyState } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime } from '../lib/format'
@@ -10,8 +10,7 @@ import type { AgentRunRead, AgentSourceRead, TeamChatMessageRead, UserRead } fro
 
 type ConversationKind = 'channel' | 'direct' | 'group'
 interface Conversation { id: string; title: string; kind: ConversationKind; participantUserIds: string[] }
-const izgeMentionPattern = /^@[iİı]zge\b/i
-const izgeMentionPrefixPattern = /^@[iİı]zge\s*/i
+const izgeMentionPattern = /(^|\s)@[iİı]zge\b/i
 
 function metadataString(message: TeamChatMessageRead, key: string) {
   const value = message.message_metadata?.[key]
@@ -27,9 +26,10 @@ function errorMessage(error: unknown, fallback: string) { return error instanceo
 
 export function TeamChatPage() {
   const { session } = useAuth()
+  const [searchParams] = useSearchParams()
   const [messages, setMessages] = useState<TeamChatMessageRead[]>([])
   const [colleagues, setColleagues] = useState<UserRead[]>([])
-  const [activeId, setActiveId] = useState('izge-colleague')
+  const [activeId, setActiveId] = useState(searchParams.get('thread') ?? 'izge-colleague')
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
@@ -40,8 +40,12 @@ export function TeamChatPage() {
   const [agentRuns, setAgentRuns] = useState<AgentRunRead[]>([])
   const [streamedTextByRun, setStreamedTextByRun] = useState<Record<string, string>>({})
   const [showGroupForm, setShowGroupForm] = useState(false)
+  const [showDirectForm, setShowDirectForm] = useState(false)
+  const [directUserId, setDirectUserId] = useState('')
+  const [startedConversations, setStartedConversations] = useState<Conversation[]>([])
   const [groupName, setGroupName] = useState('')
   const [groupParticipants, setGroupParticipants] = useState<string[]>([])
+  const composerRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     if (!session?.token) return
@@ -103,16 +107,13 @@ export function TeamChatPage() {
     const values = new Map<string, Conversation>()
     values.set('izge-colleague', { id: 'izge-colleague', title: 'İzge', kind: 'direct', participantUserIds: session ? [session.user.user_id] : [] })
     values.set('company-general', { id: 'company-general', title: 'Şirket geneli', kind: 'channel', participantUserIds: session ? [session.user.user_id, ...colleagues.map((user) => user.user_id)] : [] })
-    for (const colleague of colleagues) {
-      const ids = [session?.user.user_id ?? '', colleague.user_id].filter(Boolean).sort()
-      values.set(`direct:${ids.join(':')}`, { id: `direct:${ids.join(':')}`, title: colleague.display_name, kind: 'direct', participantUserIds: ids })
-    }
+    for (const conversation of startedConversations) values.set(conversation.id, conversation)
     for (const message of messages) {
       const id = messageThreadId(message)
       if (!values.has(id)) values.set(id, { id, title: metadataString(message, 'thread_title') ?? 'Ekip konuşması', kind: (metadataString(message, 'thread_kind') as ConversationKind) ?? 'group', participantUserIds: metadataStrings(message, 'participant_user_ids') })
     }
     return Array.from(values.values())
-  }, [colleagues, messages, session])
+  }, [colleagues, messages, session, startedConversations])
   const filteredConversations = conversations.filter((conversation) => conversation.title.toLocaleLowerCase('tr-TR').includes(search.toLocaleLowerCase('tr-TR')))
   const active = conversations.find((conversation) => conversation.id === activeId) ?? conversations[0]
   const activeMessages = messages.filter((message) => messageThreadId(message) === active?.id)
@@ -130,7 +131,7 @@ export function TeamChatPage() {
     try {
       if (invokesAgent) {
         const created = await api.askColleague(session.token, {
-          message: body.replace(izgeMentionPrefixPattern, ''),
+          message: body,
           client_request_id: crypto.randomUUID(),
           thread_id: active.id,
           thread_title: active.title,
@@ -185,6 +186,19 @@ export function TeamChatPage() {
     } finally { setIsSending(false) }
   }
 
+  function startDirect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const colleague = colleagues.find((user) => user.user_id === directUserId)
+    if (!session || !colleague) return
+    const participantUserIds = [session.user.user_id, colleague.user_id].sort()
+    const conversation = { id: `direct:${participantUserIds.join(':')}`, title: colleague.display_name, kind: 'direct' as const, participantUserIds }
+    setStartedConversations((current) => current.some((item) => item.id === conversation.id) ? current : [...current, conversation])
+    setActiveId(conversation.id)
+    setShowDirectForm(false)
+    setDirectUserId('')
+    window.requestAnimationFrame(() => composerRef.current?.focus())
+  }
+
   function messageSources(message: TeamChatMessageRead): AgentSourceRead[] {
     const value = message.message_metadata?.source_refs
     return Array.isArray(value) ? value.filter((item): item is AgentSourceRead => Boolean(item && typeof item === 'object' && 'artifact_id' in item)) : []
@@ -197,13 +211,19 @@ export function TeamChatPage() {
     setActiveId(conversationId)
   }
 
+  const fillFollowUp = (question: string) => {
+    setDraft(`@izge ${question}`)
+    window.requestAnimationFrame(() => composerRef.current?.focus())
+  }
+
   return (
     <div className="team-chat-product-page">
       <header className="employee-page-header"><div><p className="eyebrow">Ekip iletişimi</p><h1>Team Chat</h1><p>Çalışma arkadaşlarınızla konuşun; İzge’yi çağırmak için bir konuşmada <strong>@izge</strong> yazın.</p></div></header>
       {error || loadError ? <Callout tone="warning">{error ?? loadError}</Callout> : null}
       <section className="team-chat-app" aria-label="Ekip konuşmaları">
         <aside className="team-chat-conversations panel-subtle">
-          <div className="team-chat-sidebar-head"><strong>Konuşmalar</strong><button type="button" className="text-button" onClick={() => setShowGroupForm((value) => !value)}>+ Grup</button></div>
+          <div className="team-chat-sidebar-head"><strong>Konuşmalar</strong><span className="team-chat-sidebar-actions"><button type="button" className="text-button" onClick={() => { setShowDirectForm((value) => !value); setShowGroupForm(false) }}>+ Sohbet</button><button type="button" className="text-button" onClick={() => { setShowGroupForm((value) => !value); setShowDirectForm(false) }}>+ Grup</button></span></div>
+          {showDirectForm ? <form className="team-chat-group-form" onSubmit={startDirect}><label className="field"><span className="field-label">Çalışma arkadaşı</span><select value={directUserId} onChange={(event) => setDirectUserId(event.target.value)} required><option value="">Seçin</option>{colleagues.map((user) => <option key={user.user_id} value={user.user_id}>{user.display_name}</option>)}</select></label><button type="submit" className="primary-button" disabled={!directUserId}>Sohbeti aç</button></form> : null}
           {showGroupForm ? <form className="team-chat-group-form" onSubmit={createGroup}><label className="field"><span className="field-label">Grup adı</span><input value={groupName} onChange={(event) => setGroupName(event.target.value)} required /></label><fieldset><legend>Katılımcılar</legend>{colleagues.map((user) => <label key={user.user_id} className="checkbox-row"><input type="checkbox" checked={groupParticipants.includes(user.user_id)} onChange={() => setGroupParticipants((current) => current.includes(user.user_id) ? current.filter((id) => id !== user.user_id) : [...current, user.user_id])} /><span>{user.display_name}</span></label>)}</fieldset><button type="submit" className="primary-button" disabled={isSending || !groupName.trim() || groupParticipants.length === 0}>Grubu oluştur</button></form> : null}
           <label className="field"><span className="field-label">Konuşmalarda ara</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="İzge veya çalışma arkadaşı…" /></label>
           <div className="conversation-list">
@@ -218,12 +238,15 @@ export function TeamChatPage() {
             {activeMessages.map((message) => {
               const own = message.author_user_id === session?.user.user_id
               const sources = messageSources(message)
-              return <article key={message.message_id} className={own ? 'team-chat-message-row team-chat-message-row-own' : 'team-chat-message-row'}><span className="team-chat-message-avatar">{message.author_display_name === 'İzge' ? 'İZ' : initials(message.author_display_name)}</span><div className={own ? 'team-chat-message team-chat-message-own' : 'team-chat-message'}><strong>{own ? 'Siz' : message.author_display_name}</strong><p>{message.body}</p>{sources.length ? <details className="agent-sources"><summary>Kaynaklar · {sources.length}</summary>{sources.map((source) => <article key={`${source.artifact_id}-${source.chunk_id ?? ''}`}><strong>{source.title}</strong><p>{source.quote}</p><SourcePreviewButton artifactId={source.artifact_id} title={source.title}>Kaynağı aç</SourcePreviewButton></article>)}</details> : null}<time>{formatDateTime(message.created_at)}</time></div></article>
+              const followUps = metadataStrings(message, 'follow_ups')
+              const fromIzge = message.author_display_name === 'İzge'
+              const authorTitle = metadataString(message, 'author_title')
+              return <article key={message.message_id} className={own ? 'team-chat-message-row team-chat-message-row-own' : 'team-chat-message-row'}><span className="team-chat-message-avatar">{fromIzge ? 'İZ' : initials(message.author_display_name)}</span><div className={own ? 'team-chat-message team-chat-message-own' : 'team-chat-message'}><span className="team-chat-message-author"><strong>{own ? 'Siz' : message.author_display_name}</strong>{authorTitle ? <small>{authorTitle}</small> : null}</span>{fromIzge ? <AgentAnswer text={message.body} sources={sources} followUps={followUps} onFollowUp={fillFollowUp} /> : <div className="team-chat-message-copy"><AgentText text={message.body} /></div>}<time>{formatDateTime(message.created_at)}</time></div></article>
             })}
-            {pendingRun ? <article className="team-chat-message-row"><span className="team-chat-message-avatar">İZ</span><div className="team-chat-message agent-run-message"><ThinkingState stages={pendingRun.stages} status={pendingRun.status} />{streamedTextByRun[pendingRun.run_id] ? <StreamingText active>{streamedTextByRun[pendingRun.run_id]}</StreamingText> : null}</div></article> : null}
+            {pendingRun ? <article className="team-chat-message-row"><span className="team-chat-message-avatar">İZ</span><div className="team-chat-message agent-run-message"><ThinkingState stages={pendingRun.stages} status={pendingRun.status} />{streamedTextByRun[pendingRun.run_id] ? <AgentAnswer text={streamedTextByRun[pendingRun.run_id]} sources={pendingRun.sources} active /> : null}</div></article> : null}
             {!pendingRun && latestThreadRun?.status === 'failed' ? <Callout tone="warning">{latestThreadRun.error || 'İzge bu işi tamamlayamadı.'}</Callout> : null}
           </div>
-          <ChatComposer value={draft} onChange={setDraft} onSubmit={() => void submit()} disabled={isSending || Boolean(pendingRun)} context={active?.id === 'izge-colleague' ? 'Şirket hafızası' : 'Ekip konuşması'} label={`${active?.title ?? 'konuşma'} mesajı`} placeholder={active?.id === 'izge-colleague' ? 'Şirket dosyaları, kararlar veya işler hakkında sor…' : 'Mesaj yaz veya @izge ile İzge’yi çağır…'} />
+          <ChatComposer value={draft} onChange={setDraft} onSubmit={() => void submit()} disabled={isSending || Boolean(pendingRun)} context={active?.id === 'izge-colleague' ? 'Şirket hafızası' : 'Ekip konuşması'} label={`${active?.title ?? 'konuşma'} mesajı`} placeholder={active?.id === 'izge-colleague' ? 'Şirket dosyaları, kararlar veya işler hakkında sor…' : 'Mesaj yaz veya @izge ile İzge’yi çağır…'} mentionAutocomplete={active?.id !== 'izge-colleague'} inputRef={composerRef} />
         </div>
       </section>
     </div>

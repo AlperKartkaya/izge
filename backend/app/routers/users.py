@@ -35,7 +35,6 @@ def list_colleagues(current_user: User = Depends(get_current_user), db: Session 
             User.workspace_id == current_user.workspace_id,
             User.user_id != current_user.user_id,
             User.email != AGENT_EMAIL,
-            User.role != "Admin",
             User.is_active.is_(True),
         )
         .order_by(User.created_at.asc())

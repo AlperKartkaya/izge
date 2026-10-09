@@ -1,6 +1,7 @@
 beautiful-ui
-https://github.com/slev12397/beautiful-ui
-Adapted from commit 44a274e598395ab61e7c96c26fda2758780253b7
+Source: https://github.com/slev12397/beautiful-ui
+Revision: 44a274e598395ab61e7c96c26fda2758780253b7
+Adapted interface primitives are used in Izge.
 
 MIT License
 

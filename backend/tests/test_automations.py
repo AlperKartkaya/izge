@@ -1,0 +1,114 @@
+import tempfile
+import unittest
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from fastapi import HTTPException
+from pydantic import ValidationError
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from app.db import Base
+from app.models import ColleagueRun, User, Workspace
+from app.models.automation import Automation
+from app.routers.automations import create_automation, delete_automation, list_automations, run_automation, update_automation
+from app.schemas.automation import AutomationCreate, AutomationUpdate
+from app.services.automations import dispatch_due_automations, next_run_at
+
+
+class AutomationsTest(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.engine = create_engine(f"sqlite:///{Path(self.directory.name) / 'test.db'}")
+        Base.metadata.create_all(self.engine)
+        self.db = Session(self.engine, expire_on_commit=False)
+        workspace = Workspace(name="Pusula", description="Test")
+        self.db.add(workspace)
+        self.db.flush()
+        self.alice = User(workspace_id=workspace.workspace_id, role="Member", display_name="Deniz", email="deniz@test.invalid", password_hash="unused")
+        self.bob = User(workspace_id=workspace.workspace_id, role="Member", display_name="Ece", email="ece@test.invalid", password_hash="unused")
+        self.db.add_all([self.alice, self.bob])
+        self.db.commit()
+
+    def tearDown(self):
+        self.db.close()
+        self.engine.dispose()
+        self.directory.cleanup()
+
+    def create(self):
+        return create_automation(AutomationCreate(title="Günlük özet", prompt="Açık işleri Türkçe özetle.", schedule_time="16:00"), self.alice, self.db)
+
+    def test_validation(self):
+        for time in ("24:00", "8:00", "16:60", "16:00x"):
+            with self.assertRaises(ValidationError):
+                AutomationCreate(title="Test", prompt="Özet", schedule_time=time)
+        with self.assertRaises(ValidationError):
+            AutomationCreate(title=" ", prompt="Özet", schedule_time="16:00")
+
+    def test_owner_boundary_and_crud(self):
+        item = self.create()
+        self.assertEqual(len(list_automations(self.alice, self.db).items), 1)
+        self.assertEqual(list_automations(self.bob, self.db).items, [])
+        for operation in (
+            lambda: update_automation(item.automation_id, AutomationUpdate(enabled=False), self.bob, self.db),
+            lambda: delete_automation(item.automation_id, self.bob, self.db),
+            lambda: run_automation(item.automation_id, self.bob, self.db),
+        ):
+            with self.assertRaises(HTTPException) as error:
+                operation()
+            self.assertEqual(error.exception.status_code, 404)
+        update_automation(item.automation_id, AutomationUpdate(enabled=False), self.alice, self.db)
+        self.assertIsNone(list_automations(self.alice, self.db).items[0].next_run_at)
+        delete_automation(item.automation_id, self.alice, self.db)
+        self.assertEqual(list_automations(self.alice, self.db).items, [])
+
+    def test_schedule_istanbul_once_per_day_and_disabled(self):
+        item = self.create()
+        before = datetime(2026, 10, 9, 12, 59, tzinfo=UTC)
+        due = before + timedelta(minutes=1)
+        self.assertEqual(dispatch_due_automations(self.db, before), 0)
+        self.assertEqual(dispatch_due_automations(self.db, due), 1)
+        self.assertEqual(dispatch_due_automations(self.db, due + timedelta(hours=2)), 0)
+        self.assertEqual(len(self.db.scalars(select(ColleagueRun)).all()), 1)
+        automation = self.db.get(Automation, item.automation_id)
+        assert automation is not None
+        self.assertEqual(next_run_at(automation, due), due + timedelta(days=1))
+        self.assertEqual(dispatch_due_automations(self.db, due + timedelta(days=1)), 1)
+        automation.enabled = False
+        self.db.commit()
+        self.assertEqual(dispatch_due_automations(self.db, due + timedelta(days=2)), 0)
+
+    def test_manual_run_does_not_consume_daily_schedule(self):
+        item = self.create()
+        accepted = run_automation(item.automation_id, self.alice, self.db)
+        run = self.db.get(ColleagueRun, accepted.run_id)
+        assert run is not None
+        self.assertEqual(run.thread_id, f"automation:{item.automation_id}")
+        self.assertIn(self.alice.user_id, run.participant_user_ids)
+        self.assertNotIn(self.bob.user_id, run.participant_user_ids)
+        automation = self.db.get(Automation, item.automation_id)
+        assert automation is not None
+        self.assertIsNone(automation.last_run_at)
+
+    def test_overdue_next_run_is_now_and_naive_dates_are_utc(self):
+        item = self.create()
+        now = datetime(2026, 10, 9, 14, 0, tzinfo=UTC)
+        automation = self.db.get(Automation, item.automation_id)
+        assert automation is not None
+        self.assertEqual(next_run_at(automation, now.replace(tzinfo=None)), now)
+
+    def test_recovery_after_enqueue_does_not_duplicate_or_crash_after_edit(self):
+        item = self.create()
+        due = datetime(2026, 10, 9, 13, 0, tzinfo=UTC)
+        self.assertEqual(dispatch_due_automations(self.db, due), 1)
+        automation = self.db.get(Automation, item.automation_id)
+        assert automation is not None
+        automation.last_run_at = None  # Simulate crash between enqueue and the schedule checkpoint.
+        automation.prompt = "Yeni günlük özet isteği."
+        self.db.commit()
+        self.assertEqual(dispatch_due_automations(self.db, due), 1)
+        self.assertEqual(len(self.db.scalars(select(ColleagueRun)).all()), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

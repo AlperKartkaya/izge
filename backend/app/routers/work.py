@@ -176,16 +176,17 @@ def _run_read(db: Session, run: ColleagueRun, reader: User) -> ColleagueRunRead:
     all_sources_visible = len(visible_source_ids) == len(set(source_ids))
     return ColleagueRunRead(
         run_id=run.run_id,
-        kind=cast("Literal['ask', 'evening_review']", run.kind),
+        kind=cast("Literal['ask', 'evening_review', 'artifact_review']", run.kind),
         thread_id=run.thread_id,
-        thread_title=run.thread_title,
+        thread_title=run.thread_title if all_sources_visible else "İzge ile çalışma",
         thread_kind=cast(ThreadKind, run.thread_kind),
         participant_user_ids=list(run.participant_user_ids or []),
-        question=run.question,
+        question=run.question if all_sources_visible or run.kind != "artifact_review" else "Yeni kayıt değerlendirildi.",
         status=cast(RunStatus, run.status),
         answer=run.answer if all_sources_visible else "Bu yanıtın dayandığı kaynaklara erişiminiz değiştiği için içerik gizlendi.",
         error=run.error,
         sources=[ColleagueSourceRead.model_validate(source) for source in (run.sources or []) if source.get("artifact_id") in visible_source_ids],
+        follow_ups=list(run.follow_ups or []) if all_sources_visible else [],
         stages=[
             ColleagueStageRead(
                 sequence=event.sequence,
@@ -217,8 +218,16 @@ def ask_colleague(payload: ColleagueAskCreate, current_user: User = Depends(get_
 
 
 @router.get("/runs", response_model=ColleagueRunList)
-def list_runs(limit: int = Query(default=40, ge=1, le=100), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ColleagueRunList:
-    runs = list(db.scalars(select(ColleagueRun).where(ColleagueRun.workspace_id == current_user.workspace_id).order_by(ColleagueRun.created_at.desc())).all())
+def list_runs(
+    limit: int = Query(default=40, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    thread_id: str | None = Query(default=None, min_length=1, max_length=80),
+) -> ColleagueRunList:
+    query = select(ColleagueRun).where(ColleagueRun.workspace_id == current_user.workspace_id)
+    if isinstance(thread_id, str):
+        query = query.where(ColleagueRun.thread_id == thread_id)
+    runs = list(db.scalars(query.order_by(ColleagueRun.created_at.desc())).all())
     visible_runs = [run for run in runs if _can_read_run(run, current_user)][:limit]
     return ColleagueRunList(items=[_run_read(db, run, current_user) for run in visible_runs])
 

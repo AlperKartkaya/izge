@@ -11,9 +11,11 @@ from app.routers.artifacts import router as artifacts_router
 from app.routers.audit import router as audit_router
 from app.routers.evidence import router as evidence_router
 from app.routers.auth import router as auth_router
+from app.routers.automations import router as automations_router
 from app.routers.graph import router as graph_router
 from app.routers.ingestion import router as ingestion_router
 from app.routers.memory import router as memory_router
+from app.routers.notifications import router as notifications_router
 from app.routers.operations import router as operations_router
 from app.routers.query import router as query_router
 from app.routers.scenario import router as scenario_router
@@ -48,6 +50,8 @@ def health() -> dict[str, str]:
 app.include_router(auth_router, prefix=settings.api_prefix)
 app.include_router(users_router, prefix=settings.api_prefix)
 app.include_router(work_router, prefix=settings.api_prefix)
+app.include_router(automations_router, prefix=settings.api_prefix)
+app.include_router(notifications_router, prefix=settings.api_prefix)
 app.include_router(artifacts_router, prefix=settings.api_prefix)
 app.include_router(ingestion_router, prefix=settings.api_prefix)
 app.include_router(query_router, prefix=settings.api_prefix)

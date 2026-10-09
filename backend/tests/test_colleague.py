@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta, timezone
@@ -18,7 +19,7 @@ from app.routers.team_chat import _message_is_visible_to_user, create_team_chat_
 from app.routers.work import _event_stream, _run_read, _task_read, _utc_naive, list_runs
 from app.schemas.api import TeamChatMessageCreate
 from app.schemas.work import WorkTaskCreate
-from app.services.colleague import LocalLLMError, LostColleagueLeaseError, _shared_signal_context, _stream_local_answer, _validate_answer_citations, add_run_event, claim_next_colleague_run, dispatch_due_reminders, enqueue_colleague_question, enqueue_due_evening_reviews, process_colleague_run, retrieve_shared_context
+from app.services.colleague import LocalLLMError, LostColleagueLeaseError, _recent_thread_context, _shared_signal_context, _stream_local_answer, _validate_answer_citations, add_run_event, claim_next_colleague_run, dispatch_due_reminders, enqueue_colleague_question, enqueue_due_evening_reviews, process_colleague_run, retrieve_shared_context
 
 
 class ColleagueServiceTest(unittest.TestCase):
@@ -110,6 +111,63 @@ class ColleagueServiceTest(unittest.TestCase):
         )
         sources, _tasks = retrieve_shared_context(self.db, run)
         self.assertEqual([], sources)
+
+    def test_retrieval_keeps_full_evidence_and_prefers_first_chunk_over_equal_tail(self) -> None:
+        evidence = "Atlas teslim kaydı\n" + "Çalışma bilgisi. " * 44 + "\nToplam 18 saat; saatlik 2.000 TL, potansiyel 36.000 TL."
+        artifact = self._artifact("Atlas teslim kaydı", evidence)
+        self.db.add(ArtifactChunk(artifact_id=artifact.artifact_id, workspace_id=self.workspace.workspace_id, sequence_number=1, text="özellik teslim edilmedi.", chunk_metadata={}))
+        self.db.commit()
+        run = self._run([self.bob.user_id])
+        run.question = "Atlas teslim tutarı nedir?"
+        self.db.commit()
+        sources, _tasks = retrieve_shared_context(self.db, run)
+        self.assertEqual(artifact.artifact_id, sources[0]["artifact_id"])
+        self.assertIn("36.000 TL", sources[0]["quote"])
+
+    def test_evening_review_keeps_other_company_topics_when_one_source_matches(self) -> None:
+        risk = self._artifact("Müşteri riski", "Risk: destek sorunu devam ediyor.")
+        tender = self._artifact("Teklif belgeleri", "İmzalı taahhüt belgesi kontrol edilecek.")
+        self.db.commit()
+        run = self._run([self.bob.user_id])
+        run.kind = "evening_review"
+        run.question = "Bugünkü riskleri ve yarın için takip edilecek işleri değerlendir."
+        self.db.commit()
+        sources, _ = retrieve_shared_context(self.db, run)
+        self.assertEqual({risk.artifact_id, tender.artifact_id}, {source["artifact_id"] for source in sources})
+
+    def test_evening_review_rechecks_sources_without_reusing_old_model_conclusions(self) -> None:
+        old = self._run([self.bob.user_id])
+        old.status = "completed"
+        old.answer = "Önceki model sonucu."
+        self.db.commit()
+        current = self._run([self.bob.user_id])
+        self.assertTrue(_recent_thread_context(self.db, current))
+        current.kind = "evening_review"
+        self.assertEqual([], _recent_thread_context(self.db, current))
+
+    def test_evening_review_prioritizes_task_evidence_and_never_prompts_omitted_evidence(self) -> None:
+        tender = self._artifact("Teklif dayanağı", "İmzalı belge tamamlanacak.")
+        risks = [self._artifact(f"Risk notu {number}", "Risk: müşteri yanıt bekliyor.") for number in range(9)]
+        task = WorkTask(workspace_id=self.workspace.workspace_id, created_by=self.alice.user_id,
+                        title="Teklif belgesini tamamla", status="open", source_artifact_ids=[tender.artifact_id])
+        self.db.add(task)
+        self.db.add(WorkTask(workspace_id=self.workspace.workspace_id, created_by=self.alice.user_id,
+                            title="Müşteri riskini incele", status="open", source_artifact_ids=[risks[0].artifact_id]))
+        self.db.commit()
+        run = self._run([self.bob.user_id])
+        run.kind = "evening_review"
+        run.question = "Risk notlarını ve açık işleri değerlendir."
+        self.db.commit()
+        sources, tasks = retrieve_shared_context(self.db, run)
+        self.assertLessEqual(len(sources), 8)
+        self.assertIn(task.task_id, {item["task_id"] for item in tasks})
+        self.assertIn(tender.artifact_id, {source["artifact_id"] for source in sources})
+        sources, tasks = retrieve_shared_context(self.db, run, artifact_limit=1)
+        self.assertNotIn(task.task_id, {item["task_id"] for item in tasks})
+        for item in tasks:
+            prompted_task = self.db.get(WorkTask, item["task_id"])
+            assert prompted_task is not None
+            self.assertTrue(set(prompted_task.source_artifact_ids) <= {source["artifact_id"] for source in sources})
 
     def test_signal_with_nested_hidden_support_is_omitted(self) -> None:
         public = self._artifact("Ortak bütçe", "Bütçe kararı ortak kayıtta.")
@@ -430,7 +488,7 @@ class ColleagueServiceTest(unittest.TestCase):
 
         class FakeConnection:
             def request(self, *_args, **_kwargs) -> None:
-                return None
+                self.payload = json.loads(_kwargs["body"])
 
             def getresponse(self) -> FakeResponse:
                 return FakeResponse()
@@ -438,14 +496,16 @@ class ColleagueServiceTest(unittest.TestCase):
             def close(self) -> None:
                 return None
 
+        connection = FakeConnection()
         settings = SimpleNamespace(local_llm_enabled=True, local_llm_model="test", local_llm_timeout_seconds=1)
         with (
             patch("app.services.colleague.get_settings", return_value=settings),
             patch("app.services.colleague.validated_local_llm_base_url", return_value="http://127.0.0.1:11434"),
-            patch("app.services.colleague.http.client.HTTPConnection", return_value=FakeConnection()),
+            patch("app.services.colleague.http.client.HTTPConnection", return_value=connection),
         ):
             with self.assertRaises(LocalLLMError):
                 list(_stream_local_answer("soru", [], [], review=False))
+        self.assertIn("Onay bekleyen tutarı yanıtın hiçbir bölümünde kesinleşmiş alacak", connection.payload["messages"][0]["content"])
 
     def test_malformed_ollama_line_and_invalid_citations_fail_closed(self) -> None:
         class BadResponse:

@@ -9,8 +9,10 @@ from app.db import Base, engine as default_engine
 
 REQUIRED_SCHEMA_COLUMNS: dict[str, set[str]] = {
     "work_tasks": {"task_id", "workspace_id", "created_by", "assignee_user_id", "status", "remind_at", "source_artifact_ids", "source_snapshot"},
-    "colleague_runs": {"run_id", "workspace_id", "created_by", "status", "participant_user_ids", "lease_expires_at", "sources"},
+    "colleague_runs": {"run_id", "workspace_id", "created_by", "status", "participant_user_ids", "lease_expires_at", "sources", "context_artifact_ids", "follow_ups"},
     "colleague_run_events": {"event_id", "run_id", "sequence", "event_type", "payload"},
+    "notifications": {"notification_id", "workspace_id", "recipient_user_id", "kind", "source_key", "read_at"},
+    "automations": {"automation_id", "workspace_id", "created_by", "schedule_time", "enabled", "last_run_at"},
     "artifacts": {"artifact_id", "workspace_id", "title", "review_status", "reviewed_by", "reviewed_at", "review_notes"},
     "artifact_chunks": {"chunk_id", "artifact_id", "workspace_id", "sequence_number", "text", "chunk_metadata"},
     "query_runs": {"query_run_id", "workspace_id", "query_class", "route_confidence", "answer_payload", "permissions_limited"},
@@ -143,5 +145,10 @@ def ensure_legacy_schema_compatibility(target_engine: Engine = default_engine) -
             connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN reviewed_at DATETIME")
         if "review_notes" not in artifact_columns:
             connection.exec_driver_sql("ALTER TABLE artifacts ADD COLUMN review_notes TEXT")
+        colleague_run_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(colleague_runs)").fetchall()}
+        if "context_artifact_ids" not in colleague_run_columns:
+            connection.exec_driver_sql("ALTER TABLE colleague_runs ADD COLUMN context_artifact_ids JSON NOT NULL DEFAULT '[]'")
+        if "follow_ups" not in colleague_run_columns:
+            connection.exec_driver_sql("ALTER TABLE colleague_runs ADD COLUMN follow_ups JSON NOT NULL DEFAULT '[]'")
         ensure_fts_table(connection)
         assert_required_schema_ready(connection)

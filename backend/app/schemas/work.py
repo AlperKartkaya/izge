@@ -98,7 +98,7 @@ class ColleagueStageRead(BaseModel):
 
 class ColleagueRunRead(BaseModel):
     run_id: str
-    kind: Literal["ask", "evening_review"]
+    kind: Literal["ask", "evening_review", "artifact_review"]
     thread_id: str
     thread_title: str
     thread_kind: ThreadKind
@@ -108,6 +108,7 @@ class ColleagueRunRead(BaseModel):
     answer: str | None
     error: str | None
     sources: list[ColleagueSourceRead]
+    follow_ups: list[str]
     stages: list[ColleagueStageRead]
     created_at: datetime
     updated_at: datetime
