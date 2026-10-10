@@ -5,5 +5,5 @@ const files = import.meta.glob<string>('../assets/button-icons/*.png', { eager: 
 export function ButtonIcon({ name, className = '' }: { name: string; className?: string }) {
   const url = files[`../assets/button-icons/${name}.png`]
   if (!url) return null
-  return <span className={`button-icon ${className}`} aria-hidden="true" style={{ '--button-icon': `url("${url}")` } as CSSProperties} />
+  return <span className={['button-icon', className].filter(Boolean).join(' ')} aria-hidden="true" style={{ '--button-icon': `url("${url}")` } as CSSProperties} />
 }

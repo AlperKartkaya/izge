@@ -5,6 +5,7 @@ import test from 'node:test'
 test('all icon sheets have nine uniquely named, correctly ordered crop cells', () => {
   const manifest = JSON.parse(readFileSync(new URL('../../docs/design/icons/manifest.json', import.meta.url)))
   assert.equal(manifest.sheet_size, 1536)
+  assert.equal(manifest.prepared_assets.glyph_max_size, 232)
   const ids = new Set()
   assert.equal(manifest.sheets.length, 4)
   manifest.sheets.forEach((sheet, sheetIndex) => {

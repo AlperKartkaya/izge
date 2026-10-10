@@ -115,6 +115,14 @@ class TeamChatAttachmentTest(unittest.TestCase):
             with self.assertRaises(HTTPException) as denied:
                 preview_artifact_source(artifact.artifact_id, self.admin, self.db)
         self.assertEqual(403, denied.exception.status_code)
+        artifact.extracted_text = "Kaynak içeriği " * 100
+        self.db.commit()
+        copied = preview_artifact_source(artifact.artifact_id, self.bob, self.db, as_text=True)
+        self.assertEqual(artifact.extracted_text, bytes(copied.body).decode())
+        self.assertGreater(len(copied.body), 500)
+        with self.assertRaises(HTTPException) as denied_copy:
+            preview_artifact_source(artifact.artifact_id, self.admin, self.db, as_text=True)
+        self.assertEqual(403, denied_copy.exception.status_code)
 
         self.db.add(ArtifactChunk(
             artifact_id=artifact.artifact_id,

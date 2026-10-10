@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -194,9 +194,11 @@ def get_artifact(artifact_id: str, current_user: User = Depends(get_current_user
     )
 
 
-@router.get("/{artifact_id}/preview")
-def preview_artifact_source(artifact_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> FileResponse:
+@router.get("/{artifact_id}/preview", response_model=None)
+def preview_artifact_source(artifact_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db), as_text: bool = False) -> FileResponse | PlainTextResponse:
     artifact = _get_accessible_artifact(db, artifact_id, current_user)
+    if as_text:
+        return PlainTextResponse(artifact.extracted_text or "")
     source_path = _artifact_source_file(artifact)
     return FileResponse(
         source_path,

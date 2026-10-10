@@ -18,7 +18,7 @@ export function ReviewContextCards({ review }: { review: AgentRunRead }) {
       <header><strong>{t("Review context", "Değerlendirmenin bağlamı")}</strong><span>{review.sources.length} {t("sources", "kaynak")}</span></header>
       <div className="review-context-source-list">{review.sources.map((source) => <article className="review-context-card" key={`${source.artifact_id}-${source.chunk_id ?? ''}`}>
         <header><strong>{source.title}</strong><small>{source.quote.length.toLocaleString(currentLocale())} {t("characters", "karakter")}</small></header>
-        <p>{source.quote}</p>
+        <div className="review-context-excerpt markdown-content"><AgentText text={source.quote} /></div>
         <footer><SourcePreviewButton artifactId={source.artifact_id} title={source.title} className="review-context-chip"><span className="review-context-badge" aria-hidden="true">↗</span>{source.title}</SourcePreviewButton></footer>
       </article>)}</div>
     </section> : null}

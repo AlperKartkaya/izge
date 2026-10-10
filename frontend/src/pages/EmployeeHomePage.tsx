@@ -8,11 +8,14 @@ import { api, ApiError } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import type { AgentRunRead, ArtifactRead, SignalRead, WorkTaskRead, WorkTaskStatus } from '../lib/types'
 import { useLanguage } from '../lib/i18n'
+import { homeGreeting } from '../lib/greeting'
 
 function errorMessage(error: unknown, fallback: string) { return error instanceof ApiError && error.message ? error.message : fallback }
 
 export function EmployeeHomePage() {
-  const { t } = useLanguage()
+  const { language, t } = useLanguage()
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 60000); return () => window.clearInterval(timer) }, [])
   const { session } = useAuth()
   const [tasks, setTasks] = useState<WorkTaskRead[]>([])
   const [artifacts, setArtifacts] = useState<ArtifactRead[]>([])
@@ -70,7 +73,7 @@ export function EmployeeHomePage() {
 
   return (
     <div className="stack-lg">
-      <header className="employee-home-hero"><div><p className="eyebrow">{t('Good morning', 'Günaydın')}, {session?.user.display_name}</p><h1>{t('What is happening in your company today?', 'Şirketinizde bugün ne oluyor?')}</h1><p>{t('Izge tracks files, decisions, and work, highlighting important changes with their sources.', 'İzge dosyaları, kararları ve işleri takip eder; sizin için önemli değişiklikleri kaynaklarıyla öne çıkarır.')}</p></div><Link className="primary-button" to="/query">{t('Ask Izge', 'İzge’ye sor')}</Link></header>
+      <header className="employee-home-hero"><div><p className="eyebrow">{t('Your workspace', 'Çalışma alanınız')}</p><h1>{homeGreeting(session?.user.display_name ?? '', language, now)}</h1><p>{t('Izge tracks files, decisions, and work, highlighting important changes with their sources.', 'İzge dosyaları, kararları ve işleri takip eder; sizin için önemli değişiklikleri kaynaklarıyla öne çıkarır.')}</p></div><Link className="primary-button" to="/query">{t('Ask Izge', 'İzge’ye sor')}</Link></header>
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {loading ? <LoadingState label={t('Preparing workspace', 'Çalışma alanı hazırlanıyor')} /> : (
         <div className="metric-grid"><MetricCard label={t('Open work', 'Açık iş')} value={openTasks.length} detail={t('Work that needs follow-up', 'Takip edilmesi gereken işler')} /><MetricCard label={t('Sources', 'Kaynak')} value={artifacts.length} detail={t('Files and notes in company memory', 'Şirket hafızasındaki dosya ve notlar')} /><MetricCard label={t('New signals', 'Yeni sinyal')} value={signals.length} detail={t('Changes, conflicts, and recommendations', 'Değişiklik, çelişki ve öneriler')} /></div>

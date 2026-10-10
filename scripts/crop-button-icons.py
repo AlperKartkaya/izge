@@ -2,6 +2,7 @@
 """Crop the documented 3×3 sheets with the locally installed ImageMagick."""
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -31,11 +32,14 @@ def main():
             for icon in sheet['icons']:
                 left, top, right, bottom = icon['crop']
                 target = OUT / f"{icon['id']}.png"
-                run(normalized, '-crop', f'{right-left}x{bottom-top}+{left}+{top}', '+repage', '-trim', '+repage',
-                    '-resize', '224x224', '-background', 'none', '-gravity', 'center', '-extent', '256x256',
+                run(normalized, '-crop', f'{right-left}x{bottom-top}+{left}+{top}', '+repage',
+                    '-channel', 'A', '-fuzz', '1%', '-trim', '+channel', '+repage',
+                    '-resize', '232x232', '-background', 'none', '-gravity', 'center', '-extent', '256x256',
                     '-channel', 'RGB', '-evaluate', 'set', '100%', '+channel', target)
-                w, h, minimum, maximum = run('identify', '-format', '%w %h %[fx:minima.a] %[fx:maxima.a]', target).split()
+                w, h, minimum, maximum, bounds = run('identify', '-format', '%w %h %[fx:minima.a] %[fx:maxima.a] %@', target).split()
                 assert (w, h) == ('256', '256') and float(minimum) == 0 and float(maximum) > 0, target
+                glyph_w, glyph_h, x, y = map(int, re.fullmatch(r'(\d+)x(\d+)\+(\d+)\+(\d+)', bounds).groups())
+                assert abs(x + glyph_w / 2 - 128) <= 2 and abs(y + glyph_h / 2 - 128) <= 2, f'{target}: glyph is not centered'
                 prepared.append(icon['id'])
     assert len(prepared) == len(set(prepared)) == 36
     print(json.dumps({'prepared': len(prepared), 'output': str(OUT)}, ensure_ascii=False))

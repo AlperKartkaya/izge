@@ -12,7 +12,7 @@ REQUIRED_SCHEMA_COLUMNS: dict[str, set[str]] = {
     "colleague_runs": {"run_id", "workspace_id", "created_by", "status", "participant_user_ids", "lease_expires_at", "sources", "context_artifact_ids", "follow_ups", "response_language"},
     "colleague_run_events": {"event_id", "run_id", "sequence", "event_type", "payload"},
     "notifications": {"notification_id", "workspace_id", "recipient_user_id", "kind", "source_key", "read_at"},
-    "automations": {"automation_id", "workspace_id", "created_by", "schedule_time", "response_language", "enabled", "last_run_at"},
+    "automations": {"automation_id", "workspace_id", "created_by", "schedule_time", "frequency", "starts_at", "response_language", "enabled", "last_run_at", "last_run_id", "last_scheduled_at"},
     "artifacts": {"artifact_id", "workspace_id", "title", "review_status", "reviewed_by", "reviewed_at", "review_notes"},
     "artifact_chunks": {"chunk_id", "artifact_id", "workspace_id", "sequence_number", "text", "chunk_metadata"},
     "query_runs": {"query_run_id", "workspace_id", "query_class", "route_confidence", "answer_payload", "permissions_limited"},
@@ -155,5 +155,14 @@ def ensure_legacy_schema_compatibility(target_engine: Engine = default_engine) -
         automation_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(automations)").fetchall()}
         if "response_language" not in automation_columns:
             connection.exec_driver_sql("ALTER TABLE automations ADD COLUMN response_language VARCHAR(2) NOT NULL DEFAULT 'tr'")
+        if "frequency" not in automation_columns:
+            connection.exec_driver_sql("ALTER TABLE automations ADD COLUMN frequency VARCHAR(24) NOT NULL DEFAULT 'daily'")
+        if "starts_at" not in automation_columns:
+            connection.exec_driver_sql("ALTER TABLE automations ADD COLUMN starts_at DATETIME")
+        if "last_run_id" not in automation_columns:
+            connection.exec_driver_sql("ALTER TABLE automations ADD COLUMN last_run_id VARCHAR(64)")
+        if "last_scheduled_at" not in automation_columns:
+            connection.exec_driver_sql("ALTER TABLE automations ADD COLUMN last_scheduled_at DATETIME")
+            connection.exec_driver_sql("UPDATE automations SET last_scheduled_at = last_run_at WHERE last_run_at IS NOT NULL")
         ensure_fts_table(connection)
         assert_required_schema_ready(connection)

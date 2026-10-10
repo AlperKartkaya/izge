@@ -538,7 +538,7 @@
     "input_size": 1254,
     "normalized_sheet_size": 1536,
     "output_size": 256,
-    "glyph_max_size": 224,
+    "glyph_max_size": 232,
     "recolor": "CSS currentColor alpha mask",
     "source_preserved": true
   }

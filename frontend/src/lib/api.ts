@@ -151,8 +151,8 @@ export const api = {
     return request<ArtifactDetail>(`/artifacts/${artifactId}`, { token })
   },
 
-  artifactPreviewUrl(artifactId: string) {
-    return `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/preview`
+  artifactPreviewUrl(artifactId: string, asText = false) {
+    return `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/preview${asText ? "?as_text=true" : ""}`
   },
 
   artifactDownloadUrl(artifactId: string) {
@@ -369,11 +369,11 @@ export const api = {
     return request<{ items: AutomationRead[] }>('/automations', { token }).then((response) => response.items)
   },
 
-  createAutomation(token: string, payload: { title: string; prompt: string; schedule_time: string; enabled?: boolean }) {
+  createAutomation(token: string, payload: { title: string; prompt: string; schedule_time: string; frequency: AutomationRead['frequency']; starts_at: string; enabled?: boolean }) {
     return request<AutomationRead>('/automations', { method: 'POST', token, body: JSON.stringify({ ...payload, response_language: getLanguage() }) })
   },
 
-  updateAutomation(token: string, automationId: string, payload: Partial<Pick<AutomationRead, 'title' | 'prompt' | 'schedule_time' | 'enabled'>>) {
+  updateAutomation(token: string, automationId: string, payload: Partial<Pick<AutomationRead, 'title' | 'prompt' | 'schedule_time' | 'frequency' | 'starts_at' | 'enabled'>>) {
     return request<AutomationRead>(`/automations/${automationId}`, { method: 'PATCH', token, body: JSON.stringify({ ...payload, ...(payload.prompt !== undefined ? { response_language: getLanguage() } : {}) }) })
   },
 

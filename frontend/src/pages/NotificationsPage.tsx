@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { LoadingState } from '../components/AgentPrimitives'
+import { AgentText, LoadingState } from '../components/AgentPrimitives'
 import { Callout, EmptyState } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime } from '../lib/format'
@@ -49,6 +49,6 @@ export function NotificationsPage() {
   return <div className="stack-lg notifications-page">
     <header className="employee-page-header"><div><p className="eyebrow">{t('Live company feed', 'Canlı şirket akışı')}</p><h1>{t('Notifications', 'Bildirimler')}</h1><p>{t('Team messages and findings from Izge that need attention are collected here.', 'Ekip mesajları ve İzge’nin dikkat gerektiren tespitleri burada toplanır.')}</p></div></header>
     {error ? <Callout tone="warning">{error}</Callout> : null}
-    {isLoading ? <LoadingState label={t('Loading notifications', 'Bildirimler yükleniyor')} /> : items.length ? <section className="notification-list" aria-label={t('Notifications', 'Bildirimler')}>{items.map((item) => <button type="button" className={item.read_at ? 'notification-item' : 'notification-item notification-item-unread'} key={item.notification_id} onClick={() => void openNotification(item)}><span className="notification-icon" aria-hidden="true">{item.kind === 'agent' ? 'İZ' : '●'}</span><span><strong>{item.title}</strong><p>{item.body}</p><time>{formatDateTime(item.created_at)}</time></span>{!item.read_at ? <i aria-label={t('Unread', 'Okunmadı')} /> : null}</button>)}</section> : <EmptyState title={t('No new notifications', 'Yeni bildirim yok')} description={t('New team messages and findings from Izge will appear here.', 'Yeni ekip mesajları ve İzge’nin tespitleri burada görünecek.')} />}
+    {isLoading ? <LoadingState label={t('Loading notifications', 'Bildirimler yükleniyor')} /> : items.length ? <section className="notification-list" aria-label={t('Notifications', 'Bildirimler')}>{items.map((item) => <button type="button" className={item.read_at ? 'notification-item' : 'notification-item notification-item-unread'} key={item.notification_id} onClick={() => void openNotification(item)}><span className="notification-icon" aria-hidden="true">{item.kind === 'agent' ? 'İZ' : '●'}</span><span><strong>{item.title}</strong><span className="notification-copy markdown-content"><AgentText text={item.body} /></span><time>{formatDateTime(item.created_at)}</time></span>{!item.read_at ? <i aria-label={t('Unread', 'Okunmadı')} /> : null}</button>)}</section> : <EmptyState title={t('No new notifications', 'Yeni bildirim yok')} description={t('New team messages and findings from Izge will appear here.', 'Yeni ekip mesajları ve İzge’nin tespitleri burada görünecek.')} />}
   </div>
 }

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEventHandler, type ReactNode, type RefObject } from 'react'
 import { Link } from 'react-router-dom'
 import { insertIzgeMentionAtCaret, tokenizeAgentText } from '../lib/agentText'
+import { markdownBlocks } from '../lib/markdownBlocks'
 import { useLanguage } from '../lib/i18n'
 import { formatSystemText } from '../lib/format'
 import { nextTaskStatus, taskStatusAction, taskStatusLabel } from '../lib/taskStatus'
@@ -80,28 +81,29 @@ function ComposerText({ text }: { text: string }) {
 }
 
 export function AgentText({ text, sources = [] }: { text: string; sources?: AgentSourceRead[] }) {
-  const blocks: ReactNode[] = []
-  let list: string[] = []
-  const flushList = () => {
-    if (!list.length) return
-    blocks.push(<ul key={`list-${blocks.length}`}>{list.map((line, index) => <li key={index}><InlineText text={line} sources={sources} /></li>)}</ul>)
-    list = []
-  }
-  for (const line of text.split('\n')) {
-    const item = line.match(/^\s*[-*]\s+(.+)$/)
-    if (item) { list.push(item[1]); continue }
-    flushList()
-    if (line.trim()) blocks.push(<p key={`p-${blocks.length}`}><InlineText text={line} sources={sources} /></p>)
-  }
-  flushList()
-  return <>{blocks}</>
+  return <>{markdownBlocks(text).map((block, index) => {
+    const inline = (value: string) => <InlineText text={value} sources={sources} />
+    if (block.kind === 'heading') {
+      // Documents live inside a page: do not introduce a second page-level h1.
+      if (block.level <= 2) return <h3 key={index}>{inline(block.text)}</h3>
+      return <h4 key={index}>{inline(block.text)}</h4>
+    }
+    if (block.kind === 'code') return <pre key={index}><code>{block.text}</code></pre>
+    if (block.kind === 'quote') return <blockquote key={index}>{inline(block.text)}</blockquote>
+    if (block.kind === 'table') return <div className="markdown-table-scroll" key={index}><table><thead><tr>{block.headers.map((cell, column) => <th key={column}>{inline(cell)}</th>)}</tr></thead><tbody>{block.rows.map((row, rowIndex) => <tr key={rowIndex}>{block.headers.map((_, column) => <td key={column}>{inline(row[column] ?? '')}</td>)}</tr>)}</tbody></table></div>
+    if (block.kind === 'list') {
+      const items = block.items.map((item, itemIndex) => <li key={itemIndex}>{inline(item)}</li>)
+      return block.ordered ? <ol key={index}>{items}</ol> : <ul key={index}>{items}</ul>
+    }
+    return <p key={index}>{inline(block.text)}</p>
+  })}</>
 }
 
 export function AgentAnswer({ text, sources = [], followUps = [], onFollowUp, active = false }: { text: string; sources?: AgentSourceRead[]; followUps?: string[]; onFollowUp?: (question: string) => void; active?: boolean }) {
   const { t } = useLanguage()
   return <div className="agent-answer">
     <div className="agent-answer-copy"><AgentText text={text} sources={sources} />{active ? <span className="agent-streaming-cursor" aria-label={t('Writing response', 'Yanıt yazılıyor')} /> : null}</div>
-    {sources.length ? <div className="agent-context-cards" aria-label={t('Sources used in the response', 'Yanıtta kullanılan kaynaklar')}>{sources.map((source) => <article className="agent-context-card" key={`${source.artifact_id}-${source.chunk_id ?? ''}`}><strong>{source.title}</strong><p>{source.quote}</p><SourcePreviewButton artifactId={source.artifact_id} title={source.title} className="review-context-chip"><ButtonIcon name="open-source" />{t('Open source', 'Kaynağı aç')}</SourcePreviewButton></article>)}</div> : null}
+    {sources.length ? <div className="agent-context-cards" aria-label={t('Sources used in the response', 'Yanıtta kullanılan kaynaklar')}>{sources.map((source) => <article className="agent-context-card" key={`${source.artifact_id}-${source.chunk_id ?? ''}`}><strong>{source.title}</strong><div className="agent-context-excerpt markdown-content"><AgentText text={source.quote} /></div><SourcePreviewButton artifactId={source.artifact_id} title={source.title} /></article>)}</div> : null}
     {followUps.length && onFollowUp ? <div className="agent-follow-ups"><strong>{t('Would you like to continue?', 'Devam etmek ister misiniz?')}</strong>{followUps.map((question) => <button type="button" key={question} onClick={() => onFollowUp(question)}>{question}</button>)}</div> : null}
   </div>
 }

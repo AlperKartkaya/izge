@@ -113,14 +113,21 @@ export interface NotificationRead {
   created_at: string
 }
 
+export type AutomationFrequency = 'hourly' | 'every_6_hours' | 'daily' | 'weekly'
+
 export interface AutomationRead {
   automation_id: string
   title: string
   prompt: string
   schedule_time: string
+  frequency: AutomationFrequency
+  starts_at: string | null
   timezone: 'Europe/Istanbul'
   enabled: boolean
+  response_language: 'tr' | 'en'
   last_run_at: string | null
+  last_run_id: string | null
+  last_run_status: AgentRunStatus | null
   next_run_at: string | null
   created_at: string
   updated_at: string
