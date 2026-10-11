@@ -38,7 +38,7 @@ veya ekran görüntüsüne koymayın. Çalışan hesabıyla giriş yapın:
 5. **Ana sayfa → Şimdi değerlendir:** Aynı gerçek gün sonu işini başlatın;
    riskleri, kaynaklarını ve yarın için önerileri gösterin.
 
-Türkçe varsayılandır. `English — Yakında` görünür ama devre dışıdır.
+Türkçe varsayılandır; dil menüsünden İngilizceye geçilebilir.
 Bu sürüm genel dosya düzenleme, Jira entegrasyonu veya dış sistemlerde
 otonom işlem yapmaz; agent şirket kaynaklarından yanıt ve öneri üretir.
 

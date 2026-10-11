@@ -33,6 +33,10 @@ from app.schemas.work import (
 from app.services.audit import log_event
 from app.services.colleague import TERMINAL_RUN_STATUSES, enqueue_colleague_question, enqueue_manual_review, task_sources_visible_to_readers
 from app.services.permissions import artifact_is_visible_to_user
+from app.services.agent_sources import visible_sources
+from app.services.agent_model import model_catalog
+from app.services.agent_tools import available_mcp_tools
+from app.config import get_settings
 
 
 router = APIRouter(prefix="/work", tags=["work"])
@@ -176,9 +180,11 @@ def _latest_reset_sequence(db: Session, run_id: str) -> int:
 def _run_read(db: Session, run: ColleagueRun, reader: User) -> ColleagueRunRead:
     reset_sequence = _latest_reset_sequence(db, run.run_id)
     stage_events = list(db.scalars(select(ColleagueRunEvent).where(ColleagueRunEvent.run_id == run.run_id, ColleagueRunEvent.event_type == "stage", ColleagueRunEvent.sequence >= reset_sequence).order_by(ColleagueRunEvent.sequence.asc())).all())
-    source_ids = [str(source.get("artifact_id")) for source in (run.sources or []) if source.get("artifact_id")]
-    visible_source_ids = set(_visible_source_ids(db, reader, source_ids))
-    all_sources_visible = len(visible_source_ids) == len(set(source_ids))
+    readable_sources = visible_sources(db, reader, run.sources or [])
+    all_sources_visible = len(readable_sources) == len(run.sources or [])
+    latest_stages = {}
+    for event in stage_events:
+        latest_stages[event.stage_key or "work"] = event
     return ColleagueRunRead(
         run_id=run.run_id,
         kind=cast("Literal['ask', 'evening_review', 'artifact_review']", run.kind),
@@ -189,26 +195,53 @@ def _run_read(db: Session, run: ColleagueRun, reader: User) -> ColleagueRunRead:
         question=run.question if all_sources_visible or run.kind != "artifact_review" else "Yeni kayıt değerlendirildi.",
         status=cast(RunStatus, run.status),
         answer=run.answer if all_sources_visible else "Bu yanıtın dayandığı kaynaklara erişiminiz değiştiği için içerik gizlendi.",
-        error=run.error,
-        sources=[ColleagueSourceRead.model_validate(source) for source in (run.sources or []) if source.get("artifact_id") in visible_source_ids],
+        error=run.error if all_sources_visible else None,
+        sources=[ColleagueSourceRead.model_validate(source) for source in readable_sources],
         follow_ups=list(run.follow_ups or []) if all_sources_visible else [],
         stages=[
             ColleagueStageRead(
+                summary=str((event.payload or {}).get("summary"))[:220] if (event.payload or {}).get("summary") else None,
                 sequence=event.sequence,
                 key=event.stage_key or "work",
                 label=event.label or "İşleniyor",
                 status=str((event.payload or {}).get("status") or "running"),
                 created_at=event.created_at,
             )
-            for event in stage_events
+            for event in latest_stages.values() if all_sources_visible
         ],
         created_at=run.created_at,
         updated_at=run.updated_at,
     )
 
 
+@router.get("/models")
+def get_agent_models(accept_language: str | None = Header(default=None, alias="Accept-Language"), current_user: User = Depends(get_current_user)) -> dict:
+    catalog = model_catalog()
+    if _response_language_from_header(accept_language) == "en":
+        reasons = {"ollama": "Local model is disabled.", "onprem": "Company model server is not configured.", "glm": "GLM API key is missing.", "deepseek": "DeepSeek API key is missing.", "codex": "Local Codex bridge is not configured."}
+        for profile in catalog["profiles"]:
+            if profile.get("reason"):
+                profile["reason"] = reasons[profile["id"]]
+            if profile["id"] == "ollama":
+                profile["label"] = f"Local model · {profile['model']}"
+            elif profile["id"] == "onprem":
+                profile["label"] = f"Company model · {profile['model'] or 'not configured'}"
+            elif profile["id"] == "codex":
+                profile["label"] = "GPT-6 Luna · Codex session"
+    catalog["tools"] = {"web_search": bool(get_settings().agent_web_search_key.get_secret_value()), "mcp": bool(available_mcp_tools(current_user.workspace_id, [current_user.user_id])), "reviewer": True}
+    return catalog
+
+
 @router.post("/ask", response_model=ColleagueAskAccepted, status_code=status.HTTP_202_ACCEPTED)
 def ask_colleague(payload: ColleagueAskCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ColleagueAskAccepted:
+    options = {key: value for key, value in payload.model_dump(include={"model_profile", "reasoning_effort", "allow_external_tools", "request_reviewer"}).items() if value is not None and value is not False}
+    if payload.model_profile or payload.reasoning_effort:
+        catalog = model_catalog()
+        profile = next(item for item in catalog["profiles"] if item["id"] == (payload.model_profile or catalog["default_profile"]))
+        if not profile["enabled"]:
+            raise HTTPException(status_code=503, detail=profile["reason"] or "Model yapılandırılmadı.")
+        if payload.reasoning_effort and payload.reasoning_effort not in profile["supported_efforts"]:
+            raise HTTPException(status_code=422, detail="Bu model seçilen düşünme düzeyini desteklemiyor.")
     run = enqueue_colleague_question(
         db,
         actor=current_user,
@@ -219,6 +252,7 @@ def ask_colleague(payload: ColleagueAskCreate, current_user: User = Depends(get_
         thread_kind=payload.thread_kind,
         participant_user_ids=payload.participant_user_ids,
         response_language=payload.response_language,
+        agent_options=options,
     )
     return ColleagueAskAccepted(run_id=run.run_id, thread_id=run.thread_id, status=cast(RunStatus, run.status))
 
@@ -259,15 +293,15 @@ def _event_stream(run_id: str, start_sequence: int, reader_id: str) -> Iterator[
             reader = db.get(User, reader_id)
             if run is None or reader is None:
                 return
-            source_ids = [str(source.get("artifact_id")) for source in (run.sources or []) if source.get("artifact_id")]
-            visible_source_ids = set(_visible_source_ids(db, reader, source_ids))
-            if len(visible_source_ids) != len(set(source_ids)):
+            if reader.workspace_id != run.workspace_id or not reader.is_active or not _can_read_run(run, reader):
+                return
+            readable = visible_sources(db, reader, run.sources or [])
+            if len(readable) != len(run.sources or []):
                 return
             for event in events:
                 if event.event_type == "source":
                     event_source = (event.payload or {}).get("source")
-                    event_artifact_id = str(event_source.get("artifact_id")) if isinstance(event_source, dict) and event_source.get("artifact_id") else None
-                    if event_artifact_id not in visible_source_ids:
+                    if not isinstance(event_source, dict) or not visible_sources(db, reader, [event_source]):
                         return
                 sequence = event.sequence
                 data = {
@@ -303,8 +337,7 @@ def stream_run_events(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Çalışma bulunamadı.")
     if not _can_read_run(run, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu çalışmaya erişemezsiniz.")
-    source_ids = [str(source.get("artifact_id")) for source in (run.sources or []) if source.get("artifact_id")]
-    if len(_visible_source_ids(db, current_user, source_ids)) != len(set(source_ids)):
+    if len(visible_sources(db, current_user, run.sources or [])) != len(run.sources or []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Çalışmanın kaynak erişimleri değişti.")
     start = after_sequence
     if last_event_id and last_event_id.isdigit():

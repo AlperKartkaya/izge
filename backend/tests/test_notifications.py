@@ -4,6 +4,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from app.config import Settings
+from app.services.agent_policy import AgentPlan
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -46,6 +48,9 @@ class NotificationFlowTest(unittest.TestCase):
         self.carol = self._user(self.workspace, "Carol", "carol-notify@example.com")
         self.outsider = self._user(self.other_workspace, "Outsider", "outsider-notify@example.com")
         self.db.commit()
+        planner = patch("app.services.colleague._plan_agent_work", return_value=AgentPlan(intent="company", summary="Kanıtları karşılaştır", web_query="", mcp_reads=[], reviewer=False))
+        planner.start()
+        self.addCleanup(planner.stop)
 
     def tearDown(self) -> None:
         self.db.close()
@@ -298,37 +303,10 @@ class NotificationFlowTest(unittest.TestCase):
         self.assertIsNone(self.db.scalar(select(CompanyChatMessage).where(CompanyChatMessage.message_metadata["colleague_run_id"].as_string() == run.run_id)))
 
     def test_follow_up_uses_json_schema_and_rejects_invalid_items(self) -> None:
-        response_body = json.dumps({"message": {"content": json.dumps({"follow_ups": ["Sorumlu kişi kim?", "Son tarih nedir?"]})}}).encode()
-
-        class FakeResponse:
-            status = 200
-
-            def read(self) -> bytes:
-                return response_body
-
-        class FakeConnection:
-            payload: dict | None = None
-
-            def request(self, _method, _path, *, body, headers) -> None:
-                self.payload = json.loads(body)
-
-            def getresponse(self) -> FakeResponse:
-                return FakeResponse()
-
-            def close(self) -> None:
-                return None
-
-        connection = FakeConnection()
-        settings = SimpleNamespace(local_llm_enabled=True, local_llm_model="test", local_llm_timeout_seconds=60)
-        with (
-            patch("app.services.colleague.get_settings", return_value=settings),
-            patch("app.services.colleague.validated_local_llm_base_url", return_value="http://127.0.0.1:11434"),
-            patch("app.services.colleague.http.client.HTTPConnection", return_value=connection),
-        ):
+        with patch("app.services.colleague.structured_agent_output", return_value={"follow_ups": ["Sorumlu kişi kim?", "Son tarih nedir?"]}) as structured:
             follow_ups = _generate_follow_ups("Durum nedir?", "Eksik belge var [1].", [{"title": "Şartname", "quote": "Belge zorunlu"}])
         self.assertEqual(["Sorumlu kişi kim?", "Son tarih nedir?"], follow_ups)
-        self.assertEqual("object", (connection.payload or {})["format"]["type"])
-        self.assertFalse((connection.payload or {})["stream"])
+        self.assertEqual("object", structured.call_args.kwargs["schema"]["type"])
 
 
 if __name__ == "__main__":

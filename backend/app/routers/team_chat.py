@@ -19,6 +19,7 @@ from app.schemas.api import TeamChatMessageCreate, TeamChatMessageRead, TeamChat
 from app.services.audit import log_event
 from app.services.notifications import notify_team_chat_recipients
 from app.services.permissions import artifact_is_visible_to_user
+from app.services.agent_sources import visible_sources
 from app.services.storage import ensure_supported_upload, persist_upload_bytes
 
 router = APIRouter(prefix="/team-chat", tags=["team-chat"])
@@ -171,10 +172,8 @@ def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, Use
     body = message.body
     source_refs = metadata.get("source_refs")
     if isinstance(source_refs, list) and source_refs:
-        source_ids = {str(source.get("artifact_id")) for source in source_refs if isinstance(source, dict) and source.get("artifact_id")}
-        artifacts = db.scalars(select(Artifact).where(Artifact.workspace_id == reader.workspace_id, Artifact.artifact_id.in_(source_ids))).all() if source_ids else []
-        visible_ids = {artifact.artifact_id for artifact in artifacts if artifact_is_visible_to_user(db, artifact, reader)}
-        if visible_ids != source_ids:
+        refs = [source for source in source_refs if isinstance(source, dict)]
+        if len(visible_sources(db, reader, refs)) != len(source_refs):
             body = "Bu yanıtın dayandığı kaynaklara erişiminiz değiştiği için içerik gizlendi."
             metadata["source_refs"] = []
             metadata["follow_ups"] = []

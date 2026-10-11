@@ -43,6 +43,8 @@ import type {
   AgentRunRead,
   AutomationRead,
   NotificationRead,
+  AgentModelCatalogRead,
+  AgentRequestOptions,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() || '/api'
@@ -329,12 +331,16 @@ export const api = {
     thread_kind?: 'channel' | 'direct' | 'group'
     participant_user_ids?: string[]
     client_request_id?: string
-  }) {
+  } & Partial<AgentRequestOptions>) {
     return request<AgentRunCreated>('/work/ask', {
       method: 'POST',
       token,
       body: JSON.stringify({ ...payload, response_language: getLanguage() }),
     })
+  },
+
+  getAgentModels(token: string) {
+    return request<AgentModelCatalogRead>('/work/models', { token })
   },
 
   listAgentRuns(token: string, threadId?: string) {

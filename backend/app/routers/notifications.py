@@ -6,38 +6,32 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import get_current_user
-from app.models import Artifact, ColleagueRun, CompanyChatMessage, Notification, User
+from app.models import ColleagueRun, CompanyChatMessage, Notification, User
 from app.schemas.notifications import NotificationList, NotificationRead
 from app.services.colleague import utcnow
-from app.services.permissions import artifact_is_visible_to_user
+from app.services.agent_sources import visible_sources
 
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
-def _source_ids(notification: Notification, db: Session) -> set[str]:
+def _sources(notification: Notification, db: Session) -> list[dict]:
     if notification.run_id:
         run = db.get(ColleagueRun, notification.run_id)
-        return {str(source.get("artifact_id")) for source in (run.sources or []) if source.get("artifact_id")} if run else set()
+        return list(run.sources or []) if run else []
     if notification.message_id:
         message = db.get(CompanyChatMessage, notification.message_id)
         refs = (message.message_metadata or {}).get("source_refs") if message else None
-        return {str(source.get("artifact_id")) for source in refs if isinstance(source, dict) and source.get("artifact_id")} if isinstance(refs, list) else set()
-    return set()
+        return [source for source in refs if isinstance(source, dict)] if isinstance(refs, list) else []
+    return []
 
 
 def _read(notification: Notification, db: Session, reader: User) -> NotificationRead:
     payload = NotificationRead.model_validate(notification, from_attributes=True)
-    source_ids = _source_ids(notification, db)
-    if source_ids:
-        artifacts = list(db.scalars(select(Artifact).where(
-            Artifact.workspace_id == reader.workspace_id,
-            Artifact.artifact_id.in_(source_ids),
-        )).all())
-        visible_ids = {artifact.artifact_id for artifact in artifacts if artifact_is_visible_to_user(db, artifact, reader)}
-        if visible_ids != source_ids:
-            payload.title = "Erişimi değişen İzge bildirimi"
-            payload.body = "Bu bildirimin dayandığı kaynaklara erişiminiz değiştiği için içerik gizlendi."
+    sources = _sources(notification, db)
+    if len(visible_sources(db, reader, sources)) != len(sources):
+        payload.title = "Erişimi değişen İzge bildirimi"
+        payload.body = "Bu bildirimin dayandığı kaynaklara erişiminiz değiştiği için içerik gizlendi."
     return payload
 
 

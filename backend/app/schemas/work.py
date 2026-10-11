@@ -67,6 +67,10 @@ class WorkTaskList(BaseModel):
 
 
 class ColleagueAskCreate(BaseModel):
+    model_profile: Literal["ollama", "onprem", "glm", "deepseek", "codex"] | None = None
+    reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] | None = None
+    allow_external_tools: bool = False
+    request_reviewer: bool = False
     response_language: Literal["tr", "en"] = "tr"
     message: str = Field(min_length=1, max_length=8000)
     client_request_id: str = Field(min_length=8, max_length=120)
@@ -83,6 +87,8 @@ class ColleagueAskAccepted(BaseModel):
 
 
 class ColleagueSourceRead(BaseModel):
+    source_type: Literal["artifact", "web", "mcp"] = "artifact"
+    url: str | None = None
     artifact_id: str
     title: str
     quote: str
@@ -90,6 +96,7 @@ class ColleagueSourceRead(BaseModel):
 
 
 class ColleagueStageRead(BaseModel):
+    summary: str | None = None
     sequence: int
     key: str
     label: str

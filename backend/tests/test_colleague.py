@@ -5,11 +5,14 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
+from app.config import Settings
+from app.services.agent_policy import AgentPlan
+from app.services.colleague import _plan_agent_work, _review_agent_draft
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session
 
@@ -34,6 +37,12 @@ class ColleagueServiceTest(unittest.TestCase):
         self.alice = self._user("Alice", "alice@example.com")
         self.bob = self._user("Bob", "bob@example.com")
         self.db.commit()
+        planner = patch("app.services.colleague._plan_agent_work", return_value=AgentPlan(intent="company", summary="Kanıtları karşılaştır", web_query="", mcp_reads=[], reviewer=False))
+        planner.start()
+        self.addCleanup(planner.stop)
+        followups = patch("app.services.colleague._safe_follow_ups", return_value=[])
+        followups.start()
+        self.addCleanup(followups.stop)
 
     def tearDown(self) -> None:
         self.db.close()
@@ -263,9 +272,11 @@ class ColleagueServiceTest(unittest.TestCase):
         self.db.add(task)
         self.db.commit()
         run = self._run([self.bob.user_id])
+        run.question = "Gizli lansman planı nedir?"
         run.answer = "Gizli plan uygulanacak [1]."
         run.sources = [{"artifact_id": private.artifact_id, "title": private.title, "quote": private.extracted_text, "chunk_id": None}]
         run.status = "completed"
+        self.db.add(ColleagueRunEvent(run_id=run.run_id, sequence=1, event_type="stage", stage_key="private", label="Gizli plan kontrol edildi", payload={"status": "completed", "summary": "Gizli ayrıntı"}))
         self.db.commit()
         _sources, tasks = retrieve_shared_context(self.db, run)
         self.assertNotIn("source_snapshot", tasks[0])
@@ -281,6 +292,7 @@ class ColleagueServiceTest(unittest.TestCase):
         read_model = _run_read(self.db, run, self.bob)
         self.assertEqual([], read_model.sources)
         self.assertIn("erişiminiz değişti", read_model.answer or "")
+        self.assertEqual([], read_model.stages)
 
     def test_client_request_is_idempotent_but_cannot_be_reused_by_another_actor(self) -> None:
         first = enqueue_colleague_question(
@@ -470,6 +482,7 @@ class ColleagueServiceTest(unittest.TestCase):
         with (
             patch("app.services.ingestion.run_ingestion") as ingest,
             patch("app.services.temporal_graph.sync_temporal_claims", return_value={"family_count": 1, "occurrence_count": 1, "synced": True}),
+            patch("app.services.colleague._review_agent_draft", return_value=("Gün sonu özeti [1].", "Kaynaklar kontrol edildi.")),
             patch("app.services.colleague._stream_local_answer", return_value=iter(["Gün sonu özeti [1]."])),
         ):
             process_colleague_run(self.db, claimed)  # type: ignore[arg-type]
@@ -550,11 +563,10 @@ class ColleagueServiceTest(unittest.TestCase):
                 return None
 
         connection = FakeConnection()
-        settings = SimpleNamespace(local_llm_enabled=True, local_llm_model="test", local_llm_timeout_seconds=1)
+        settings = Settings(_env_file=None, local_llm_enabled=True, local_llm_model="test", local_llm_timeout_seconds=1)
         with (
-            patch("app.services.colleague.get_settings", return_value=settings),
-            patch("app.services.colleague.validated_local_llm_base_url", return_value="http://127.0.0.1:11434"),
-            patch("app.services.colleague.http.client.HTTPConnection", return_value=connection),
+            patch("app.services.agent_model.get_settings", return_value=settings),
+            patch("app.services.agent_model.http.client.HTTPConnection", return_value=connection),
         ):
             with self.assertRaises(LocalLLMError):
                 list(_stream_local_answer("soru", [], [], review=False))
@@ -583,11 +595,10 @@ class ColleagueServiceTest(unittest.TestCase):
                 return None
 
         connection = FakeConnection()
-        settings = SimpleNamespace(local_llm_enabled=True, local_llm_model="test", local_llm_timeout_seconds=60)
+        settings = Settings(_env_file=None, local_llm_enabled=True, local_llm_model="test", local_llm_timeout_seconds=60)
         with (
-            patch("app.services.colleague.get_settings", return_value=settings),
-            patch("app.services.colleague.validated_local_llm_base_url", return_value="http://127.0.0.1:11434"),
-            patch("app.services.colleague.http.client.HTTPConnection", return_value=connection),
+            patch("app.services.agent_model.get_settings", return_value=settings),
+            patch("app.services.agent_model.http.client.HTTPConnection", return_value=connection),
         ):
             self.assertEqual(["Done."], list(_stream_local_answer("Status?", [], [], review=False, response_language="en", conversation=[{"question": "Old?", "answer": "Old fact [2]."}])))
         self.assertIn("İngilizce", (connection.payload or {})["messages"][0]["content"])
@@ -649,11 +660,10 @@ class ColleagueServiceTest(unittest.TestCase):
             def getresponse(self) -> BadResponse: return BadResponse()
             def close(self) -> None: return None
 
-        settings = SimpleNamespace(local_llm_enabled=True, local_llm_model="test", local_llm_timeout_seconds=1)
+        settings = Settings(_env_file=None, local_llm_enabled=True, local_llm_model="test", local_llm_timeout_seconds=1)
         with (
-            patch("app.services.colleague.get_settings", return_value=settings),
-            patch("app.services.colleague.validated_local_llm_base_url", return_value="http://127.0.0.1:11434"),
-            patch("app.services.colleague.http.client.HTTPConnection", return_value=BadConnection()),
+            patch("app.services.agent_model.get_settings", return_value=settings),
+            patch("app.services.agent_model.http.client.HTTPConnection", return_value=BadConnection()),
             self.assertRaises(LocalLLMError),
         ):
             list(_stream_local_answer("soru", [], [], review=False))
@@ -663,6 +673,112 @@ class ColleagueServiceTest(unittest.TestCase):
             _validate_answer_citations("Atıfsız yanıt.", [{"artifact_id": "art_1"}])
         with self.assertRaises(LocalLLMError):
             _validate_answer_citations("Geçersiz [2].", [{"artifact_id": "art_1"}])
+
+    def test_capability_request_has_no_company_search_or_required_citations(self) -> None:
+        run = self._run([])
+        run.question = "Ne yapabilirsin benim için?"
+        self.db.commit()
+        claimed = claim_next_colleague_run(self.db, worker_id="capability-worker")
+        plan = AgentPlan(intent="capabilities", summary="Yetenek ve sınırlarımı açıklayacağım.", web_query="", mcp_reads=[], reviewer=False)
+        with patch("app.services.colleague._plan_agent_work", return_value=plan), patch("app.services.colleague.retrieve_shared_context") as retrieval, patch("app.services.colleague._stream_local_answer", return_value=iter(["Şirket dosyalarında kaynaklı yanıt ve öneri üretebilirim."])) as answer:
+            completed = process_colleague_run(self.db, claimed)
+        self.assertEqual("completed", completed.status)
+        self.assertEqual([], completed.sources)
+        retrieval.assert_not_called()
+        answer.assert_not_called()
+        self.assertIn("Fatura kesemem", completed.answer)
+        self.assertIn("bu istek için arama kapalı", completed.answer)
+        read = _run_read(self.db, completed, self.alice)
+        self.assertNotIn("retrieval", {stage.key for stage in read.stages})
+        self.assertTrue(all(stage.status == "completed" for stage in read.stages))
+        self.assertEqual(1, len([stage for stage in read.stages if stage.key == "plan"]))
+        self.assertEqual(plan.summary, next(stage.summary for stage in read.stages if stage.key == "plan"))
+
+    def test_general_context_does_not_claim_company_has_no_files(self) -> None:
+        with patch("app.services.colleague.stream_agent_text", return_value=iter(["Merhaba"])) as model:
+            list(_stream_local_answer("Neler yaparsın?", [], [], review=False, intent="capabilities"))
+        prompt=model.call_args.args[0][1]["content"]
+        self.assertIn("bu istekte aranmadı",prompt)
+        self.assertNotIn("Açık görev bulunamadı",prompt)
+        source={"title":"Public page","quote":"Fact"}
+        with patch("app.services.colleague.stream_agent_text", return_value=iter(["Fact [1]"])) as model:
+            list(_stream_local_answer("Kamu bilgisi?", [source], [], review=False, intent="general"))
+        self.assertIn("kaynak numarası koy",model.call_args.args[0][0]["content"])
+        self.assertIn("Şirket görevleri bu istekte aranmadı",model.call_args.args[0][1]["content"])
+        self.assertNotIn("Açık görev bulunamadı",model.call_args.args[0][1]["content"])
+
+    def test_planner_cannot_enable_unapproved_web_or_mcp_tools(self) -> None:
+        run = self._run([])
+        fields = dict(intent="company", summary="Kanıtları okuyacağım.", web_query="private customer data", mcp_reads=[], reviewer=False)
+        with patch("app.services.colleague._structured_local_output", return_value=fields):
+            self.assertEqual("", _plan_agent_work(run, [], [], web_enabled=False).web_query)
+        fields["mcp_reads"] = [{"connector_id": "not-authorized", "tool_name": "delete", "arguments": {}}]
+        with patch("app.services.colleague._structured_local_output", return_value=fields), self.assertRaises(LocalLLMError):
+            _plan_agent_work(run, [], [], web_enabled=True)
+        fields["intent"] = "capabilities"
+        with patch("app.services.colleague._structured_local_output", return_value=fields):
+            plan = _plan_agent_work(run, [], [], web_enabled=True)
+        self.assertEqual([], plan.mcp_reads)
+        self.assertEqual("", plan.web_query)
+
+    def test_real_tool_call_and_separate_reviewer_have_completed_history(self) -> None:
+        run = self._run([])
+        run.agent_options = {"allow_external_tools": True, "request_reviewer": True}
+        self.db.commit()
+        claimed = claim_next_colleague_run(self.db, worker_id="tools-worker")
+        plan = AgentPlan(intent="general", summary="Kamu bilgisi arayıp yanıtı denetleyeceğim.", web_query="public information", mcp_reads=[], reviewer=True)
+        source = {"artifact_id": "web:verified", "title": "Public page", "quote": "Public fact", "source_type": "web", "url": "https://example.com/public"}
+        with patch("app.services.colleague.get_settings", return_value=Settings(_env_file=None, agent_web_search_key=SecretStr("test-key"))), patch("app.services.colleague._plan_agent_work", return_value=plan), patch("app.services.colleague.run_web_search", return_value=[source]) as tool, patch("app.services.colleague._stream_local_answer", return_value=iter(["Public fact [1]."])), patch("app.services.colleague._review_agent_draft", return_value=("Checked public fact [1].", "Kanıt kontrol edildi.")) as reviewer:
+            completed = process_colleague_run(self.db, claimed)
+        tool.assert_called_once_with("public information")
+        reviewer.assert_called_once()
+        self.assertEqual("completed", completed.status)
+        self.assertEqual("Checked public fact [1].", completed.answer)
+        read = _run_read(self.db, completed, self.alice)
+        self.assertEqual("web", read.sources[0].source_type)
+        self.assertIn("web_search", {stage.key for stage in read.stages})
+        self.assertIn("reviewer", {stage.key for stage in read.stages})
+        self.assertTrue(all(stage.status == "completed" for stage in read.stages))
+        with patch("app.routers.work.SessionLocal", side_effect=lambda: Session(self.engine)):
+            self.assertIn('"source_type": "web"', "".join(_event_stream(run.run_id, 0, self.alice.user_id)))
+
+    def test_external_tool_consent_is_checked_at_execution(self) -> None:
+        run = self._run([])
+        claimed = claim_next_colleague_run(self.db, worker_id="consent-worker")
+        plan = AgentPlan(intent="general", summary="Yanıt hazırla.", web_query="public query", mcp_reads=[{"connector_id":"internal", "tool_name":"read", "arguments":{}}], reviewer=False)
+        with patch("app.services.colleague.available_mcp_tools") as discovery, patch("app.services.colleague._plan_agent_work", return_value=plan), patch("app.services.colleague.run_web_search") as web, patch("app.services.colleague.run_mcp_tool") as mcp, patch("app.services.colleague._stream_local_answer", return_value=iter(["Merhaba."])):
+            completed = process_colleague_run(self.db, claimed)
+        self.assertEqual("completed", completed.status)
+        discovery.assert_not_called()
+        web.assert_not_called()
+        mcp.assert_not_called()
+
+    def test_nonexistent_citation_is_repaired_without_inventing_evidence(self) -> None:
+        with patch("app.services.colleague._structured_local_output", return_value={"answer": "Kaynaklı yanıt üretebilirim."}) as repair:
+            answer = _ensure_answer_citations("Ne yapabilirsin?", "Kaynaklı yanıt üretebilirim [1].", [], response_language="tr")
+        self.assertEqual("Kaynaklı yanıt üretebilirim.", answer)
+        repair.assert_called_once()
+        self.assertIn("No source exists", repair.call_args.kwargs["system_prompt"])
+
+    def test_run_idempotency_includes_provider_and_tool_permissions(self) -> None:
+        options = {"model_profile": "codex", "reasoning_effort": "low", "allow_external_tools": True}
+        args = dict(actor=self.alice, message="Açık işler?", client_request_id="option-idempotency", thread_id="options", thread_title="Options", thread_kind="direct", participant_user_ids=[])
+        first = enqueue_colleague_question(self.db, **args, agent_options=options)
+        self.assertEqual(options, first.agent_options)
+        self.assertEqual(first.run_id, enqueue_colleague_question(self.db, **args, agent_options=options).run_id)
+        with self.assertRaises(HTTPException) as raised:
+            enqueue_colleague_question(self.db, **args, agent_options={**options, "allow_external_tools": False})
+        self.assertEqual(409, raised.exception.status_code)
+
+
+    def test_default_model_is_snapshotted_before_settings_change(self) -> None:
+        args = dict(actor=self.alice, message="Merhaba", client_request_id="model-snapshot", thread_id="snapshot", thread_title="Snapshot", thread_kind="direct", participant_user_ids=[])
+        with patch("app.services.agent_model.get_settings", return_value=Settings(_env_file=None, agent_model_provider="deepseek", agent_model_effort="high")):
+            run = enqueue_colleague_question(self.db, **args)
+        self.assertEqual({"model_profile":"deepseek", "reasoning_effort":"high"}, run.agent_options)
+        with patch("app.services.agent_model.get_settings", return_value=Settings(_env_file=None, agent_model_provider="ollama", agent_model_effort="none")):
+            self.assertEqual(run.run_id, enqueue_colleague_question(self.db, **args).run_id)
+        self.assertEqual("deepseek", run.agent_options["model_profile"])
 
     def test_new_private_threads_require_real_participants(self) -> None:
         with self.assertRaises(HTTPException) as raised:

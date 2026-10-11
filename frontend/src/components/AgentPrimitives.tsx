@@ -5,6 +5,7 @@ import { markdownBlocks } from '../lib/markdownBlocks'
 import { useLanguage } from '../lib/i18n'
 import { formatSystemText } from '../lib/format'
 import { nextTaskStatus, taskStatusAction, taskStatusLabel } from '../lib/taskStatus'
+import { latestAgentStages, safeHttpUrl } from '../lib/agentRun'
 import type { AgentRunStageRead, AgentSourceRead, WorkTaskRead, WorkTaskStatus } from '../lib/types'
 import { ButtonIcon } from './ButtonIcon'
 import { SourcePreviewButton } from './SourcePreviewButton'
@@ -35,8 +36,10 @@ export function LoadingState({ label }: { label: string }) {
 
 export function ThinkingState({ stages, status }: { stages: AgentRunStageRead[]; status: 'queued' | 'running' | 'completed' | 'failed' }) {
   const { t } = useLanguage()
-  const [expanded, setExpanded] = useState(true)
   const working = status === 'queued' || status === 'running'
+  const [expanded, setExpanded] = useState(working)
+  const visibleStages = latestAgentStages(stages)
+
 
   return (
     <div className="agent-thinking">
@@ -47,10 +50,10 @@ export function ThinkingState({ stages, status }: { stages: AgentRunStageRead[];
       </button>
       {expanded ? (
         <ol className="agent-stage-list">
-          {stages.map((stage) => (
+          {visibleStages.map((stage) => (
             <li key={`${stage.sequence}-${stage.key}`} data-status={stage.status}>
               <span aria-hidden="true">{stage.status === 'completed' ? '✓' : stage.status === 'failed' ? '×' : '•'}</span>
-              <span>{formatSystemText(stage.label)}</span>
+              <span><strong>{formatSystemText(stage.label)}</strong>{stage.summary ? <small>{formatSystemText(stage.summary)}</small> : null}</span>
             </li>
           ))}
         </ol>
@@ -70,7 +73,11 @@ function InlineText({ text, sources = [] }: { text: string; sources?: AgentSourc
     if (token.kind === 'mention') return <mark className="izge-mention" key={index}>{token.value}</mark>
     if (token.kind === 'source') {
       const source = sources[token.sourceIndex]
-      return source ? <SourcePreviewButton key={index} artifactId={source.artifact_id} title={source.title} className="agent-inline-source">{source.title}</SourcePreviewButton> : token.value
+      if (!source) return token.value
+      const url = source.source_type === 'web' ? safeHttpUrl(source.url) : null
+      if (url) return <a key={index} href={url} target="_blank" rel="noreferrer" className="agent-inline-source">{source.title}</a>
+      if (source.source_type === 'mcp' || source.source_type === 'web') return <span key={index} className="agent-inline-source">{source.title}</span>
+      return <SourcePreviewButton key={index} artifactId={source.artifact_id} title={source.title} className="agent-inline-source">{source.title}</SourcePreviewButton>
     }
     return token.value
   })
@@ -103,7 +110,10 @@ export function AgentAnswer({ text, sources = [], followUps = [], onFollowUp, ac
   const { t } = useLanguage()
   return <div className="agent-answer">
     <div className="agent-answer-copy"><AgentText text={text} sources={sources} />{active ? <span className="agent-streaming-cursor" aria-label={t('Writing response', 'Yanıt yazılıyor')} /> : null}</div>
-    {sources.length ? <div className="agent-context-cards" aria-label={t('Sources used in the response', 'Yanıtta kullanılan kaynaklar')}>{sources.map((source) => <article className="agent-context-card" key={`${source.artifact_id}-${source.chunk_id ?? ''}`}><strong>{source.title}</strong><div className="agent-context-excerpt markdown-content"><AgentText text={source.quote} /></div><SourcePreviewButton artifactId={source.artifact_id} title={source.title} /></article>)}</div> : null}
+    {sources.length ? <div className="agent-context-cards" aria-label={t('Sources used in the response', 'Yanıtta kullanılan kaynaklar')}>{sources.map((source, index) => {
+      const url = source.source_type === 'web' ? safeHttpUrl(source.url) : null
+      return <article className="agent-context-card" key={`${source.source_type ?? 'artifact'}-${source.artifact_id}-${source.chunk_id ?? index}`}><strong>{source.title}</strong><div className="agent-context-excerpt markdown-content"><AgentText text={source.quote} /></div>{url ? <a href={url} target="_blank" rel="noreferrer">{t('Open web source', 'Web kaynağını aç')}</a> : source.source_type === 'mcp' ? <small>{t('Company tool context', 'Şirket aracı bağlamı')}</small> : source.source_type === 'web' ? <small>{t('Web address unavailable', 'Web adresi kullanılamıyor')}</small> : <SourcePreviewButton artifactId={source.artifact_id} title={source.title} />}</article>
+    })}</div> : null}
     {followUps.length && onFollowUp ? <div className="agent-follow-ups"><strong>{t('Would you like to continue?', 'Devam etmek ister misiniz?')}</strong>{followUps.map((question) => <button type="button" key={question} onClick={() => onFollowUp(question)}>{question}</button>)}</div> : null}
   </div>
 }

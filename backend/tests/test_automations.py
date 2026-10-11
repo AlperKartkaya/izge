@@ -37,7 +37,7 @@ class AutomationsTest(unittest.TestCase):
         self.directory.cleanup()
 
     def create(self):
-        return create_automation(AutomationCreate(title="Günlük özet", prompt="Açık işleri Türkçe özetle.", schedule_time="16:00"), self.alice, self.db)
+        return create_automation(AutomationCreate(title="Günlük özet", prompt="Açık işleri Türkçe özetle.", schedule_time="16:00", starts_at=datetime(2026, 10, 9, 13, 0, tzinfo=UTC)), self.alice, self.db)
 
     def test_validation(self):
         for time in ("24:00", "8:00", "16:60", "16:00x"):
@@ -178,12 +178,12 @@ class AutomationsTest(unittest.TestCase):
         due = datetime(2026, 10, 9, 13, 0, tzinfo=UTC)
         self.assertEqual(dispatch_due_automations(self.db, due), 1)
         updated = update_automation(item.automation_id, AutomationUpdate(
-            frequency="weekly", starts_at=datetime(2026, 10, 10, 10, 0, tzinfo=UTC)
+            frequency="weekly", starts_at=datetime(2030, 10, 10, 10, 0, tzinfo=UTC)
         ), self.alice, self.db)
         self.assertEqual(updated.frequency, "weekly")
-        self.assertEqual(updated.starts_at, datetime(2026, 10, 10, 10, 0))
+        self.assertEqual(updated.starts_at, datetime(2030, 10, 10, 10, 0))
         self.assertEqual(updated.schedule_time, "13:00")
-        self.assertEqual(updated.next_run_at, datetime(2026, 10, 10, 10, 0, tzinfo=UTC))
+        self.assertEqual(updated.next_run_at, datetime(2030, 10, 10, 10, 0, tzinfo=UTC))
         automation = self.db.get(Automation, item.automation_id)
         assert automation is not None
         self.assertIsNone(automation.last_scheduled_at)

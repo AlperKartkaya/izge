@@ -73,6 +73,8 @@ export interface AgentSourceRead {
   title: string
   quote: string
   chunk_id?: string | null
+  source_type?: 'artifact' | 'web' | 'mcp'
+  url?: string | null
 }
 
 export interface AgentRunStageRead {
@@ -81,6 +83,7 @@ export interface AgentRunStageRead {
   label: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   created_at: string
+  summary?: string | null
 }
 
 export interface AgentRunRead {
@@ -131,6 +134,32 @@ export interface AutomationRead {
   next_run_at: string | null
   created_at: string
   updated_at: string
+}
+
+
+export type AgentModelProfileId = 'ollama' | 'onprem' | 'glm' | 'deepseek' | 'codex'
+
+export interface AgentModelProfileRead {
+  id: AgentModelProfileId
+  label: string
+  model: string
+  enabled: boolean
+  reason: string | null
+  data_boundary: 'local' | 'cloud'
+  supported_efforts: string[]
+}
+
+export interface AgentModelCatalogRead {
+  default_profile: string
+  profiles: AgentModelProfileRead[]
+  tools: { web_search: boolean; mcp: boolean; reviewer: boolean }
+}
+
+export interface AgentRequestOptions {
+  model_profile?: AgentModelProfileId
+  reasoning_effort?: string
+  allow_external_tools: boolean
+  request_reviewer: boolean
 }
 
 export interface AgentRunCreated {

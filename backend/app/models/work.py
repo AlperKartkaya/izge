@@ -45,6 +45,7 @@ class ColleagueRun(Base, TimestampMixin):
     participant_user_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     response_language: Mapped[str] = mapped_column(String(2), default="tr", server_default="tr", nullable=False)
+    agent_options: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="queued", nullable=False, index=True)
     answer: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)

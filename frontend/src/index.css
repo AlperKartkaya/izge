@@ -6691,6 +6691,9 @@ body:has(.full-chat-page) .top-nav {
 .agent-stage-list li { display: flex; gap: 8px; color: var(--color-ink); font-size: 13px; }
 .agent-stage-list li[data-status="running"] span:first-child { animation: agent-pulse .8s ease-in-out infinite; }
 .agent-stage-list li[data-status="failed"] { color: var(--danger, #c34a4a); }
+.agent-stage-list li > span:nth-child(2) { display: grid; gap: 2px; min-width: 0; }
+.agent-stage-list li strong { font-size: inherit; font-weight: 600; }
+.agent-stage-list li small { color: var(--color-ink-muted); line-height: 1.45; }
 .agent-streaming-text { white-space: pre-wrap; line-height: 1.7; margin: 0; }
 .agent-streaming-cursor { display: inline-block; width: 7px; height: 1.05em; margin-left: 3px; vertical-align: -.15em; background: currentColor; animation: agent-pulse .7s steps(1) infinite; }
 .agent-task-rows { display: grid; gap: 8px; }
@@ -6882,6 +6885,12 @@ body:has(.app-frame-chat) { overflow: hidden; }
 .agent-follow-ups button { padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface); color: var(--color-ink); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .agent-follow-ups button:hover { border-color: var(--color-border-strong); background: var(--color-surface-muted); }
 .agent-chat-composer { position: relative; }
+.agent-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; min-width: 0; margin: 0; padding: 0 0 7px; border: 0; border-bottom: 1px solid var(--color-border); }
+.agent-controls > label:not(.agent-control-check) { display: inline-flex; align-items: center; gap: 5px; color: var(--color-ink-muted); font-size: 10px; }
+.agent-controls select { max-width: 190px; min-height: 28px; padding: 3px 24px 3px 7px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-surface); color: var(--color-ink); font: inherit; font-size: 11px; }
+.agent-control-check { display: inline-flex; align-items: center; gap: 5px; color: var(--color-ink); font-size: 11px; cursor: pointer; }
+.agent-control-check input { margin: 0; }
+.agent-controls-warning, .agent-controls-status { flex-basis: 100%; color: var(--color-ink-muted); font-size: 10px; line-height: 1.4; }
 .agent-composer-editor { position: relative; display: block; }
 .agent-composer-highlight { position: absolute; inset: 0; z-index: 0; overflow: hidden; padding: 3px; color: var(--color-ink-strong); font: inherit; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: break-word; pointer-events: none; }
 .agent-composer-editor-mentions textarea { position: relative; z-index: 1; color: transparent !important; caret-color: var(--color-ink-strong); -webkit-text-fill-color: transparent; }

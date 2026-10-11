@@ -9,6 +9,8 @@ docker compose --project-name izge-coolify --env-file "$RUNTIME/.env" -f deploy/
 docker build -t izge-backend:local backend
 docker build -t izge-frontend:local frontend
 docker build -t izge-website:local -f deploy/website.Dockerfile .
+python3 scripts/setup-codex-bridge.py
+backend/.venv/bin/python scripts/configure-local-agent.py
 python3 - <<'PY'
 import json
 import subprocess

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { AgentAnswer, AgentText, ChatComposer, LoadingState, ThinkingState } from '../components/AgentPrimitives'
+import { AgentControls } from '../components/AgentControls'
+import { useAgentControls } from '../components/useAgentControls'
 import { useChatScroll } from '../components/useChatScroll'
 import { Callout, EmptyState } from '../components/ui'
 import { api, ApiError } from '../lib/api'
@@ -13,7 +15,7 @@ import type { AgentRunRead } from '../lib/types'
 function errorMessage(error: unknown, fallback: string, t: (english: string, turkish: string) => string) {
   if (!(error instanceof ApiError)) return fallback
   if (error.status === 403) return t('You do not have permission for this action.', 'Bu işlem için yetkiniz yok.')
-  if (error.status === 503) return t('The local language model is currently unavailable.', 'Yerel dil modeli şu anda kullanılamıyor.')
+  if (error.status === 503) return t('The selected language model is currently unavailable.', 'Seçili dil modeli şu anda kullanılamıyor.')
   return error.message || fallback
 }
 
@@ -32,6 +34,7 @@ export function QueryPage() {
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  const agentControls = useAgentControls(session?.token, session?.user.user_id)
   const activeRunThreadId = runs.find((run) => run.run_id === activeRunId)?.thread_id
   const { ref: messagesRef, onScroll: handleMessageScroll, followLatest } = useChatScroll(threadId, JSON.stringify(runs.map((run) => [run.run_id, run.status, run.answer, run.stages.length])) + streamedText)
 
@@ -102,6 +105,7 @@ export function QueryPage() {
         thread_title: runs[0]?.thread_title ?? 'İzge',
         thread_kind: runs[0]?.thread_kind ?? 'direct',
         participant_user_ids: runs[0]?.participant_user_ids ?? [session.user.user_id],
+        ...agentControls.requestOptions,
       })
       const run = await api.getAgentRun(session.token, created.run_id)
       setRuns((current) => [run, ...current])
@@ -137,7 +141,7 @@ export function QueryPage() {
               {run.kind === 'ask' && run.run_id !== notificationRunId ? <article className="agent-user-message"><strong>{t('You', 'Siz')}</strong><div><AgentText text={run.question} /></div><time>{formatDateTime(run.created_at)}</time></article> : null}
               <article className="agent-assistant-message">
                 <div className="agent-message-author"><span className="agent-avatar">İZ</span><strong>İzge</strong></div>
-                {(run.status === 'queued' || run.status === 'running') ? <ThinkingState stages={run.stages} status={run.status} /> : null}
+                {run.stages.length ? <ThinkingState key={`${run.run_id}-${run.status}`} stages={run.stages} status={run.status} /> : null}
                 {run.status === 'queued' && run.stages.length === 0 ? <LoadingState label={t('Work queued', 'İş sıraya alındı')} /> : null}
                 {answer ? <AgentAnswer text={answer} sources={run.sources} followUps={run.follow_ups} active={active && run.status === 'running'} onFollowUp={fillFollowUp} /> : null}
                 {run.status === 'failed' ? <Callout tone="warning">{run.error || t('Izge could not complete this work.', 'İzge bu işi tamamlayamadı.')}</Callout> : null}
@@ -146,7 +150,7 @@ export function QueryPage() {
           )
         })}
       </section>
-      <ChatComposer value={draft} onChange={setDraft} onSubmit={() => void ask()} disabled={isLoading || loadedThreadId !== threadId || isSending || Boolean(activeRunId)} inputRef={composerRef} mentionAutocomplete />
+      <ChatComposer value={draft} onChange={setDraft} onSubmit={() => void ask()} disabled={isLoading || loadedThreadId !== threadId || isSending || Boolean(activeRunId)} inputRef={composerRef} mentionAutocomplete leading={<AgentControls controls={agentControls} disabled={isSending || Boolean(activeRunId)} />} />
       </div>
     </div>
   )

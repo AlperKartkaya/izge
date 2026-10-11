@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { AgentAnswer, AgentText, ChatComposer, LoadingState, ThinkingState } from '../components/AgentPrimitives'
+import { AgentControls } from '../components/AgentControls'
+import { useAgentControls } from '../components/useAgentControls'
 import { SourcePreviewButton } from '../components/SourcePreviewButton'
 import { useChatScroll } from '../components/useChatScroll'
 import { Callout, EmptyState } from '../components/ui'
@@ -54,6 +56,7 @@ export function TeamChatPage() {
   const [groupParticipants, setGroupParticipants] = useState<string[]>([])
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const agentControls = useAgentControls(session?.token, session?.user.user_id)
 
   useEffect(() => {
     if (!session?.token) return
@@ -146,6 +149,7 @@ export function TeamChatPage() {
           thread_title: active.title,
           thread_kind: active.kind,
           participant_user_ids: active.participantUserIds,
+          ...agentControls.requestOptions,
         })
         const run = await api.getAgentRun(session.token, created.run_id)
         dataRevision.current += 1
@@ -280,13 +284,15 @@ export function TeamChatPage() {
               const followUps = metadataStrings(message, 'follow_ups')
               const fromIzge = message.author_display_name === 'İzge'
               const authorTitle = metadataString(message, 'author_title')
-              return <article key={message.message_id} className={own ? 'team-chat-message-row team-chat-message-row-own' : 'team-chat-message-row'}><span className="team-chat-message-avatar">{fromIzge ? 'İZ' : initials(message.author_display_name)}</span><div className={own ? 'team-chat-message team-chat-message-own' : 'team-chat-message'}><span className="team-chat-message-author"><strong>{own ? t('You', 'Siz') : message.author_display_name}</strong>{authorTitle ? <small>{authorTitle}</small> : null}</span>{fromIzge ? <AgentAnswer text={message.body} sources={sources} followUps={followUps} onFollowUp={fillFollowUp} /> : message.message_metadata?.attachment_only ? null : <div className="team-chat-message-copy"><AgentText text={message.body} /></div>}{attachments.length ? <div className="team-chat-attachments">{attachments.map((attachment) => <SourcePreviewButton key={attachment.artifact_id} artifactId={attachment.artifact_id} title={attachment.title} className="team-chat-attachment"><ButtonIcon name="attach" /><span><strong>{attachment.filename}</strong><small>{t('Conversation source', 'Sohbet kaynağı')}</small></span></SourcePreviewButton>)}</div> : null}<time>{formatDateTime(message.created_at)}</time></div></article>
+              const messageRunId = metadataString(message, 'colleague_run_id')
+              const messageRun = messageRunId ? agentRuns.find((run) => run.run_id === messageRunId) : null
+              return <article key={message.message_id} className={own ? 'team-chat-message-row team-chat-message-row-own' : 'team-chat-message-row'}><span className="team-chat-message-avatar">{fromIzge ? 'İZ' : initials(message.author_display_name)}</span><div className={own ? 'team-chat-message team-chat-message-own' : 'team-chat-message'}><span className="team-chat-message-author"><strong>{own ? t('You', 'Siz') : message.author_display_name}</strong>{authorTitle ? <small>{authorTitle}</small> : null}</span>{fromIzge && messageRun?.stages.length ? <ThinkingState key={`${messageRun.run_id}-${messageRun.status}`} stages={messageRun.stages} status={messageRun.status} /> : null}{fromIzge ? <AgentAnswer text={message.body} sources={sources} followUps={followUps} onFollowUp={fillFollowUp} /> : message.message_metadata?.attachment_only ? null : <div className="team-chat-message-copy"><AgentText text={message.body} /></div>}{attachments.length ? <div className="team-chat-attachments">{attachments.map((attachment) => <SourcePreviewButton key={attachment.artifact_id} artifactId={attachment.artifact_id} title={attachment.title} className="team-chat-attachment"><ButtonIcon name="attach" /><span><strong>{attachment.filename}</strong><small>{t('Conversation source', 'Sohbet kaynağı')}</small></span></SourcePreviewButton>)}</div> : null}<time>{formatDateTime(message.created_at)}</time></div></article>
             })}
-            {pendingRun ? <article className="team-chat-message-row"><span className="team-chat-message-avatar">İZ</span><div className="team-chat-message agent-run-message"><ThinkingState stages={pendingRun.stages} status={pendingRun.status} />{streamedTextByRun[pendingRun.run_id] ? <AgentAnswer text={streamedTextByRun[pendingRun.run_id]} sources={pendingRun.sources} active /> : null}</div></article> : null}
+            {pendingRun ? <article className="team-chat-message-row"><span className="team-chat-message-avatar">İZ</span><div className="team-chat-message agent-run-message"><ThinkingState key={`${pendingRun.run_id}-${pendingRun.status}`} stages={pendingRun.stages} status={pendingRun.status} />{streamedTextByRun[pendingRun.run_id] ? <AgentAnswer text={streamedTextByRun[pendingRun.run_id]} sources={pendingRun.sources} active /> : null}</div></article> : null}
             {!pendingRun && latestThreadRun?.status === 'failed' ? <Callout tone="warning">{latestThreadRun.error || t('Izge could not complete this work.', 'İzge bu işi tamamlayamadı.')}</Callout> : null}
           </div>
           <input ref={fileInputRef} hidden type="file" accept=".txt,.md,.markdown,.pdf,text/plain,text/markdown,application/pdf" onChange={(event) => void attachFile(event.target.files?.[0])} />
-          <ChatComposer value={draft} onChange={setDraft} onSubmit={() => void submit()} disabled={isSending || Boolean(pendingRun)} context={active?.id === 'izge-colleague' ? t('Company memory', 'Şirket hafızası') : t('Team conversation', 'Ekip konuşması')} label={t(`${active?.title ?? 'conversation'} message`, `${active?.title ?? 'konuşma'} mesajı`)} placeholder={active?.id === 'izge-colleague' ? t('Ask about company files, decisions, or work…', 'Şirket dosyaları, kararlar veya işler hakkında sor…') : t('Write a message or call Izge with @izge…', 'Mesaj yaz veya @izge ile İzge’yi çağır…')} mentionAutocomplete={active?.id !== 'izge-colleague'} inputRef={composerRef} onAdd={() => fileInputRef.current?.click()} addDisabled={isUploading || isSending || Boolean(pendingRun)} addLabel={isUploading ? t('Uploading file', 'Dosya yükleniyor') : t('Add file to conversation', 'Konuşmaya dosya ekle')} />
+          <ChatComposer value={draft} onChange={setDraft} onSubmit={() => void submit()} disabled={isSending || Boolean(pendingRun)} context={active?.id === 'izge-colleague' ? t('Company memory', 'Şirket hafızası') : t('Team conversation', 'Ekip konuşması')} label={t(`${active?.title ?? 'conversation'} message`, `${active?.title ?? 'konuşma'} mesajı`)} placeholder={active?.id === 'izge-colleague' ? t('Ask about company files, decisions, or work…', 'Şirket dosyaları, kararlar veya işler hakkında sor…') : t('Write a message or call Izge with @izge…', 'Mesaj yaz veya @izge ile İzge’yi çağır…')} mentionAutocomplete={active?.id !== 'izge-colleague'} inputRef={composerRef} onAdd={() => fileInputRef.current?.click()} addDisabled={isUploading || isSending || Boolean(pendingRun)} addLabel={isUploading ? t('Uploading file', 'Dosya yükleniyor') : t('Add file to conversation', 'Konuşmaya dosya ekle')} leading={<AgentControls controls={agentControls} disabled={isSending || Boolean(pendingRun)} />} />
         </div>
       </section>
     </div>

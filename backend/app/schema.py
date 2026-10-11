@@ -152,6 +152,8 @@ def ensure_legacy_schema_compatibility(target_engine: Engine = default_engine) -
             connection.exec_driver_sql("ALTER TABLE colleague_runs ADD COLUMN follow_ups JSON NOT NULL DEFAULT '[]'")
         if "response_language" not in colleague_run_columns:
             connection.exec_driver_sql("ALTER TABLE colleague_runs ADD COLUMN response_language VARCHAR(2) NOT NULL DEFAULT 'tr'")
+        if "agent_options" not in colleague_run_columns:
+            connection.exec_driver_sql("ALTER TABLE colleague_runs ADD COLUMN agent_options JSON NOT NULL DEFAULT '{}'")
         automation_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(automations)").fetchall()}
         if "response_language" not in automation_columns:
             connection.exec_driver_sql("ALTER TABLE automations ADD COLUMN response_language VARCHAR(2) NOT NULL DEFAULT 'tr'")

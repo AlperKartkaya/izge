@@ -1,6 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +32,18 @@ class Settings(BaseSettings):
     local_llm_base_url: str = "http://127.0.0.1:11434"
     local_llm_model: str = "qwen3.5:9b"
     local_llm_timeout_seconds: int = 60
+    agent_model_provider: Literal["ollama", "onprem", "glm", "deepseek", "codex"] = "ollama"
+    agent_model_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] = "none"
+    agent_onprem_base_url: str | None = None
+    agent_onprem_model: str | None = None
+    agent_onprem_api_key: SecretStr | None = None
+    agent_allow_public_onprem_url: bool = False
+    agent_glm_api_key: SecretStr | None = None
+    agent_deepseek_api_key: SecretStr | None = None
+    agent_codex_bridge_base_url: str | None = None
+    agent_codex_bridge_token: SecretStr | None = None
+    agent_web_search_key: SecretStr = SecretStr("")
+    agent_mcp_connectors_json: str = "[]"
     llm_signal_explanation_enabled: bool = False
     llm_query_routing_enabled: bool = False
     llm_answer_synthesis_enabled: bool = False
