@@ -104,6 +104,15 @@ export interface AgentRunRead {
   updated_at: string
 }
 
+export interface AssistantConversationRead {
+  conversation_id: string
+  thread_id: string
+  title: string
+  archived_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface NotificationRead {
   notification_id: string
   kind: 'message' | 'agent'
@@ -147,6 +156,7 @@ export interface AgentModelProfileRead {
   reason: string | null
   data_boundary: 'local' | 'cloud'
   supported_efforts: string[]
+  native_web_search: boolean
 }
 
 export interface AgentModelCatalogRead {

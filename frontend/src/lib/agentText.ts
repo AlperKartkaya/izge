@@ -1,16 +1,19 @@
 export type AgentInlineToken =
-  | { kind: 'text' | 'bold' | 'mention'; value: string }
+  | { kind: 'text' | 'bold' | 'mention' | 'code'; value: string }
+  | { kind: 'link'; value: string; href: string }
   | { kind: 'source'; value: string; sourceIndex: number }
 
 export function tokenizeAgentText(value: string, sourceCount = Infinity): AgentInlineToken[] {
   const tokens: AgentInlineToken[] = []
-  const matcher = /(\*\*([^*\n]+)\*\*|\[(\d+)\]|@[iİı]zge\b)/giu
+  const matcher = /(`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|\[(\d+)\]|@[iİı]zge\b)/giu
   let cursor = 0
   for (const match of value.matchAll(matcher)) {
     if (match.index > cursor) tokens.push({ kind: 'text', value: value.slice(cursor, match.index) })
-    if (match[2]) tokens.push({ kind: 'bold', value: match[2] })
-    else if (match[3]) {
-      const sourceIndex = Number(match[3]) - 1
+    if (match[2]) tokens.push({ kind: 'code', value: match[2] })
+    else if (match[3] && match[4]) tokens.push({ kind: 'link', value: match[3], href: match[4] })
+    else if (match[5]) tokens.push({ kind: 'bold', value: match[5] })
+    else if (match[6]) {
+      const sourceIndex = Number(match[6]) - 1
       tokens.push(sourceIndex >= 0 && sourceIndex < sourceCount
         ? { kind: 'source', value: match[0], sourceIndex }
         : { kind: 'text', value: match[0] })

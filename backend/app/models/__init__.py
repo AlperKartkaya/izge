@@ -25,7 +25,7 @@ from app.models.domain import (
     Workspace,
 )
 from app.models.automation import Automation
-from app.models.work import ColleagueRun, ColleagueRunEvent, Notification, WorkTask
+from app.models.work import AssistantConversation, ColleagueRun, ColleagueRunEvent, Notification, WorkTask
 
 __all__ = [
     "Artifact",
@@ -53,6 +53,7 @@ __all__ = [
     "UserSession",
     "Workspace",
     "Automation",
+    "AssistantConversation",
     "ColleagueRun",
     "ColleagueRunEvent",
     "Notification",

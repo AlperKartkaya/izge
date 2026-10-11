@@ -707,6 +707,44 @@ class ColleagueServiceTest(unittest.TestCase):
         self.assertIn("Şirket görevleri bu istekte aranmadı",model.call_args.args[0][1]["content"])
         self.assertNotIn("Açık görev bulunamadı",model.call_args.args[0][1]["content"])
 
+    def test_general_prompt_forbids_unsolicited_company_claims(self) -> None:
+        with patch("app.services.colleague.stream_agent_text", return_value=iter(["Merhaba"])) as model:
+            list(_stream_local_answer("Merhaba", [], [], review=False, intent="general"))
+        system_prompt = model.call_args.args[0][0]["content"]
+        self.assertIn("Kullanıcı açıkça istemedikçe şirket öncelikleri", system_prompt)
+
+    def test_punctuation_only_question_is_answered_before_planning_or_retrieval(self) -> None:
+        for language, message, expected in (("tr", ".", "Size nasıl yardımcı olabilirim?"), ("en", ".", "How can I help you?"), ("tr", "@izge .", "Size nasıl yardımcı olabilirim?")):
+            with self.subTest(language=language):
+                run = enqueue_colleague_question(
+                    self.db,
+                    actor=self.alice,
+                    message=message,
+                    client_request_id=f"punctuation-{language}-{message}",
+                    thread_id=f"punctuation-{language}",
+                    thread_title="İzge",
+                    thread_kind="direct",
+                    participant_user_ids=[],
+                    response_language=language,
+                )
+                claimed = claim_next_colleague_run(self.db, worker_id=f"punctuation-{language}-worker")
+                with (
+                    patch("app.services.colleague._plan_agent_work") as planner,
+                    patch("app.services.colleague.retrieve_shared_context") as retrieval,
+                    patch("app.services.colleague._stream_local_answer") as answer,
+                    patch("app.services.colleague.available_mcp_tools") as tool_discovery,
+                    patch("app.services.colleague._safe_follow_ups") as follow_ups,
+                ):
+                    completed = process_colleague_run(self.db, claimed)
+                self.assertEqual("completed", completed.status)
+                self.assertEqual(expected, completed.answer)
+                self.assertEqual([], completed.sources)
+                planner.assert_not_called()
+                retrieval.assert_not_called()
+                answer.assert_not_called()
+                tool_discovery.assert_not_called()
+                follow_ups.assert_not_called()
+
     def test_planner_cannot_enable_unapproved_web_or_mcp_tools(self) -> None:
         run = self._run([])
         fields = dict(intent="company", summary="Kanıtları okuyacağım.", web_query="private customer data", mcp_reads=[], reviewer=False)
@@ -741,6 +779,25 @@ class ColleagueServiceTest(unittest.TestCase):
         self.assertTrue(all(stage.status == "completed" for stage in read.stages))
         with patch("app.routers.work.SessionLocal", side_effect=lambda: Session(self.engine)):
             self.assertIn('"source_type": "web"', "".join(_event_stream(run.run_id, 0, self.alice.user_id)))
+
+    def test_codex_uses_native_web_search_without_brave_configuration(self) -> None:
+        run = self._run([])
+        run.agent_options = {"model_profile": "codex", "reasoning_effort": "low", "allow_external_tools": True}
+        self.db.commit()
+        claimed = claim_next_colleague_run(self.db, worker_id="native-web-worker")
+        plan = AgentPlan(intent="general", summary="Kamu bilgisini ara.", web_query="public information", mcp_reads=[], reviewer=False)
+        source = {"artifact_id": "web:native", "title": "Public page", "quote": "Public fact", "source_type": "web", "url": "https://example.com/public"}
+        with (
+            patch("app.services.colleague._plan_agent_work", return_value=plan),
+            patch("app.services.colleague.native_web_search_available", return_value=True),
+            patch("app.services.colleague.run_native_web_search", return_value=[source]) as native_search,
+            patch("app.services.colleague.run_web_search") as brave_search,
+            patch("app.services.colleague._stream_local_answer", return_value=iter(["Public fact [1]."])),
+        ):
+            completed = process_colleague_run(self.db, claimed)
+        self.assertEqual("completed", completed.status)
+        native_search.assert_called_once_with("public information")
+        brave_search.assert_not_called()
 
     def test_external_tool_consent_is_checked_at_execution(self) -> None:
         run = self._run([])

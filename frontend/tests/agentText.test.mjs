@@ -51,3 +51,16 @@ test('Turkish-cased mentions are highlighted in sent messages too', () => {
     assert.deepEqual(tokenizeAgentText(mention), [{ kind: 'mention', value: mention }])
   }
 })
+
+test('inline code stays literal, without turning mentions or references into chips', () => {
+  assert.deepEqual(tokenizeAgentText('Dosya `something_here` ve `@izge [1] **x**`'), [
+    { kind: 'text', value: 'Dosya ' }, { kind: 'code', value: 'something_here' },
+    { kind: 'text', value: ' ve ' }, { kind: 'code', value: '@izge [1] **x**' },
+  ])
+})
+
+test('provider Markdown links render safe destinations, never javascript or code links', () => {
+  assert.deepEqual(tokenizeAgentText('[Python](https://python.org/docs)'), [{ kind: 'link', value: 'Python', href: 'https://python.org/docs' }])
+  assert.deepEqual(tokenizeAgentText('[unsafe](javascript:alert)'), [{ kind: 'text', value: '[unsafe](javascript:alert)' }])
+  assert.deepEqual(tokenizeAgentText('`[Python](https://python.org/docs)`'), [{ kind: 'code', value: '[Python](https://python.org/docs)' }])
+})

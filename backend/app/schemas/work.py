@@ -11,6 +11,28 @@ ThreadKind = Literal["channel", "direct", "group"]
 RunStatus = Literal["queued", "running", "completed", "failed"]
 
 
+class AssistantConversationCreate(BaseModel):
+    title: str = Field(default="İzge ile çalışma", min_length=1, max_length=120)
+
+
+class AssistantConversationUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    archived: bool | None = None
+
+
+class AssistantConversationRead(BaseModel):
+    conversation_id: str
+    thread_id: str
+    title: str
+    archived_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AssistantConversationList(BaseModel):
+    items: list[AssistantConversationRead]
+
+
 class WorkTaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=4000)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import http.client
+import hashlib
 import ipaddress
 import json
 from contextlib import contextmanager
@@ -19,12 +20,34 @@ class AgentModelError(LocalLLMError):
 _PROFILES = {"ollama", "onprem", "glm", "deepseek", "codex"}
 _EFFORTS = {"none", "low", "medium", "high", "xhigh", "max"}
 _DEFAULT_EFFORTS = {"ollama": "none", "onprem": "none", "glm": "low", "deepseek": "none", "codex": "medium"}
+_CODEX_TOKEN_FLOORS = {"none": 1024, "low": 2048, "medium": 4096, "high": 6144, "xhigh": 8192, "max": 8192}
+_CODEX_MAX_OUTPUT_TOKENS = 8192
 _session_profile: ContextVar[str | None] = ContextVar("agent_model_profile", default=None)
 _session_effort: ContextVar[str | None] = ContextVar("agent_model_effort", default=None)
 
 
 class _ReadableStream(Protocol):
     def readline(self, limit: int = -1, /) -> bytes: ...
+
+
+class _CodexIncompleteError(AgentModelError):
+    def __init__(self, reason: str | None) -> None:
+        self.reason = reason
+        super().__init__("Codex response was incomplete")
+
+
+def profile_supports_native_web_search(profile: str) -> bool:
+    return profile == "codex"
+
+
+def native_web_search_available(profile: str | None = None) -> bool:
+    settings = get_settings()
+    selected_profile = profile or _session_profile.get() or settings.agent_model_provider
+    return (
+        profile_supports_native_web_search(selected_profile)
+        and bool((settings.agent_codex_bridge_base_url or "").strip())
+        and _secret_text(settings.agent_codex_bridge_token) is not None
+    )
 
 
 @contextmanager
@@ -59,6 +82,7 @@ def model_catalog() -> dict[str, Any]:
             "data_boundary": "local",
             "supported_efforts": ["none"],
             "default_effort": "none",
+            "native_web_search": False,
         },
         {
             "id": "onprem",
@@ -71,6 +95,7 @@ def model_catalog() -> dict[str, Any]:
             "data_boundary": "local",
             "supported_efforts": ["none", "low", "medium", "high", "xhigh", "max"],
             "default_effort": "none",
+            "native_web_search": False,
         },
         {
             "id": "glm",
@@ -81,6 +106,7 @@ def model_catalog() -> dict[str, Any]:
             "data_boundary": "cloud",
             "supported_efforts": ["low", "high", "max"],
             "default_effort": "low",
+            "native_web_search": False,
         },
         {
             "id": "deepseek",
@@ -91,6 +117,7 @@ def model_catalog() -> dict[str, Any]:
             "data_boundary": "cloud",
             "supported_efforts": ["none", "low", "high", "max"],
             "default_effort": "none",
+            "native_web_search": False,
         },
         {
             "id": "codex",
@@ -101,6 +128,7 @@ def model_catalog() -> dict[str, Any]:
             "data_boundary": "cloud",
             "supported_efforts": ["none", "low", "medium", "high", "xhigh", "max"],
             "default_effort": "medium",
+            "native_web_search": codex_enabled,
         },
     ]
     return {"default_profile": settings.agent_model_provider, "profiles": profiles}
@@ -172,20 +200,37 @@ def stream_agent_text(
             raise AgentModelError("Codex bridge URL and token must be configured")
         codex_messages = _messages_with_schema(messages, schema) if schema is not None else messages
         system, inputs = _responses_input(codex_messages)
-        payload = {
+        output_tokens = min(_CODEX_MAX_OUTPUT_TOKENS, max(max_tokens, _CODEX_TOKEN_FLOORS[effort]))
+        payload: dict[str, Any] = {
             "model": "gpt-6-luna",
             "input": inputs,
             "instructions": system or "You are a helpful assistant.",
             "store": False,
             "stream": True,
-            "max_output_tokens": max_tokens,
+            "max_output_tokens": output_tokens,
         }
         payload["reasoning"] = {"effort": effort}
         if schema is not None:
             payload["text"] = {"format": {"type": "json_object"}}
         headers = _bearer_headers(settings.agent_codex_bridge_token)
-        yield from _stream_responses(bridge_url, payload, headers, timeout)
-        return
+        while True:
+            chunks: list[str] = []
+            emitted = False
+            try:
+                for chunk in _stream_responses(bridge_url, dict(payload), headers, timeout):
+                    if schema is not None:
+                        chunks.append(chunk)
+                    else:
+                        emitted = True
+                        yield chunk
+            except _CodexIncompleteError as exc:
+                if emitted or exc.reason != "max_output_tokens" or output_tokens >= _CODEX_MAX_OUTPUT_TOKENS:
+                    raise AgentModelError("Codex response was incomplete") from exc
+                output_tokens = min(_CODEX_MAX_OUTPUT_TOKENS, output_tokens * 2)
+                payload["max_output_tokens"] = output_tokens
+                continue
+            yield from chunks
+            return
 
     base_url, model, secret = _chat_profile(profile)
     chat_payload: dict[str, Any] = {
@@ -226,6 +271,116 @@ def structured_agent_output(
     if not isinstance(value, dict):
         raise AgentModelError("Agent model structured output must be an object")
     return value
+
+
+def run_native_web_search(query: str) -> list[dict[str, Any]]:
+    query = " ".join(query.split())
+    if not query or len(query) > 500:
+        raise AgentModelError("Web search query must be between 1 and 500 characters")
+    profile, effort = _selected_session()
+    if profile != "codex" or not native_web_search_available(profile):
+        raise AgentModelError("Selected model does not provide native web search")
+    settings = get_settings()
+    payload = {
+        "model": "gpt-6-luna",
+        "input": [{"role": "user", "content": query}],
+        "instructions": (
+            "You must search the public web for the user's query. Return a concise factual summary and cite every "
+            "web-derived claim. Do not use or request company data."
+        ),
+        "store": False,
+        "stream": True,
+        "max_output_tokens": max(4096, _CODEX_TOKEN_FLOORS[effort]),
+        "reasoning": {"effort": effort},
+        "tools": [{"type": "web_search", "external_web_access": True}],
+    }
+    bridge_url = (settings.agent_codex_bridge_base_url or "").strip()
+    connection, response = _open_request(
+        _validated_private_url(bridge_url),
+        "/responses",
+        payload,
+        _bearer_headers(settings.agent_codex_bridge_token),
+        settings.local_llm_timeout_seconds,
+    )
+    completed = False
+    web_search_called = False
+    text_parts: list[str] = []
+    annotations: list[dict[str, Any]] = []
+    try:
+        try:
+            for data in _sse_data(response):
+                try:
+                    event = json.loads(data)
+                except json.JSONDecodeError as exc:
+                    raise AgentModelError("Codex bridge returned an invalid web search event") from exc
+                event_type = event.get("type")
+                item = event.get("item") if isinstance(event.get("item"), dict) else {}
+                if event_type == "response.output_item.added" and item.get("type") == "web_search_call":
+                    web_search_called = True
+                elif event_type == "response.web_search_call.completed":
+                    web_search_called = True
+                elif event_type == "response.output_text.delta" and isinstance(event.get("delta"), str):
+                    text_parts.append(event["delta"])
+                elif event_type == "response.output_text.annotation.added" and isinstance(event.get("annotation"), dict):
+                    annotations.append(event["annotation"])
+                elif event_type == "response.completed":
+                    completed = True
+                    response_data = event.get("response") if isinstance(event.get("response"), dict) else {}
+                    for output_item in response_data.get("output", []):
+                        if not isinstance(output_item, dict):
+                            continue
+                        if output_item.get("type") == "web_search_call":
+                            web_search_called = True
+                        for content in output_item.get("content", []):
+                            if not isinstance(content, dict) or content.get("type") != "output_text":
+                                continue
+                            if not text_parts and isinstance(content.get("text"), str):
+                                text_parts.append(content["text"])
+                            if isinstance(content.get("annotations"), list):
+                                annotations.extend(item for item in content["annotations"] if isinstance(item, dict))
+                    break
+                elif event_type == "response.incomplete":
+                    raise AgentModelError("Codex web search response was incomplete")
+                elif event_type in {"error", "response.failed"}:
+                    raise AgentModelError("Codex bridge reported a web search error")
+        except (OSError, TimeoutError) as exc:
+            raise AgentModelError("Codex web search stream was interrupted") from exc
+    finally:
+        connection.close()
+    if not completed:
+        raise AgentModelError("Codex web search stream ended before completion")
+    if not web_search_called:
+        raise AgentModelError("Codex did not execute the required web search")
+
+    from app.services.agent_tools import _is_public_url
+
+    answer = "".join(text_parts)
+    sources: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    for annotation in annotations:
+        url = annotation.get("url")
+        if annotation.get("type") != "url_citation" or not isinstance(url, str) or url in seen_urls:
+            continue
+        if not _is_public_url(url, resolve_dns=False):
+            continue
+        start = annotation.get("start_index")
+        end = annotation.get("end_index")
+        # Citations often cover only their marker; keep the associated claim, not just the marker.
+        quote = answer[max(0, start - 800):min(len(answer), end + 200)].strip() if isinstance(start, int) and isinstance(end, int) and 0 <= start < end <= len(answer) else answer.strip()
+        raw_title = annotation.get("title")
+        title = raw_title if isinstance(raw_title, str) else url
+        digest = hashlib.sha256(f"{query}\0{url}".encode()).hexdigest()[:24]
+        sources.append({
+            "artifact_id": f"web:{digest}",
+            "title": " ".join(title.split())[:300] or url,
+            "quote": " ".join(quote.split())[:2000],
+            "source_type": "web",
+            "url": url,
+        })
+        seen_urls.add(url)
+        if len(sources) == 5:
+            break
+    return sources
 
 
 def _selected_session() -> tuple[str, str]:
@@ -396,7 +551,10 @@ def _stream_responses(
                     completed = True
                     break
                 elif event.get("type") == "response.incomplete":
-                    raise AgentModelError("Codex response was incomplete; increase max_tokens")
+                    response_data = event.get("response") if isinstance(event.get("response"), dict) else {}
+                    details = response_data.get("incomplete_details")
+                    reason = details.get("reason") if isinstance(details, dict) and isinstance(details.get("reason"), str) else None
+                    raise _CodexIncompleteError(reason)
                 elif event.get("type") in {"error", "response.failed"}:
                     raise AgentModelError("Codex bridge reported a generation error")
         except (OSError, TimeoutError) as exc:

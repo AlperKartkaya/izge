@@ -59,15 +59,18 @@ export function useAgentControls(token: string | undefined, userId: string | und
 
   const selected = catalog?.profiles.find((profile) => profile.id === modelProfile) ?? null
   const reasoningEffort = selected?.supported_efforts.includes(efforts[selected.id] ?? '') ? efforts[selected.id] : undefined
+  const webSearchAvailable = selected?.native_web_search === true || catalog?.tools.web_search === true
+  const externalToolsAvailable = webSearchAvailable || catalog?.tools.mcp === true
+  const effectiveExternalTools = allowExternalTools && externalToolsAvailable
   const requestOptions: AgentRequestOptions = {
     ...(selected ? { model_profile: selected.id } : {}),
     ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-    allow_external_tools: allowExternalTools,
+    allow_external_tools: effectiveExternalTools,
     request_reviewer: requestReviewer,
   }
 
   return {
-    catalog, selected, modelProfile, reasoningEffort, allowExternalTools, requestReviewer, loadError, requestOptions,
+    catalog, selected, modelProfile, reasoningEffort, allowExternalTools: effectiveExternalTools, webSearchAvailable, requestReviewer, loadError, requestOptions,
     setModelProfile,
     setReasoningEffort: (effort: string) => selected && setEfforts((current) => ({ ...current, [selected.id]: effort })),
     setAllowExternalTools, setRequestReviewer,

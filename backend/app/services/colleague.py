@@ -17,13 +17,14 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import Artifact, ArtifactChunk, ColleagueRun, ColleagueRunEvent, CompanyChatMessage, Signal, User, WorkTask, Workspace
 from app.services.llm import LocalLLMError
-from app.services.agent_model import model_session, resolve_effective_model_options, stream_agent_text, structured_agent_output
+from app.services.agent_model import model_session, native_web_search_available, resolve_effective_model_options, run_native_web_search, stream_agent_text, structured_agent_output
 from app.services.agent_sources import artifact_source_ids, visible_sources
-from app.services.agent_policy import AgentPlan, MCPRead, capabilities_reply, capabilities_text
+from app.services.agent_policy import AgentPlan, MCPRead, capabilities_reply, capabilities_text, non_substantive_reply
 from app.services.agent_tools import available_mcp_tools, run_mcp_tool, run_web_search
 from app.services.notifications import create_notification, notify_team_chat_recipients
 from app.services.permissions import artifact_is_visible_to_user, signal_is_visible_to_artifact_ids
 from app.services.security import hash_password
+from app.services.conversations import DEFAULT_ASSISTANT_TITLE, conversation_for_thread, ensure_personal_conversation
 
 
 AGENT_EMAIL = "izge-agent@local.invalid"
@@ -144,6 +145,17 @@ def enqueue_colleague_question(
     response_language: str = "tr",
     agent_options: dict | None = None,
 ) -> ColleagueRun:
+    agent_user_id = db.scalar(select(User.user_id).where(User.workspace_id == actor.workspace_id, User.email == AGENT_EMAIL))
+    allowed_personal_participants = {actor.user_id, agent_user_id}
+    existing_conversation = conversation_for_thread(db, actor, _clean_thread_id(thread_id, actor.user_id))
+    personal_conversation = existing_conversation is not None or (thread_kind == "direct" and set(participant_user_ids) <= allowed_personal_participants)
+    if existing_conversation is not None and (thread_kind != "direct" or not set(participant_user_ids) <= allowed_personal_participants):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Kişisel konuşmanın katılımcıları değiştirilemez.")
+    conversation = None
+    if personal_conversation:
+        conversation = ensure_personal_conversation(db, actor, thread_id=thread_id, title=thread_title)
+        thread_id = conversation.thread_id
+        thread_title = conversation.title
     existing = db.scalar(
         select(ColleagueRun).where(
             ColleagueRun.workspace_id == actor.workspace_id,
@@ -172,6 +184,9 @@ def enqueue_colleague_question(
     question = " ".join(message.strip().split())
     if not question:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Mesaj boş olamaz.")
+    if conversation is not None and conversation.title == DEFAULT_ASSISTANT_TITLE:
+        conversation.title = question[:120]
+        thread_title = conversation.title
     agent = ensure_colleague_user(db, actor.workspace_id)
     participants = normalize_participants(db, actor, participant_user_ids, agent)
     cleaned_thread_id = _clean_thread_id(thread_id, actor.user_id)
@@ -719,6 +734,7 @@ def _stream_local_answer(
             "Sen İzge'sin, şirket içi güvenilir bir çalışma arkadaşısın. "
             "Kendi yeteneklerini ve sınırlarını aşağıdaki gerçek araç listesine göre anlatabilir, genel açıklama ve taslak sunabilirsin. "
             "Bu istekte şirket dosyaları aranmadı; şirkete/müşteriye ilişkin olgu, dosya, kaynak veya gerçekleşmiş işlem uydurma. "
+            "Kullanıcı açıkça istemedikçe şirket öncelikleri, riskleri, müşterileri veya açık işleri hakkında iddia ya da öneri üretme. "
             "Numaralı kaynak atfı yazma. Genel öneri ile şirketten doğrulanmış bulguyu ayır. "
             "Araçlar kapalıysa sınırlarını tek tek ve açık olumsuz cümlelerle anlat: Fatura kesemem. E-posta gönderemem. Ticket kapatamam. "
             "Henüz kullanmadığın aracı kullandığını veya yapmadığın işi tamamladığını söyleme. "
@@ -1051,19 +1067,31 @@ def _process_colleague_run(db: Session, run: ColleagueRun, *, lease_owner: str |
         english = run.response_language == "en"
         def label(en: str, tr: str) -> str:
             return en if english else tr
+        deterministic_answer = non_substantive_reply(run.question, language=run.response_language) if run.kind == "ask" else None
         readers = _run_readers(db, run)
         reader_ids = [reader.user_id for reader in readers]
-        conversation = _recent_thread_context(db, run)
-        external_tools_allowed = bool((run.agent_options or {}).get("allow_external_tools"))
+        conversation = [] if deterministic_answer is not None else _recent_thread_context(db, run)
+        external_tools_allowed = bool((run.agent_options or {}).get("allow_external_tools")) and deterministic_answer is None
         mcp_tools = available_mcp_tools(run.workspace_id, reader_ids) if external_tools_allowed else []
-        web_enabled = bool(external_tools_allowed and get_settings().agent_web_search_key.get_secret_value())
+        native_web_enabled = bool(external_tools_allowed and native_web_search_available())
+        web_enabled = bool(native_web_enabled or external_tools_allowed and get_settings().agent_web_search_key.get_secret_value())
         capabilities = capabilities_text(web_enabled=web_enabled, mcp_tools=mcp_tools)
         plan = AgentPlan(intent="company", summary=label("Compare accessible evidence", "Erişilebilir kanıtları karşılaştır"), web_query="", mcp_reads=[], reviewer=False)
         if run.kind == "ask":
             active_stage_key = "plan"
             active_stage_label = label("Understanding the request", "İstek ve gerekli araçlar belirleniyor")
             add_run_event(db, run, "stage", stage_key="plan", label=active_stage_label, payload={"status": "running"}, lease_owner=lease_owner)
-            plan = _plan_agent_work(run, conversation, mcp_tools, web_enabled=web_enabled)
+            plan = (
+                AgentPlan(
+                    intent="general",
+                    summary=label("Ask how to help", "Nasıl yardımcı olunacağı sorulacak"),
+                    web_query="",
+                    mcp_reads=[],
+                    reviewer=False,
+                )
+                if deterministic_answer is not None
+                else _plan_agent_work(run, conversation, mcp_tools, web_enabled=web_enabled)
+            )
             add_run_event(db, run, "stage", stage_key="plan", label=label("Work plan prepared", "İşlem planı hazır"), payload={"status": "completed", "summary": plan.summary}, lease_owner=lease_owner)
         sources: list[dict] = []
         tasks: list[dict] = []
@@ -1086,7 +1114,7 @@ def _process_colleague_run(db: Session, run: ColleagueRun, *, lease_owner: str |
             active_stage_label = label("Searching the web", "Web'de aranıyor") if isinstance(request, str) else label(f"Reading MCP: {request.tool_name}", f"MCP okunuyor: {request.tool_name}")
             add_run_event(db, run, "stage", stage_key=stage_key, label=active_stage_label, payload={"status": "running"}, lease_owner=lease_owner)
             if isinstance(request, str):
-                tool_sources = run_web_search(request)
+                tool_sources = run_native_web_search(request) if native_web_enabled else run_web_search(request)
             else:
                 tool_sources = [run_mcp_tool(request.connector_id, request.tool_name, request.arguments, workspace_id=run.workspace_id, reader_ids=reader_ids)]
             sources.extend(tool_sources)
@@ -1160,7 +1188,7 @@ def _process_colleague_run(db: Session, run: ColleagueRun, *, lease_owner: str |
 
         answer_parts: list[str] = []
         buffer = ""
-        answer_stream = iter([capabilities_reply(web_enabled=web_enabled, mcp_tools=mcp_tools, language=run.response_language)]) if plan.intent == "capabilities" else _stream_local_answer(
+        answer_stream = iter([deterministic_answer]) if deterministic_answer is not None else iter([capabilities_reply(web_enabled=web_enabled, mcp_tools=mcp_tools, language=run.response_language)]) if plan.intent == "capabilities" else _stream_local_answer(
             run.question,
             sources,
             tasks,
@@ -1183,7 +1211,7 @@ def _process_colleague_run(db: Session, run: ColleagueRun, *, lease_owner: str |
         if not answer:
             raise LocalLLMError("Seçilen model boş yanıt döndürdü.")
         add_run_event(db, run, "stage", stage_key="thinking", label=label("Capabilities and permissions prepared", "Yetenekler ve izinler hazır") if plan.intent == "capabilities" else label("Draft generated", "Yanıt taslağı üretildi"), payload={"status": "completed"}, lease_owner=lease_owner)
-        if plan.intent != "capabilities" and (plan.reviewer or (run.agent_options or {}).get("request_reviewer") or run.kind == "evening_review"):
+        if deterministic_answer is None and plan.intent != "capabilities" and (plan.reviewer or (run.agent_options or {}).get("request_reviewer") or run.kind == "evening_review"):
             active_stage_key = "reviewer"
             active_stage_label = label("Delegating a source reviewer", "Kaynak denetçisi agent'e görev veriliyor")
             add_run_event(db, run, "stage", stage_key="reviewer", label=active_stage_label, payload={"status": "running"}, lease_owner=lease_owner)
@@ -1194,11 +1222,13 @@ def _process_colleague_run(db: Session, run: ColleagueRun, *, lease_owner: str |
         add_run_event(db, run, "stage", stage_key="citations", label=active_stage_label, payload={"status": "running"}, lease_owner=lease_owner)
         answer = _ensure_answer_citations(run.question, answer, sources, response_language=run.response_language)
         add_run_event(db, run, "stage", stage_key="citations", label=label("Source references checked", "Kaynak referansları doğrulandı"), payload={"status": "completed"}, lease_owner=lease_owner)
-        active_stage_key = "follow_ups"
-        active_stage_label = label("Generating follow-up suggestions", "Takip soruları üretiliyor")
-        add_run_event(db, run, "stage", stage_key="follow_ups", label=active_stage_label, payload={"status": "running"}, lease_owner=lease_owner)
-        follow_ups = _safe_follow_ups(run.question, answer, sources, response_language=run.response_language)
-        add_run_event(db, run, "stage", stage_key="follow_ups", label=label(f"Prepared {len(follow_ups)} suggestions", f"{len(follow_ups)} takip sorusu hazırlandı"), payload={"status": "completed"}, lease_owner=lease_owner)
+        follow_ups = []
+        if deterministic_answer is None:
+            active_stage_key = "follow_ups"
+            active_stage_label = label("Generating follow-up suggestions", "Takip soruları üretiliyor")
+            add_run_event(db, run, "stage", stage_key="follow_ups", label=active_stage_label, payload={"status": "running"}, lease_owner=lease_owner)
+            follow_ups = _safe_follow_ups(run.question, answer, sources, response_language=run.response_language)
+            add_run_event(db, run, "stage", stage_key="follow_ups", label=label(f"Prepared {len(follow_ups)} suggestions", f"{len(follow_ups)} takip sorusu hazırlandı"), payload={"status": "completed"}, lease_owner=lease_owner)
         agent = ensure_colleague_user(db, run.workspace_id)
         existing_answer_message = db.scalar(
             select(CompanyChatMessage).where(

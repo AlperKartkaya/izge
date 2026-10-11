@@ -45,6 +45,7 @@ import type {
   NotificationRead,
   AgentModelCatalogRead,
   AgentRequestOptions,
+  AssistantConversationRead,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() || '/api'
@@ -255,8 +256,9 @@ export const api = {
     return request<QueryTraceRead>(`/query/${queryRunId}/trace`, { token })
   },
 
-  listTeamChatMessages(token: string, limit = 80) {
-    return request<TeamChatThreadRead>(`/team-chat?limit=${limit}`, { token })
+  listTeamChatMessages(token: string, limit = 80, threadId?: string) {
+    const thread = threadId ? `&thread_id=${encodeURIComponent(threadId)}` : ''
+    return request<TeamChatThreadRead>(`/team-chat?limit=${limit}${thread}`, { token })
   },
 
   createTeamChatMessage(token: string, body: string, options: { thread_id?: string; thread_title?: string; thread_kind?: 'channel' | 'direct' | 'group'; message_metadata?: Record<string, unknown> } = {}) {
@@ -337,6 +339,40 @@ export const api = {
       token,
       body: JSON.stringify({ ...payload, response_language: getLanguage() }),
     })
+  },
+
+  listAssistantConversations(token: string, includeArchived = false) {
+    return request<{ items: AssistantConversationRead[] }>(`/work/conversations?include_archived=${includeArchived}`, { token }).then((response) => response.items)
+  },
+
+  createAssistantConversation(token: string, title?: string) {
+    return request<AssistantConversationRead>('/work/conversations', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ title: title || 'İzge ile çalışma' }),
+    })
+  },
+
+  getAssistantConversation(token: string, conversationId: string) {
+    return request<AssistantConversationRead>(`/work/conversations/${encodeURIComponent(conversationId)}`, { token })
+  },
+
+  updateAssistantConversation(token: string, conversationId: string, payload: { title?: string; archived?: boolean }) {
+    return request<AssistantConversationRead>(`/work/conversations/${encodeURIComponent(conversationId)}`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify(payload),
+    })
+  },
+
+  deleteAssistantConversation(token: string, conversationId: string) {
+    return request<void>(`/work/conversations/${encodeURIComponent(conversationId)}`, { method: 'DELETE', token })
+  },
+
+  attachAssistantConversationFile(token: string, conversationId: string, file: File) {
+    const body = new FormData()
+    body.append('file', file)
+    return request<TeamChatMessageRead>(`/work/conversations/${encodeURIComponent(conversationId)}/attachments`, { method: 'POST', token, body })
   },
 
   getAgentModels(token: string) {

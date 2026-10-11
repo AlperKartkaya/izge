@@ -1,3 +1,4 @@
+import { IzgeLogo } from '../components/IzgeLogo'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
@@ -54,7 +55,7 @@ export function AppShell() {
     <div className="site-atmosphere" aria-hidden="true"><span className="atmosphere-plane atmosphere-plane-one" /><span className="atmosphere-plane atmosphere-plane-two" /><span className="atmosphere-scanline" /></div>
     <header className="top-nav app-sidebar">
       <button type="button" className="sidebar-toggle" onClick={() => setSidebarExpanded((value) => !value)} aria-expanded={sidebarExpanded} aria-label={sidebarAction} title={sidebarAction}>
-        <span className="brand-sigil">İZ</span>
+        <span className="brand-sigil"><IzgeLogo /></span>
         <span className="sidebar-brand-copy"><span className="brand-kicker">{isAdmin ? t('Memory operations', 'Hafıza operasyonları') : t('Company memory', 'Şirket hafızası')}</span><span className="brand-name">Izge</span></span>
         <span className="sidebar-toggle-arrow" aria-hidden="true">›</span>
       </button>

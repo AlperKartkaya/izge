@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.config import get_settings
-from app.models import Artifact, ArtifactPermission, CompanyChatMessage, User
+from app.models import Artifact, ArtifactPermission, AssistantConversation, CompanyChatMessage, User
 from app.schemas.api import TeamChatMessageCreate, TeamChatMessageRead, TeamChatThreadRead, TeamChatTypingCreate, TeamChatTypingRead, TeamChatTypingUserRead
 from app.services.audit import log_event
 from app.services.notifications import notify_team_chat_recipients
@@ -212,14 +212,25 @@ def list_team_chat_messages(
     limit: int = 80,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    thread_id: str | None = None,
 ) -> TeamChatThreadRead:
     bounded_limit = max(1, min(limit, 200))
+    deleted_threads = set(db.scalars(select(AssistantConversation.thread_id).where(
+        AssistantConversation.workspace_id == current_user.workspace_id,
+        AssistantConversation.owner_user_id == current_user.user_id,
+        AssistantConversation.deleted_at.is_not(None),
+    )))
     fetched_messages = db.scalars(
         select(CompanyChatMessage)
         .where(CompanyChatMessage.workspace_id == current_user.workspace_id)
         .order_by(CompanyChatMessage.created_at.desc())
     ).all()
-    messages = list(reversed([message for message in fetched_messages if _message_is_visible_to_user(message, current_user)][:bounded_limit]))
+    messages = list(reversed([
+        message for message in fetched_messages
+        if _message_is_visible_to_user(message, current_user)
+        and str((message.message_metadata or {}).get("thread_id") or (message.message_metadata or {}).get("channel")) not in deleted_threads
+        and (thread_id is None or str((message.message_metadata or {}).get("thread_id") or (message.message_metadata or {}).get("channel")) == thread_id)
+    ][:bounded_limit]))
     author_ids = {message.author_user_id for message in messages}
     authors = (
         db.scalars(
@@ -368,7 +379,7 @@ async def attach_team_chat_file(
     cleaned_thread_id = _clean_thread_id(thread_id)
     cleaned_title = _clean_thread_title(thread_title, cleaned_thread_id)
     requested_participants = {item.strip() for item in parsed_participants if item.strip()}
-    if thread_kind == "direct" and cleaned_thread_id == "izge-colleague" and requested_participants <= {current_user.user_id}:
+    if thread_kind == "direct" and (cleaned_thread_id == "izge-colleague" or cleaned_thread_id.startswith("assistant-cowork:")) and requested_participants <= {current_user.user_id}:
         participants = {current_user.user_id}
     else:
         participants = _validated_participants(

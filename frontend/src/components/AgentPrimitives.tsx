@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEventHandler, type ReactNode, type RefObject } from 'react'
-import { Link } from 'react-router-dom'
 import { insertIzgeMentionAtCaret, tokenizeAgentText } from '../lib/agentText'
 import { markdownBlocks } from '../lib/markdownBlocks'
 import { useLanguage } from '../lib/i18n'
@@ -8,6 +7,9 @@ import { nextTaskStatus, taskStatusAction, taskStatusLabel } from '../lib/taskSt
 import { latestAgentStages, safeHttpUrl } from '../lib/agentRun'
 import type { AgentRunStageRead, AgentSourceRead, WorkTaskRead, WorkTaskStatus } from '../lib/types'
 import { ButtonIcon } from './ButtonIcon'
+import { IzgeLogo } from './IzgeLogo'
+import { AgentToolMenu, AgentToolChips } from './AgentControls'
+import type { useAgentControls } from './useAgentControls'
 import { SourcePreviewButton } from './SourcePreviewButton'
 
 /* Adapted from beautiful-ui primitives at 44a274e598395ab61e7c96c26fda2758780253b7.
@@ -69,6 +71,11 @@ export function StreamingText({ children, active }: { children: string; active: 
 
 function InlineText({ text, sources = [] }: { text: string; sources?: AgentSourceRead[] }) {
   return tokenizeAgentText(text, sources.length).map((token, index) => {
+    if (token.kind === 'link') {
+      const url = safeHttpUrl(token.href)
+      return url ? <a key={index} href={url} target="_blank" rel="noreferrer">{token.value}</a> : token.value
+    }
+    if (token.kind === 'code') return <code key={index}>{token.value}</code>
     if (token.kind === 'bold') return <strong key={index}><InlineText text={token.value} sources={sources} /></strong>
     if (token.kind === 'mention') return <mark className="izge-mention" key={index}>{token.value}</mark>
     if (token.kind === 'source') {
@@ -156,7 +163,7 @@ export function TaskRows({ tasks, onStatusChange }: { tasks: WorkTaskRead[]; onS
   )
 }
 
-export function ChatComposer({ value, onChange, onSubmit, disabled, label, placeholder, context, leading, mentionAutocomplete = false, inputRef, onAdd, addDisabled = false, addLabel }: {
+export function ChatComposer({ value, onChange, onSubmit, disabled, label, placeholder, context, leading, mentionAutocomplete = false, inputRef, onAdd, addDisabled = false, addLabel, tools }: {
   value: string
   onChange: (value: string) => void
   onSubmit: () => void
@@ -170,12 +177,16 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, label, place
   onAdd?: () => void
   addDisabled?: boolean
   addLabel?: string
+  tools?: ReturnType<typeof useAgentControls>
 }) {
   const { t } = useLanguage()
   const resolvedLabel = label ?? t('Send a message to Izge', 'İzge’ye mesaj gönder')
   const resolvedPlaceholder = placeholder ?? t('Ask about a decision, file, task, or risk…', 'Bir karar, dosya, görev veya risk hakkında sor…')
   const resolvedContext = context ?? t('Company memory', 'Şirket hafızası')
   const resolvedAddLabel = addLabel ?? t('Add a file or note', 'Dosya veya not ekle')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const addRef = useRef<HTMLButtonElement>(null)
   const localRef = useRef<HTMLTextAreaElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
   const pendingCaretRef = useRef<number | null>(null)
@@ -185,6 +196,18 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, label, place
     localRef.current = element
     if (inputRef) inputRef.current = element
   }
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node) && !addRef.current?.contains(event.target as Node)) setMenuOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setMenuOpen(false); addRef.current?.focus() }
+    }
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', escape) }
+  }, [menuOpen])
   const selectMention = () => {
     const element = localRef.current
     const selectionStart = element?.selectionStart ?? caret
@@ -213,6 +236,8 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, label, place
   return (
     <form className="agent-chat-composer" onSubmit={submit}>
       {leading}
+      <div className="agent-composer-input-row">
+      {tools ? <AgentToolChips controls={tools} disabled={disabled} /> : null}
       <label>
         <span className="sr-only">{resolvedLabel}</span>
         <span className={mentionAutocomplete ? 'agent-composer-editor agent-composer-editor-mentions' : 'agent-composer-editor'}>
@@ -231,11 +256,15 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, label, place
         }} />
         </span>
       </label>
-      {mentionOpen ? <div className="agent-mention-menu" role="listbox" aria-label={t('Mention', 'Bahset')}><button type="button" role="option" aria-selected="true" onClick={selectMention}><span className="agent-avatar">İZ</span><span><strong>@izge</strong><small>{t('Ask company memory', 'Şirket hafızasına sor')}</small></span></button></div> : null}
+      </div>
+      {mentionOpen ? <div className="agent-mention-menu" role="listbox" aria-label={t('Mention', 'Bahset')}><button type="button" role="option" aria-selected="true" onClick={selectMention}><span className="agent-avatar"><IzgeLogo /></span><span><strong>@izge</strong><small>{t('Ask company memory', 'Şirket hafızasına sor')}</small></span></button></div> : null}
       <div className="agent-prompt-controls">
-        {onAdd
-          ? <button type="button" className="agent-prompt-add" onClick={onAdd} disabled={addDisabled} aria-label={resolvedAddLabel} title={resolvedAddLabel}><ButtonIcon name="attach" /></button>
-          : <Link className="agent-prompt-add" to="/memory" aria-label={resolvedAddLabel} title={resolvedAddLabel}><ButtonIcon name="attach" /></Link>}
+        <button ref={addRef} type="button" className="agent-prompt-add" onClick={() => setMenuOpen((open) => !open)} disabled={disabled} aria-expanded={menuOpen} aria-haspopup="menu" aria-label={t('Add files and tools', 'Dosya ve araç ekle')} title={t('Add files and tools', 'Dosya ve araç ekle')}><ButtonIcon name="add" /></button>
+        {menuOpen ? <div ref={menuRef} className="agent-add-menu" role="menu" aria-label={t('Add', 'Ekle')}>
+          <strong>{t('Add', 'Ekle')}</strong>
+          <button type="button" role="menuitem" disabled={!onAdd || addDisabled} onClick={() => { setMenuOpen(false); onAdd?.() }}><ButtonIcon name="attach" /><span>{resolvedAddLabel}<small>{t('Upload from computer', 'Bilgisayardan yükle')}</small></span></button>
+          {tools ? <AgentToolMenu controls={tools} disabled={disabled} onSelect={() => { setMenuOpen(false); localRef.current?.focus() }} /> : null}
+        </div> : null}
         <span className="agent-prompt-context"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m12 3 10 5-10 5L2 8l10-5Zm-10 9 10 5 10-5M2 16l10 5 10-5" /></svg>{resolvedContext}</span>
         <span className="agent-prompt-hint">Shift + Enter · {t('New line', 'Yeni satır')}</span>
         <button type="submit" className="primary-button" disabled={disabled || !value.trim()} aria-label={t('Send', 'Gönder')}><ButtonIcon name="send" /></button>

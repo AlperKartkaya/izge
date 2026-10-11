@@ -26,6 +26,21 @@ class WorkTask(Base, TimestampMixin):
     source_snapshot: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
 
+class AssistantConversation(Base, TimestampMixin):
+    __tablename__ = "assistant_conversations"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "owner_user_id", "thread_id", name="uq_assistant_conversation_owner_thread"),
+    )
+
+    conversation_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("acv"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
+    owner_user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), nullable=False, index=True)
+    thread_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+
+
 class ColleagueRun(Base, TimestampMixin):
     __tablename__ = "colleague_runs"
     __table_args__ = (

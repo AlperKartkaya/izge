@@ -65,9 +65,11 @@ def _valid_payload(payload: object) -> bool:
         "max_output_tokens",
         "reasoning",
         "text",
+        "tools",
     }
     max_output_tokens = payload.get("max_output_tokens")
     reasoning = payload.get("reasoning")
+    tools = payload.get("tools")
     return (
         not (set(payload) - allowed_fields)
         and payload.get("model") == "gpt-6-luna"
@@ -78,6 +80,7 @@ def _valid_payload(payload: object) -> bool:
         and isinstance(max_output_tokens, int)
         and not isinstance(max_output_tokens, bool)
         and 1 <= max_output_tokens <= 8192
+        and (tools is None or tools == [{"type": "web_search", "external_web_access": True}])
         and (
             reasoning is None
             or isinstance(reasoning, dict)

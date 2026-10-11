@@ -6,14 +6,16 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Literal, cast
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, get_db
 from app.dependencies import get_current_user
-from app.models import Artifact, ColleagueRun, ColleagueRunEvent, User, WorkTask
+from app.models import Artifact, AssistantConversation, ColleagueRun, ColleagueRunEvent, User, WorkTask
+from app.routers.team_chat import attach_team_chat_file
+from app.schemas.api import TeamChatMessageRead
 from app.schemas.work import (
     ColleagueAskAccepted,
     ColleagueAskCreate,
@@ -29,17 +31,173 @@ from app.schemas.work import (
     WorkTaskList,
     WorkTaskRead,
     WorkTaskUpdate,
+    AssistantConversationCreate,
+    AssistantConversationList,
+    AssistantConversationRead,
+    AssistantConversationUpdate,
 )
 from app.services.audit import log_event
-from app.services.colleague import TERMINAL_RUN_STATUSES, enqueue_colleague_question, enqueue_manual_review, task_sources_visible_to_readers
+from app.services.colleague import AGENT_EMAIL, TERMINAL_RUN_STATUSES, enqueue_colleague_question, enqueue_manual_review, task_sources_visible_to_readers
 from app.services.permissions import artifact_is_visible_to_user
 from app.services.agent_sources import visible_sources
 from app.services.agent_model import model_catalog
 from app.services.agent_tools import available_mcp_tools
 from app.config import get_settings
+from app.services.conversations import DEFAULT_ASSISTANT_THREAD_ID, archive_conversation, conversation_for_thread, ensure_personal_conversation, get_owned_conversation
 
 
 router = APIRouter(prefix="/work", tags=["work"])
+
+
+def _conversation_read(conversation: AssistantConversation) -> AssistantConversationRead:
+    return AssistantConversationRead(
+        conversation_id=conversation.conversation_id,
+        thread_id=conversation.thread_id,
+        title=conversation.title,
+        archived_at=conversation.archived_at,
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+    )
+
+
+def _reject_active_conversation_run(db: Session, conversation: AssistantConversation) -> None:
+    active_run = db.scalar(select(ColleagueRun.run_id).where(
+        ColleagueRun.workspace_id == conversation.workspace_id,
+        ColleagueRun.created_by == conversation.owner_user_id,
+        ColleagueRun.thread_id == conversation.thread_id,
+        ColleagueRun.status.in_(["queued", "running"]),
+    ).limit(1))
+    if active_run:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Etkin çalışma tamamlanmadan konuşma gizlenemez.")
+
+
+@router.get("/conversations", response_model=AssistantConversationList)
+def list_conversations(
+    include_archived: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AssistantConversationList:
+    legacy_runs = list(db.scalars(select(ColleagueRun).where(
+        ColleagueRun.workspace_id == current_user.workspace_id,
+        ColleagueRun.created_by == current_user.user_id,
+        ColleagueRun.thread_kind == "direct",
+    ).order_by(ColleagueRun.created_at.asc())).all())
+    agent_user_id = db.scalar(select(User.user_id).where(
+        User.workspace_id == current_user.workspace_id,
+        User.email == AGENT_EMAIL,
+    ))
+    for run in legacy_runs:
+        participants = set(run.participant_user_ids or [])
+        if participants <= {current_user.user_id, agent_user_id} and conversation_for_thread(db, current_user, run.thread_id) is None:
+            ensure_personal_conversation(db, current_user, thread_id=run.thread_id, title=run.thread_title or run.question[:120])
+    if conversation_for_thread(db, current_user, DEFAULT_ASSISTANT_THREAD_ID) is None:
+        ensure_personal_conversation(
+            db,
+            current_user,
+            thread_id=DEFAULT_ASSISTANT_THREAD_ID,
+            title=None,
+        )
+    db.commit()
+    query = select(AssistantConversation).where(
+        AssistantConversation.workspace_id == current_user.workspace_id,
+        AssistantConversation.owner_user_id == current_user.user_id,
+        AssistantConversation.deleted_at.is_(None),
+    )
+    if not include_archived:
+        query = query.where(AssistantConversation.archived_at.is_(None))
+    conversations = list(db.scalars(query).all())
+    latest_activity = dict(db.execute(
+        select(ColleagueRun.thread_id, func.max(ColleagueRun.updated_at))
+        .where(
+            ColleagueRun.workspace_id == current_user.workspace_id,
+            ColleagueRun.created_by == current_user.user_id,
+            ColleagueRun.thread_id.in_([item.thread_id for item in conversations]),
+        )
+        .group_by(ColleagueRun.thread_id)
+    ).all()) if conversations else {}
+    conversations.sort(key=lambda item: latest_activity.get(item.thread_id) or item.updated_at, reverse=True)
+    return AssistantConversationList(items=[_conversation_read(item) for item in conversations])
+
+
+@router.post("/conversations", response_model=AssistantConversationRead, status_code=status.HTTP_201_CREATED)
+def create_conversation(
+    payload: AssistantConversationCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AssistantConversationRead:
+    conversation = AssistantConversation(
+        workspace_id=current_user.workspace_id,
+        owner_user_id=current_user.user_id,
+        thread_id="pending",
+        title=payload.title.strip(),
+    )
+    db.add(conversation)
+    db.flush()
+    conversation.thread_id = f"assistant-cowork:{conversation.conversation_id}"
+    db.commit()
+    db.refresh(conversation)
+    return _conversation_read(conversation)
+
+
+@router.get("/conversations/{conversation_id}", response_model=AssistantConversationRead)
+def get_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AssistantConversationRead:
+    return _conversation_read(get_owned_conversation(db, current_user, conversation_id))
+
+
+@router.patch("/conversations/{conversation_id}", response_model=AssistantConversationRead)
+def update_conversation(
+    conversation_id: str,
+    payload: AssistantConversationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AssistantConversationRead:
+    conversation = get_owned_conversation(db, current_user, conversation_id)
+    if payload.archived is not None and payload.archived != (conversation.archived_at is not None):
+        _reject_active_conversation_run(db, conversation)
+        archive_conversation(conversation, payload.archived)
+    if payload.title is not None:
+        conversation.title = payload.title.strip()
+    db.commit()
+    db.refresh(conversation)
+    return _conversation_read(conversation)
+
+
+@router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    conversation = get_owned_conversation(db, current_user, conversation_id)
+    _reject_active_conversation_run(db, conversation)
+    conversation.deleted_at = datetime.utcnow()
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/conversations/{conversation_id}/attachments", response_model=TeamChatMessageRead, status_code=status.HTTP_201_CREATED)
+async def attach_conversation_file(
+    conversation_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TeamChatMessageRead:
+    conversation = get_owned_conversation(db, current_user, conversation_id)
+    if conversation.archived_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Arşivlenmiş konuşmaya dosya eklenemez.")
+    return await attach_team_chat_file(
+        file=file,
+        thread_id=conversation.thread_id,
+        thread_title=conversation.title,
+        thread_kind="direct",
+        participant_user_ids=json.dumps([current_user.user_id]),
+        current_user=current_user,
+        db=db,
+    )
 
 
 def _response_language_from_header(value: str | None) -> Literal["tr", "en"]:
@@ -164,7 +322,14 @@ def update_task(task_id: str, payload: WorkTaskUpdate, current_user: User = Depe
     return _task_read(db, current_user, task, assignee)
 
 
-def _can_read_run(run: ColleagueRun, user: User) -> bool:
+def _can_read_run(db: Session, run: ColleagueRun, user: User) -> bool:
+    conversation = db.scalar(select(AssistantConversation).where(
+        AssistantConversation.workspace_id == run.workspace_id,
+        AssistantConversation.owner_user_id == run.created_by,
+        AssistantConversation.thread_id == run.thread_id,
+    ))
+    if conversation is not None:
+        return conversation.owner_user_id == user.user_id and conversation.deleted_at is None
     return user.role == "Admin" or run.created_by == user.user_id or user.user_id in (run.participant_user_ids or [])
 
 
@@ -268,7 +433,7 @@ def list_runs(
     if isinstance(thread_id, str):
         query = query.where(ColleagueRun.thread_id == thread_id)
     runs = list(db.scalars(query.order_by(ColleagueRun.created_at.desc())).all())
-    visible_runs = [run for run in runs if _can_read_run(run, current_user)][:limit]
+    visible_runs = [run for run in runs if _can_read_run(db, run, current_user)][:limit]
     return ColleagueRunList(items=[_run_read(db, run, current_user) for run in visible_runs])
 
 
@@ -277,7 +442,7 @@ def get_run(run_id: str, current_user: User = Depends(get_current_user), db: Ses
     run = db.scalar(select(ColleagueRun).where(ColleagueRun.run_id == run_id, ColleagueRun.workspace_id == current_user.workspace_id))
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Çalışma bulunamadı.")
-    if not _can_read_run(run, current_user):
+    if not _can_read_run(db, run, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu çalışmaya erişemezsiniz.")
     return _run_read(db, run, current_user)
 
@@ -293,7 +458,7 @@ def _event_stream(run_id: str, start_sequence: int, reader_id: str) -> Iterator[
             reader = db.get(User, reader_id)
             if run is None or reader is None:
                 return
-            if reader.workspace_id != run.workspace_id or not reader.is_active or not _can_read_run(run, reader):
+            if reader.workspace_id != run.workspace_id or not reader.is_active or not _can_read_run(db, run, reader):
                 return
             readable = visible_sources(db, reader, run.sources or [])
             if len(readable) != len(run.sources or []):
@@ -335,7 +500,7 @@ def stream_run_events(
     run = db.scalar(select(ColleagueRun).where(ColleagueRun.run_id == run_id, ColleagueRun.workspace_id == current_user.workspace_id))
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Çalışma bulunamadı.")
-    if not _can_read_run(run, current_user):
+    if not _can_read_run(db, run, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu çalışmaya erişemezsiniz.")
     if len(visible_sources(db, current_user, run.sources or [])) != len(run.sources or []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Çalışmanın kaynak erişimleri değişti.")

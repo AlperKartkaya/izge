@@ -1,3 +1,4 @@
+import re
 """A bounded, typed work plan; tool output can never grant new permissions."""
 from typing import Literal
 
@@ -18,6 +19,13 @@ class AgentPlan(BaseModel):
     web_query: str = Field(max_length=300)
     mcp_reads: list[MCPRead] = Field(max_length=2)
     reviewer: bool
+
+
+def non_substantive_reply(text: str, *, language: str) -> str | None:
+    text = re.sub(r"^\s*@[iİı]zge\b\s*", "", text, flags=re.IGNORECASE)
+    if any(character.isalnum() for character in text):
+        return None
+    return "How can I help you?" if language == "en" else "Size nasıl yardımcı olabilirim?"
 
 
 def capabilities_text(*, web_enabled: bool, mcp_tools: list[dict]) -> str:

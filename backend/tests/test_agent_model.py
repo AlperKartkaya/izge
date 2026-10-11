@@ -15,7 +15,10 @@ from app.services.agent_model import (
     _stream_ollama,
     model_catalog,
     model_session,
+    native_web_search_available,
+    profile_supports_native_web_search,
     resolve_effective_model_options,
+    run_native_web_search,
     stream_agent_text,
     structured_agent_output,
 )
@@ -37,6 +40,9 @@ class AgentModelTests(unittest.TestCase):
         self.assertTrue(valid_payload(payload))
         self.assertFalse(valid_payload([]))
         self.assertFalse(valid_payload({**payload, "tools": []}))
+        self.assertTrue(valid_payload({**payload, "tools": [{"type": "web_search", "external_web_access": True}]}))
+        self.assertFalse(valid_payload({**payload, "tools": [{"type": "web_search", "external_web_access": False}]}))
+        self.assertFalse(valid_payload({**payload, "tools": [{"type": "computer"}]}))
         self.assertFalse(valid_payload({**payload, "reasoning": {"effort": "unsupported"}}))
 
     @patch("app.services.agent_model.get_settings")
@@ -162,7 +168,114 @@ class AgentModelTests(unittest.TestCase):
         payload = mocked_stream.call_args.args[1]
         self.assertEqual(payload["model"], "gpt-6-luna")
         self.assertEqual(payload["reasoning"], {"effort": "max"})
+        self.assertEqual(payload["max_output_tokens"], 8192)
         self.assertEqual(mocked_stream.call_args.args[2]["Authorization"], "Bearer bridge-key")
+
+    @patch("app.services.agent_model._open_request")
+    @patch("app.services.agent_model.get_settings")
+    def test_codex_retries_incomplete_once_without_leaking_partial_text(self, mocked_settings, mocked_open) -> None:
+        mocked_settings.return_value = Settings.model_construct(
+            agent_codex_bridge_base_url="http://127.0.0.1:8766",
+            agent_codex_bridge_token=SecretStr("bridge-key"),
+        )
+        first = io.BytesIO(
+            b'data: {"type":"response.output_text.delta","delta":"partial"}\n\n'
+            b'data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}\n\n'
+        )
+        second = io.BytesIO(
+            b'data: {"type":"response.output_text.delta","delta":"complete"}\n\n'
+            b'data: {"type":"response.completed"}\n\n'
+        )
+        mocked_open.side_effect = [(Mock(), first), (Mock(), second)]
+
+        with model_session("codex", "medium"):
+            self.assertEqual(
+                list(stream_agent_text([{"role": "user", "content": "test"}], max_tokens=220, schema={"type": "object"})),
+                ["complete"],
+            )
+
+        self.assertEqual(mocked_open.call_count, 2)
+        self.assertEqual(mocked_open.call_args_list[0].args[2]["max_output_tokens"], 4096)
+        self.assertEqual(mocked_open.call_args_list[1].args[2]["max_output_tokens"], 8192)
+
+    @patch("app.services.agent_model._open_request")
+    @patch("app.services.agent_model.get_settings")
+    def test_codex_stops_incomplete_stream_without_duplicating_visible_partial_text(self, mocked_settings, mocked_open) -> None:
+        mocked_settings.return_value = Settings.model_construct(
+            agent_codex_bridge_base_url="http://127.0.0.1:8766",
+            agent_codex_bridge_token=SecretStr("bridge-key"),
+        )
+        mocked_open.return_value = (
+            Mock(),
+            io.BytesIO(
+                b'data: {"type":"response.output_text.delta","delta":"partial"}\n\n'
+                b'data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}\n\n'
+            ),
+        )
+        seen: list[str] = []
+
+        with model_session("codex", "max"), self.assertRaisesRegex(AgentModelError, "incomplete"):
+            for chunk in stream_agent_text([{"role": "user", "content": "test"}], max_tokens=1400):
+                seen.append(chunk)
+
+        self.assertEqual(seen, ["partial"])
+        self.assertEqual(mocked_open.call_count, 1)
+
+    @patch("app.services.agent_model._open_request")
+    @patch("app.services.agent_model.get_settings")
+    def test_codex_native_web_search_requires_real_call_and_returns_citations(self, mocked_settings, mocked_open) -> None:
+        mocked_settings.return_value = Settings.model_construct(
+            agent_codex_bridge_base_url="http://127.0.0.1:8766",
+            agent_codex_bridge_token=SecretStr("bridge-key"),
+        )
+        mocked_open.return_value = (
+            Mock(),
+            io.BytesIO(
+                b'data: {"type":"response.output_item.added","item":{"type":"web_search_call","id":"ws_1"}}\n\n'
+                b'data: {"type":"response.output_text.delta","delta":"Verified public fact."}\n\n'
+                b'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","url":"https://example.com/report","title":"Public report","start_index":0,"end_index":21}}\n\n'
+                b'data: {"type":"response.completed"}\n\n'
+            ),
+        )
+
+        with model_session("codex", "low"):
+            sources = run_native_web_search("public report")
+
+        self.assertEqual(sources[0]["source_type"], "web")
+        self.assertEqual(sources[0]["title"], "Public report")
+        self.assertEqual(sources[0]["quote"], "Verified public fact.")
+        payload = mocked_open.call_args.args[2]
+        self.assertEqual(payload["tools"], [{"type": "web_search", "external_web_access": True}])
+        self.assertEqual(payload["input"], [{"role": "user", "content": "public report"}])
+
+    @patch("app.services.agent_model._open_request")
+    @patch("app.services.agent_model.get_settings")
+    def test_codex_native_web_search_rejects_citations_without_tool_call(self, mocked_settings, mocked_open) -> None:
+        mocked_settings.return_value = Settings.model_construct(
+            agent_codex_bridge_base_url="http://127.0.0.1:8766",
+            agent_codex_bridge_token=SecretStr("bridge-key"),
+        )
+        mocked_open.return_value = (
+            Mock(),
+            io.BytesIO(
+                b'data: {"type":"response.output_text.delta","delta":"Claim"}\n\n'
+                b'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","url":"https://example.com/report","title":"Report","start_index":0,"end_index":5}}\n\n'
+                b'data: {"type":"response.completed"}\n\n'
+            ),
+        )
+        with model_session("codex", "low"), self.assertRaisesRegex(AgentModelError, "did not execute"):
+            run_native_web_search("public report")
+
+    @patch("app.services.agent_model.get_settings")
+    def test_native_web_search_availability_is_codex_only(self, mocked_settings) -> None:
+        mocked_settings.return_value = Settings.model_construct(
+            agent_codex_bridge_base_url="http://127.0.0.1:8766",
+            agent_codex_bridge_token=SecretStr("bridge-key"),
+        )
+        self.assertTrue(profile_supports_native_web_search("codex"))
+        self.assertFalse(profile_supports_native_web_search("glm"))
+        self.assertTrue(native_web_search_available("codex"))
+        self.assertFalse(native_web_search_available("deepseek"))
 
     @patch("app.services.agent_model._stream_responses", return_value=iter(['{"ok":true}']))
     @patch("app.services.agent_model.get_settings")
