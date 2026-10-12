@@ -1,3 +1,4 @@
+import { ProgressMeter } from '../components/ProgressMeter'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
@@ -95,8 +96,8 @@ export function TargetReadinessPage() {
 
       <section className="panel-subtle" aria-label={t('Readiness summary', 'Hazırlık özeti')}>
         <div className="readiness-header">
-          <div><p className="table-primary">{t('Overall readiness', 'Genel hazırlık')}</p><p className="table-secondary">{readiness ? formatPercent(readiness.target_score) : '—'}</p></div>
-          <StatusBadge status={gaps.length ? 'warning' : 'success'} value={gaps.length ? t('Needs attention', 'Dikkat gerekli') : t('Ready', 'Hazır')} />
+          <ProgressMeter label={t('Overall readiness', 'Genel hazırlık')} value={readiness?.target_score ?? null} />
+          {readiness ? <StatusBadge status={gaps.length ? 'warning' : 'success'} value={gaps.length ? t('Needs attention', 'Dikkat gerekli') : t('Ready', 'Hazır')} /> : null}
         </div>
         <dl className="review-ledger">
           <div><dt>{t('Complete', 'Tamam')}</dt><dd>{readiness ? statusCount(readiness, 'implemented') : '—'}</dd></div>
@@ -155,15 +156,14 @@ export function TargetReadinessPage() {
         )}
       </details>
 
-      <Panel title={t('Requirement coverage', 'Gereksinim kapsamı')} description={t('Each area states the requirement, current product reflection, proof routes, and remaining work before the target is complete.', 'Her alan hedef tamamlanmadan önce gereksinimi, mevcut ürün karşılığını, kanıt yollarını ve kalan işi gösterir.')}>
+      <Panel title={t('Requirement coverage', 'Gereksinim kapsamı')} >
         {readiness ? (
           <div className="stack-sm">
             {readiness.areas.map((area) => (
               <details key={area.area_key} className={areaCardClass(area.status)}>
                 <summary className="timeline-card-head">
                   <span className="disclosure-heading">
-                    <span className="section-label">{formatPercent(area.score)} {t('complete', 'tamamlandı')}</span>
-                    <span className="table-primary">{area.title}</span>
+                    <ProgressMeter value={area.score} label={area.title} />
                   </span>
                   <StatusBadge value={area.status} />
                 </summary>
@@ -198,7 +198,7 @@ export function TargetReadinessPage() {
       </Panel>
 
       <div className="two-column-layout">
-        <Panel title={t('Closest gaps', 'En yakın eksikler')} description={t('The lowest-scored or still-active gaps that define the next implementation passes.', 'Sonraki uygulama adımlarını belirleyen düşük puanlı veya hâlâ etkin eksikler.')}>
+        <Panel title={t('Closest gaps', 'En yakın eksikler')} >
           {gaps.length > 0 ? (
             <div className="stack-sm">
               {gaps.map((area) => (
@@ -216,7 +216,7 @@ export function TargetReadinessPage() {
           )}
         </Panel>
 
-        <Panel title={t('Next best passes', 'Sonraki en iyi adımlar')} description={t('Implementation order that preserves the evidence-first architecture.', 'Kanıt öncelikli mimariyi koruyan uygulama sırası.')}>
+        <Panel title={t('Next best passes', 'Sonraki en iyi adımlar')} >
           {readiness ? (
             <div className="stack-sm">
               {readiness.next_best_passes.map((item, index) => (

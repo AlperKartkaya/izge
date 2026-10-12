@@ -224,3 +224,41 @@ The final source review has no outstanding high/medium findings in the changed
 flows. A regression covers legacy trailing unpaired bold markers without changing
 stored text, valid bold, inline code, or literal exponent notation. This source
 review does not supersede the dependency audit or the no-browser evidence limit.
+
+## Component maturity pass — 12 October 2026
+- Preserve the quiet near-black/light surfaces and existing product identity.
+- Give the supplied mark optical breathing room, without reducing its host/avatar size.
+- Replace browser-like navigation links with compact, icon-led product actions.
+- Use an accessible library-backed shared selection control, not a hand-built popup.
+- Keep route focus for assistive technology, but remove the outline on the noninteractive main region only.
+- Use real readiness/task data for restrained progress indicators; no fabricated trends or decorative charts.
+- Reduce duplicate prose, retaining evidence in disclosures. Verify code/tests/build only.
+- Keep public tunnel activation gated on credentials, safe demo data, and SSE support.
+
+### References and concrete use
+- [HeroUI](https://heroui.com/en/docs/react/getting-started/quick-start): compact trigger/value/indicator hierarchy; not installed because Tailwind migration is out of scope.
+- [Radix Select](https://www.radix-ui.com/primitives/docs/components/select) and [Progress](https://www.radix-ui.com/primitives/docs/components/progress): installed individual accessible primitives; popup focus/typeahead and real-data progress replace native visual controls and duplicate score prose.
+- [React Aria Select](https://react-aria.adobe.com/Select): explicit label, disabled/error states, and small-viewport overlay sizing informed the shared control.
+- [Base UI Select](https://base-ui.com/react/components/select): unstyled compound-control approach and clear selected/hover states; no second component runtime.
+- [Lucide React](https://lucide.dev/guide/react): tree-shaken Sun/Moon and selection icons, rather than hand-drawn or bitmap theme glyphs.
+
+No display-only percentages pretend to measure AI completion. Readiness uses API scores;
+task progress uses completed/total loaded tasks. Empty or unknown data is not labelled ready.
+The main route focus remains available to assistive technology; only its noninteractive
+container outline is suppressed. Button/link/selection keyboard focus remains visible.
+
+### Component pass verification
+- 77 frontend Node tests (including server-rendered Select markup; no browser) passed.
+- 131 backend tests passed, including three deployment-config tests. The obsolete
+  control-plane-helper test was removed with that helper, not bypassed.
+- ESLint, TypeScript/Vite, git whitespace, shell syntax, Compose config and Render
+  YAML parsing passed. Hosted Docker image built; nginx -t and pip check passed.
+- Current frontend build was installed in the existing localhost:8080 container;
+  its index hash matches dist. No rendered/visual/browser verification was done.
+- Cloudflare was cancelled by the user. Render/Railway preparation replaces
+  control-plane-specific repo configuration; running legacy management containers
+  and data were not removed. No DNS, public deployment, commit or push occurred.
+- Remaining release gates: existing two high React Router dependency audit entries,
+  main JS bundle ~631 kB warning, real hosting/model configuration, anonymized demo
+  data, TLS and restore/streaming acceptance. Docker's credentials-path ENV warning
+  refers to a file path, not a baked-in secret.

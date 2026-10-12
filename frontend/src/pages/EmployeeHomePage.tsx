@@ -1,3 +1,5 @@
+import { ProgressMeter } from '../components/ProgressMeter'
+import { ButtonIcon } from '../components/ButtonIcon'
 import { ReviewContextCards } from '../components/ReviewContextCards'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -82,13 +84,14 @@ export function EmployeeHomePage() {
         </div>
       )}
       <nav className="employee-home-actions" aria-label={t('Quick actions', 'Hızlı işlemler')}>
-        <Link to="/tasks">{t('Review work', 'İşleri gözden geçir')}</Link>
-        <Link to="/team-chat">{t('Open team chat', 'Ekip sohbetini aç')}</Link>
-        <Link to="/memory">{t(`Browse ${artifacts.length} sources`, `${artifacts.length} kaynağı incele`)}</Link>
-        <Link to={recentSignals[0] ? `/signals/${recentSignals[0].signal_id}` : '/memory'}>{recentSignals[0] ? t('Review latest change', 'Son değişikliği incele') : t('Explore company memory', 'Şirket hafızasını keşfet')}</Link>
+        <Link className="home-action" to="/tasks"><ButtonIcon name="tasks" />{t('Tasks', 'İşler')}</Link>
+        <Link className="home-action" to="/team-chat"><ButtonIcon name="team-chat" />{t('Team chat', 'Ekip sohbeti')}</Link>
+        <Link className="home-action" to="/memory"><ButtonIcon name="memory" />{t(`${artifacts.length} sources`, `${artifacts.length} kaynak`)}</Link>
+        <Link className="home-action" to={recentSignals[0] ? `/signals/${recentSignals[0].signal_id}` : '/memory'}><ButtonIcon name="notifications" />{recentSignals[0] ? t('Latest change', 'Son değişiklik') : t('Explore company memory', 'Şirket hafızasını keşfet')}</Link>
       </nav>
       <div className="employee-two-column">
-        <Panel title={t("Today's work", 'Bugünün işleri')} aside={<Link to="/tasks">{t('Open all', 'Tümünü aç')}</Link>}>
+        <Panel title={t("Today's work", 'Bugünün işleri')} aside={<Link className="home-action" to="/tasks"><ButtonIcon name="tasks" />{t('Open all', 'Tümünü aç')}</Link>}>
+          {!loading && tasks.length > 0 ? <ProgressMeter value={(tasks.length - openTasks.length) / tasks.length} label={t('Completed tasks', 'Tamamlanan işler')} detail={t(`${tasks.length - openTasks.length} of ${tasks.length}`, `${tasks.length - openTasks.length} / ${tasks.length}`)} /> : null}
           {openTasks.length ? <TaskRows tasks={openTasks.slice(0, 5)} onStatusChange={updateTask} /> : <EmptyState title={t('No open work', 'Açık iş yok')} description={t('You can add a new task or reminder.', 'Yeni bir iş veya hatırlatma ekleyebilirsiniz.')} />}
         </Panel>
         <Panel title={t("Izge's daily review", 'İzge’nin günlük değerlendirmesi')} aside={<button type="button" className="text-button" disabled={Boolean(reviewRun && (reviewRun.status === 'queued' || reviewRun.status === 'running'))} onClick={() => void startReview()}>{t('Review now', 'Şimdi değerlendir')}</button>}>

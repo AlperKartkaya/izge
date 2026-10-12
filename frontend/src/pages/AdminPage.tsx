@@ -6,6 +6,7 @@ import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatLabel } from '../lib/format'
 import type { ArtifactDetail, ArtifactRead, LocalLLMSmokeRead, LocalLLMStatusRead, UserRead, UserRole } from '../lib/types'
 import { useLanguage } from '../lib/i18n'
+import { Select } from '../components/Select'
 
 type VisibilityScope = 'workspace' | 'restricted'
 type ReviewStatus = 'submitted' | 'needs_review' | 'reviewed' | 'rejected'
@@ -408,10 +409,7 @@ export function AdminPage() {
             </label>
             <label className="field">
               <span className="field-label">{t('Role', 'Rol')}</span>
-              <select value={createUserForm.role} onChange={(event) => setCreateUserForm((current) => ({ ...current, role: event.target.value as UserRole }))}>
-                <option value="Member">{t('Member', 'Üye')}</option>
-                <option value="Admin">{t('Admin', 'Yönetici')}</option>
-              </select>
+              <Select aria-label={t('Role', 'Rol')} value={createUserForm.role} onValueChange={(value) => setCreateUserForm((current) => ({ ...current, role: value as UserRole }))} options={[{ value: 'Member', label: t('Member', 'Üye') }, { value: 'Admin', label: t('Admin', 'Yönetici') }]} />
             </label>
             <label className="field">
               <span className="field-label">{t('Password', 'Parola')}</span>
@@ -430,29 +428,22 @@ export function AdminPage() {
             <div className="form-grid">
               <label className="field">
                 <span className="field-label">{t('Artifact', 'Kaynak')}</span>
-                <select value={selectedArtifactId} onChange={(event) => void handleArtifactSelection(event.target.value)}>
-                  {artifacts.map((artifact) => (
-                    <option key={artifact.artifact_id} value={artifact.artifact_id}>
-                      {artifact.title}
-                    </option>
-                  ))}
-                </select>
+                <Select aria-label={t('Artifact', 'Kaynak')} value={selectedArtifactId} onValueChange={(value) => void handleArtifactSelection(value)} options={artifacts.map((artifact) => ({ value: artifact.artifact_id, label: artifact.title }))} />
               </label>
               <label className="field">
                 <span className="field-label">{t('Visibility', 'Görünürlük')}</span>
-                <select
+                <Select
+                  aria-label={t('Visibility', 'Görünürlük')}
                   value={permissionDraft.visibility_scope}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setPermissionDraft((current) => ({
                       ...current,
-                      visibility_scope: event.target.value as VisibilityScope,
-                      permitted_user_ids: event.target.value === 'workspace' ? [] : current.permitted_user_ids,
+                      visibility_scope: value as VisibilityScope,
+                      permitted_user_ids: value === 'workspace' ? [] : current.permitted_user_ids,
                     }))
                   }
-                >
-                  <option value="workspace">{t('Workspace', 'Çalışma alanı')}</option>
-                  <option value="restricted">{t('Restricted', 'Kısıtlı')}</option>
-                </select>
+                  options={[{ value: 'workspace', label: t('Workspace', 'Çalışma alanı') }, { value: 'restricted', label: t('Restricted', 'Kısıtlı') }]}
+                />
               </label>
               {permissionDraft.visibility_scope === 'restricted' ? (
                 <fieldset className="choice-grid">

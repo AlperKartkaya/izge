@@ -6,6 +6,7 @@ import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { ArtifactProactiveSignals, ArtifactRead, IngestionJobRead } from '../lib/types'
 import { useLanguage } from '../lib/i18n'
+import { Select } from '../components/Select'
 
 export function IngestionPage() {
   const { t } = useLanguage()
@@ -135,21 +136,16 @@ export function IngestionPage() {
             <div className="form-grid">
             <label className="field">
               <span className="field-label">{t('Artifact', 'Kaynak')}</span>
-              <select
+              <Select
+                aria-label={t('Artifact', 'Kaynak')}
                 name="artifact"
-                autoComplete="off"
                 value={selectedArtifactId}
-                onChange={(event) => {
-                  setSelectedArtifactId(event.target.value)
+                onValueChange={(value) => {
+                  setSelectedArtifactId(value)
                   setArtifactSignals(null)
                 }}
-              >
-                  {artifacts.map((artifact) => (
-                    <option key={artifact.artifact_id} value={artifact.artifact_id}>
-                      {artifact.title}
-                    </option>
-                  ))}
-                </select>
+                options={artifacts.map((artifact) => ({ value: artifact.artifact_id, label: artifact.title }))}
+              />
               </label>
               {selectedArtifact ? (
                 <div className="panel-subtle">

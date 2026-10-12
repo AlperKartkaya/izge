@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: izge-app
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: 0.5c-512mb
+    region: frankfurt
+    numInstances: 1
+    healthCheckPath: /health
+    domains:
+      - app.izge.dev
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: IZGE_DEFAULT_ADMIN_EMAIL
+        sync: false
+      - key: IZGE_DEFAULT_ADMIN_PASSWORD
+        sync: false
+      - key: IZGE_SYNC_DEFAULT_ADMIN_PASSWORD
+        value: "false"
+      - key: IZGE_DEMO_SEED_ENABLED
+        value: "false"
+      - key: IZGE_LOCAL_LLM_ENABLED
+        value: "false"
+      - key: IZGE_AGENT_MODEL_PROVIDER
+        sync: false
+      - key: IZGE_ALLOW_PUBLIC_LLM_BASE_URL
+        value: "false"
+    disk:
+      name: izge-data
+      mountPath: /data
+      sizeGB: 1
+
+  - type: web
+    name: izge-website
+    runtime: static
+    buildCommand: echo "Static website"
+    staticPublishPath: ./website
+    domains:
+      - izge.dev
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+

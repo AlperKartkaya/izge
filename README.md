@@ -30,7 +30,7 @@ For the MVP, local-first means **organization-controlled storage and inference**
 
 Deployment stance:
 - **Local development:** your laptop runs the frontend/backend and a local Ollama/Qwen model.
-- **Managed trial:** `app.izge.dev` can run on Izge-controlled EC2 with an EC2-local/private LLM gateway.
+- **Managed trial:** `app.izge.dev` is prepared for a single-instance Render/Railway service; website `izge.dev` is separate. See [deployment](docs/DEPLOYMENT.md).
 - **Customer target:** self-hosted or customer-controlled deployment at an internal/customer URL, with customer-controlled storage and local/private inference.
 - **Commercial bridge:** Izge-managed single-tenant deployment may be used for pilots, but generic multi-tenant SaaS is not the core product identity.
 - **Future only:** employee-local/edge models may participate later, but they are not required for MVP correctness.
@@ -282,3 +282,9 @@ Full specifications live in `docs/`. Start with `docs/README.md` for a guided in
 ## Design rule
 
 If a change makes Izge feel more like generic search, generic chat, or generic AI tooling, it is probably the wrong change.
+
+## Deployment and architecture reports
+
+- [Render / Railway deployment](docs/DEPLOYMENT.md)
+- [Local Compose demo](docs/LOCAL_DEMO.md)
+- [Rust backend feasibility (Turkish)](docs/backend-rust-feasibility.md)

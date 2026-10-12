@@ -29,3 +29,19 @@ test('runs prioritize activity over internal orchestration documentation', () =>
   assert.match(source, /Raw runtime description/)
   assert.doesNotMatch(source, /Recent database-backed job queue/)
 })
+
+test('product polish keeps mark padding, route focus and explicit theme icons', () => {
+  const css = read('../src/refinement.css')
+  assert.match(css, /\.izge-logo\s*\{[^}]*mask-size:\s*84% 84%/)
+  assert.match(css, /#main-content:focus\s*\{[^}]*outline:\s*none/)
+  assert.match(read('../src/layout/AppShell.tsx'), /mainRef.current\?\.focus/)
+  assert.match(read('../src/components/ThemeIcon.tsx'), /Sun/)
+  assert.match(read('../src/components/ThemeIcon.tsx'), /Moon/)
+  assert.doesNotMatch(read('../src/pages/SignInPage.tsx'), /Şirketinize giriş yapın/)
+})
+
+test('home shortcuts are product actions rather than unstyled anchors', () => {
+  const source = read('../src/pages/EmployeeHomePage.tsx')
+  assert.match(source, /className="home-action"/)
+  assert.doesNotMatch(source, /<Link to="\/tasks">/)
+})

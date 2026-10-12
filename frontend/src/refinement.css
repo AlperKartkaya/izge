@@ -330,3 +330,43 @@ input[type='file']::file-selector-button { margin-right: .75rem; min-height: 2.5
 .agent-follow-ups button { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .notification-detail-status { color: var(--color-ink-muted); font-size: .875rem; }
 .notification-detail-error { display: grid; justify-items: start; gap: .5rem; padding-bottom: .75rem; }
+
+/* Optical padding lives in the mark, not in a smaller avatar. */
+.izge-logo { mask-size: 84% 84%; }
+.sidebar-toggle .brand-sigil { width: 2.75rem; height: 2.75rem; flex-shrink: 0; }
+/* The route-focus landing point is not an interactive control. */
+#main-content:focus { outline: none; }
+.theme-icon { flex-shrink: 0; display: block; }
+.theme-toggle { justify-content: center; }
+.employee-home-actions { gap: .5rem; }
+.employee-home-actions .home-action, .section-head a {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  min-height: 2.5rem; padding: .5rem .75rem; border-radius: .625rem;
+  color: var(--color-ink-strong); background: var(--color-surface-muted);
+  text-decoration: none; font-size: .8125rem; font-weight: 500;
+}
+.employee-home-actions .home-action:hover, .section-head a:hover { background: var(--primary-light); }
+.home-action .button-icon { width: 1.125rem; height: 1.125rem; }
+.language-select:has(.select-trigger) { min-width: 0; }
+.app-sidebar .language-select .select-trigger { min-width: 0; width: 100%; }
+.progress-meter { min-width: 0; width: 100%; margin-block: .25rem .875rem; }
+.progress-meter-label { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: .5rem; font-size: .8125rem; }
+.progress-meter-label > :first-child { min-width: 0; overflow-wrap: anywhere; color: var(--color-ink-strong); }
+.progress-meter-label > :last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--color-ink-muted); }
+.progress-track { overflow: hidden; height: .375rem; border-radius: 1rem; background: var(--color-surface-muted); }
+.progress-fill { height: 100%; width: 100%; border-radius: inherit; background: var(--primary); }
+.readiness-header { gap: 1.5rem; }
+.readiness-header > .progress-meter { flex: 1; max-width: 32rem; }
+.disclosure-heading:has(.progress-meter) { flex: 1; max-width: 34rem; }
+.disclosure-heading .progress-meter { margin: .25rem 0; }
+.app-frame:not(.app-frame-sidebar-expanded) .app-sidebar .language-select .select-trigger {
+  position: absolute; inset: 0; width: 100%; height: 100%; border: 0; padding: 0;
+  min-height: 0; background: transparent;
+}
+.app-frame:not(.app-frame-sidebar-expanded) .app-sidebar .language-select .select-trigger > span {
+  opacity: 0; width: 0; overflow: hidden;
+}
+.app-frame-sidebar-expanded .app-sidebar .language-select { padding-inline: .5rem; }
+.app-frame-sidebar-expanded .app-sidebar .theme-toggle { justify-content: center; }
+
+.progress-meter, .progress-track, .progress-fill { display: block; }

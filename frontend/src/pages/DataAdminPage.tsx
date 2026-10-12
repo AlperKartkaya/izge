@@ -8,6 +8,7 @@ import { formatDateTime, formatLabel } from '../lib/format'
 import type { ArtifactStorageAdminRead, DatabaseOverviewRead } from '../lib/types'
 import { useLanguage } from '../lib/i18n'
 import { filterSourceList } from '../lib/sourceList'
+import { Select } from '../components/Select'
 
 function formatBytes(value: number | null, missing: string): string {
   if (value === null) {
@@ -158,7 +159,7 @@ export function DataAdminPage() {
         <Panel title={t('Stored artifacts', 'Kayıtlı kaynaklar')} description={t('Admin view of source storage, memory coverage, review state, and supported metadata changes.', 'Kaynak depolama, hafıza kapsamı, inceleme durumu ve desteklenen üst veri değişikliklerinin yönetici görünümü.')}>
           <div className="source-list-controls">
             <label className="field"><span className="field-label">{t('Find source', 'Kaynak ara')}</span><input type="search" name="source-search" autoComplete="off" value={sourceSearch} onChange={(event) => setSourceSearch(event.target.value)} placeholder={t('Search by title…', 'Başlığa göre ara…')} /></label>
-            <label className="field"><span className="field-label">{t('Sort', 'Sıralama')}</span><select value={sourceSort} onChange={(event) => setSourceSort(event.target.value as 'title' | 'recent')}><option value="recent">{t('Recently updated', 'Son güncellenen')}</option><option value="title">{t('Title', 'Başlık')}</option></select></label>
+            <label className="field"><span className="field-label">{t('Sort', 'Sıralama')}</span><Select aria-label={t('Sort', 'Sıralama')} value={sourceSort} onValueChange={(value) => setSourceSort(value as 'title' | 'recent')} options={[{ value: 'recent', label: t('Recently updated', 'Son güncellenen') }, { value: 'title', label: t('Title', 'Başlık') }]} /></label>
           </div>
           {overview && sourceSearch && !visibleArtifacts.length ? <p role="status" className="muted-copy">{t('No matching sources. Try another title.', 'Eşleşen kaynak yok. Başka bir başlık deneyin.')}</p> : null}
           {!overview || overview.artifacts.length === 0 ? (

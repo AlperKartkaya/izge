@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import type { UserRead, WorkTaskRead, WorkTaskStatus } from '../lib/types'
 import { useLanguage } from '../lib/i18n'
 import { splitTasksByCompletion } from '../lib/taskStatus'
+import { Select } from '../components/Select'
 
 function toIso(value: string) { return value ? new Date(`${value}+03:00`).toISOString() : null }
 function errorMessage(error: unknown, fallback: string) { return error instanceof Error && error.message ? error.message : fallback }
@@ -86,7 +87,7 @@ export function TasksPage() {
           <form className="form-grid" onSubmit={createTask}>
             <label className="field"><span className="field-label">{t('Task title', 'İş başlığı')}</span><input name="task_title" autoComplete="off" value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
             <label className="field"><span className="field-label">{t('Description', 'Açıklama')}</span><textarea name="task_description" autoComplete="off" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} /></label>
-            <label className="field"><span className="field-label">{t('Owner', 'Sorumlu')}</span><select name="task_owner" autoComplete="off" value={assignee} onChange={(event) => setAssignee(event.target.value)}>{colleagues.map((user) => <option key={user.user_id} value={user.user_id}>{user.display_name}</option>)}</select></label>
+            <label className="field"><span className="field-label">{t('Owner', 'Sorumlu')}</span><Select aria-label={t('Owner', 'Sorumlu')} name="task_owner" value={assignee} onValueChange={setAssignee} options={colleagues.map((user) => ({ value: user.user_id, label: user.display_name }))} /></label>
             <div className="form-grid form-grid-two"><label className="field"><span className="field-label">{t('Due time (Istanbul)', 'Bitiş zamanı (İstanbul)')}</span><input name="task_due_at" autoComplete="off" type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label><label className="field"><span className="field-label">{t('Reminder (Istanbul)', 'Hatırlatma (İstanbul)')}</span><input name="task_remind_at" autoComplete="off" type="datetime-local" value={remindAt} onChange={(event) => setRemindAt(event.target.value)} /></label></div>
             <button className="primary-button" type="submit" disabled={isSaving}>{isSaving ? t('Saving…', 'Kaydediliyor…') : t('Create task', 'İşi oluştur')}</button>
           </form>

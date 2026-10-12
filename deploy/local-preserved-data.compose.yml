@@ -1,0 +1,12 @@
+# Opt-in only: reuse the existing product data instead of ./backend/data.
+services:
+  backend:
+    volumes:
+      - izge-data:/data
+  worker:
+    volumes:
+      - izge-data:/data
+volumes:
+  izge-data:
+    external: true
+    name: izge-product-data

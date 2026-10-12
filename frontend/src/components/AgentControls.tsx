@@ -2,8 +2,13 @@ import { ButtonIcon } from './ButtonIcon'
 import { useLanguage } from '../lib/i18n'
 import type { AgentModelProfileId } from '../lib/types'
 import type { useAgentControls } from './useAgentControls'
+import { Select } from './Select'
 
 type Controls = ReturnType<typeof useAgentControls>
+
+function effortLabel(effort: string, t: (english: string, turkish: string) => string) {
+  return ({ none: t('None', 'Kapalı'), max: t('Maximum', 'En yüksek'), low: t('Low', 'Düşük'), medium: t('Medium', 'Orta'), high: t('High', 'Yüksek'), xhigh: t('Extra high', 'Çok yüksek') } as Record<string, string>)[effort] ?? effort
+}
 
 export function AgentControls({ controls, disabled = false }: { controls: Controls; disabled?: boolean }) {
   const { t } = useLanguage()
@@ -14,8 +19,8 @@ export function AgentControls({ controls, disabled = false }: { controls: Contro
       <summary>{t('Response settings', 'Yanıt ayarları')}</summary>
     <fieldset className="agent-controls" disabled={disabled}>
       <legend className="sr-only">{t('Izge work settings', 'İzge çalışma ayarları')}</legend>
-      <label><span>{t('Model', 'Model')}</span><select value={controls.modelProfile} onChange={(event) => controls.setModelProfile(event.target.value as AgentModelProfileId)}>{!controls.modelProfile ? <option value="">{t('No configured model', 'Yapılandırılmış model yok')}</option> : null}{controls.catalog.profiles.map((profile) => <option key={profile.id} value={profile.id} disabled={!profile.enabled}>{profile.label}{profile.enabled ? '' : ` — ${profile.reason ?? t('Not configured', 'Yapılandırılmadı')}`}</option>)}</select></label>
-      {controls.selected?.supported_efforts.some((effort) => effort !== 'none') ? <label><span>{t('Effort', 'Efor')}</span><select value={controls.reasoningEffort ?? ''} onChange={(event) => controls.setReasoningEffort(event.target.value)}><option value="">{t('Default', 'Varsayılan')}</option>{controls.selected.supported_efforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}</select></label> : null}
+      <label><span>{t('Model', 'Model')}</span><Select aria-label={t('Model', 'Model')} value={controls.modelProfile} disabled={disabled} onValueChange={(value) => controls.setModelProfile(value as AgentModelProfileId)} options={[...(!controls.modelProfile ? [{ value: '', label: t('No configured model', 'Yapılandırılmış model yok') }] : []), ...controls.catalog.profiles.map((profile) => ({ value: profile.id, label: `${profile.label}${profile.enabled ? '' : ` — ${profile.reason ?? t('Not configured', 'Yapılandırılmadı')}`}`, disabled: !profile.enabled }))]} /></label>
+      {controls.selected?.supported_efforts.some((effort) => effort !== 'none') ? <label><span>{t('Effort', 'Efor')}</span><Select aria-label={t('Effort', 'Efor')} value={controls.reasoningEffort ?? ''} disabled={disabled} onValueChange={controls.setReasoningEffort} options={[{ value: '', label: t('Default', 'Varsayılan') }, ...controls.selected.supported_efforts.map((effort) => ({ value: effort, label: effortLabel(effort, t) }))]} /></label> : null}
     </fieldset>
     </details>
     {controls.selected?.data_boundary === 'cloud' ? <small className="agent-controls-warning">{t('The prompt and selected context are sent to the cloud model provider.', 'İstem ve seçilen bağlam bulut model sağlayıcısına gönderilir.')}</small> : null}

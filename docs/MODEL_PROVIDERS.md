@@ -32,22 +32,24 @@ Unlike upstream, it treats Codex credentials as read-only: when the access
 token expires, let Codex refresh it or run `codex login`, then retry.
 **The bridge is local; GPT inference is still in the cloud.**
 
-## Private keys and local Coolify
+## Private keys and deployment
 
-Place keys in repo-root `.env` (gitignored) or `backend/.env`:
+Place canonical `IZGE_*` variables in repo-root `.env` for Compose, or the hosting
+provider's secret-variable UI for production:
 
 ```dotenv
 IZGE_AGENT_GLM_API_KEY=your-private-standard-api-key
 IZGE_AGENT_DEEPSEEK_API_KEY=your-private-api-key
-# Optional public search; disabled until configured AND explicitly checked:
 IZGE_AGENT_WEB_SEARCH_KEY=your-brave-key
 ```
 
-`GLM_API_KEY` / `ZAI_API_KEY`, `DEEPSEEK_API_KEY`, and `BRAVE_API_KEY` aliases
-are accepted by the local deployment helper. No key is returned to the browser.
-`scripts/local-demo.sh` applies settings to both API and worker through Coolify,
-then deploys without deleting the product volume. The same host bridge token is
-wired automatically; do not put OAuth tokens in `.env`.
+`scripts/local-demo.sh` runs generic Docker Compose; API and worker share the environment.
+Legacy short aliases are no longer rewritten by a control-plane helper.
+The local bridge URL/token must be supplied explicitly through
+`IZGE_AGENT_CODEX_BRIDGE_BASE_URL` and `IZGE_AGENT_CODEX_BRIDGE_TOKEN`.
+Never copy local OAuth tokens or `~/.codex` into hosted images.
+See [hosted deployment](DEPLOYMENT.md) for Render/Railway and model prerequisites.
+
 Configure the shared company server with `IZGE_AGENT_ONPREM_BASE_URL`,
 `IZGE_AGENT_ONPREM_MODEL`, and optionally `IZGE_AGENT_ONPREM_API_KEY`.
 One selected backend gateway serves all employees; their browsers do not

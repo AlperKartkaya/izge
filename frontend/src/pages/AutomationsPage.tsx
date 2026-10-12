@@ -9,6 +9,7 @@ import { automationFrequencyLabel, automationRunStatusLabel, istanbulDateInput, 
 import { formatDateTime } from '../lib/format'
 import { useLanguage } from '../lib/i18n'
 import type { AutomationFrequency, AutomationRead } from '../lib/types'
+import { Select } from '../components/Select'
 
 const templates = [
   ['Günlük iş özeti', 'Bugünkü işleri, açık riskleri ve yarın için önerilen öncelikleri özetle.', '16:00', 'Daily work summary', 'Summarize today\'s work, open risks, and recommended priorities for tomorrow.'],
@@ -133,7 +134,7 @@ export function AutomationsPage() {
         <label className="field"><span className="field-label">{t('Title', 'Başlık')}</span><input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
         <label className="field"><span className="field-label">{t('What should Izge check?', 'İzge neyi kontrol etsin?')}</span><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={4} required /></label>
         <div className="automation-schedule-fields">
-          <label className="field"><span className="field-label">{t('Frequency', 'Sıklık')}</span><select value={frequency} onChange={(event) => setFrequency(event.target.value as AutomationFrequency)}>{frequencies.map((value) => <option key={value} value={value}>{automationFrequencyLabel(value, language)}</option>)}</select></label>
+          <label className="field"><span className="field-label">{t('Frequency', 'Sıklık')}</span><Select aria-label={t('Frequency', 'Sıklık')} value={frequency} onValueChange={(value) => setFrequency(value as AutomationFrequency)} options={frequencies.map((value) => ({ value, label: automationFrequencyLabel(value, language) }))} /></label>
           <label className="field"><span className="field-label">{t('Start date', 'Başlangıç tarihi')}</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required /></label>
           <label className="field"><span className="field-label">{t('Start time (Istanbul)', 'Başlangıç saati (İstanbul)')}</span><input type="time" value={scheduleTime} onChange={(event) => setScheduleTime(event.target.value)} required /></label>
         </div>

@@ -7,6 +7,7 @@ import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from "../component
 import { api, ApiError } from "../lib/api";
 import { formatDateTime, formatLabel } from "../lib/format";
 import { useLanguage } from '../lib/i18n'
+import { Select } from '../components/Select'
 import type {
   ArtifactDetail,
   ArtifactProactiveSignals,
@@ -414,24 +415,22 @@ export function ArtifactsPage() {
             </label>
             <label className="field memory-quiet-field">
               <span className="field-label">{t('Visibility', 'Görünürlük')}</span>
-              <select
+              <Select
+                aria-label={t('Visibility', 'Görünürlük')}
                 name="upload_visibility"
-                autoComplete="off"
                 value={uploadState.visibility_scope}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   setUploadState((current) => ({
                     ...current,
-                    visibility_scope: event.target.value as VisibilityScope,
+                    visibility_scope: value as VisibilityScope,
                     permitted_user_ids:
-                      event.target.value === "workspace"
+                      value === "workspace"
                         ? []
                         : current.permitted_user_ids,
                   }))
                 }
-              >
-                <option value="workspace">{t('Workspace', 'Çalışma alanı')}</option>
-                <option value="restricted">{t('Restricted', 'Kısıtlı')}</option>
-              </select>
+                options={[{ value: 'workspace', label: t('Workspace', 'Çalışma alanı') }, { value: 'restricted', label: t('Restricted', 'Kısıtlı') }]}
+              />
             </label>
             {uploadState.visibility_scope === "restricted" &&
             selectableUsers.length > 0 ? (
@@ -510,24 +509,22 @@ export function ArtifactsPage() {
             </label>
             <label className="field memory-quiet-field">
               <span className="field-label">{t('Visibility', 'Görünürlük')}</span>
-              <select
+              <Select
+                aria-label={t('Visibility', 'Görünürlük')}
                 name="note_visibility"
-                autoComplete="off"
                 value={pasteState.visibility_scope}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   setPasteState((current) => ({
                     ...current,
-                    visibility_scope: event.target.value as VisibilityScope,
+                    visibility_scope: value as VisibilityScope,
                     permitted_user_ids:
-                      event.target.value === "workspace"
+                      value === "workspace"
                         ? []
                         : current.permitted_user_ids,
                   }))
                 }
-              >
-                <option value="workspace">{t('Workspace', 'Çalışma alanı')}</option>
-                <option value="restricted">{t('Restricted', 'Kısıtlı')}</option>
-              </select>
+                options={[{ value: 'workspace', label: t('Workspace', 'Çalışma alanı') }, { value: 'restricted', label: t('Restricted', 'Kısıtlı') }]}
+              />
             </label>
             {pasteState.visibility_scope === "restricted" &&
             selectableUsers.length > 0 ? (
@@ -737,22 +734,18 @@ export function ArtifactsPage() {
                   <>
                     <label className="field">
                       <span className="field-label">{t('Review status', 'İnceleme durumu')}</span>
-                      <select
+                      <Select
+                        aria-label={t('Review status', 'İnceleme durumu')}
                         name="review_status"
-                        autoComplete="off"
                         value={reviewState.review_status}
-                        onChange={(event) =>
+                        onValueChange={(value) =>
                           setReviewState((current) => ({
                             ...current,
-                            review_status: event.target.value as ReviewStatus,
+                            review_status: value as ReviewStatus,
                           }))
                         }
-                      >
-                        <option value="submitted">{t('Submitted', 'Gönderildi')}</option>
-                        <option value="needs_review">{t('Needs review', 'İnceleme gerekli')}</option>
-                        <option value="reviewed">{t('Reviewed', 'İncelendi')}</option>
-                        <option value="rejected">{t('Rejected', 'Reddedildi')}</option>
-                      </select>
+                        options={[{ value: 'submitted', label: t('Submitted', 'Gönderildi') }, { value: 'needs_review', label: t('Needs review', 'İnceleme gerekli') }, { value: 'reviewed', label: t('Reviewed', 'İncelendi') }, { value: 'rejected', label: t('Rejected', 'Reddedildi') }]}
+                      />
                     </label>
                     <label className="field field-block">
                       <span className="field-label">{t('Notes', 'Notlar')}</span>

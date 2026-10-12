@@ -24,6 +24,7 @@ import {
   StatusBadge,
 } from '../components/ui'
 import { api, ApiError } from '../lib/api'
+import { Select } from '../components/Select'
 import {
   buildEvidenceGraph,
   resolveGraphSelection,
@@ -399,20 +400,17 @@ export function GraphPage() {
                 </div>
                 <label className="field graph-source-filter">
                   <span className="field-label">{t('Source scope', 'Kaynak kapsamı')}</span>
-                  <select
+                  <Select
+                    aria-label={t('Source scope', 'Kaynak kapsamı')}
                     name="graph_source"
                     value={graphSourceId}
-                    onChange={(event) => {
-                      setGraphSourceId(event.target.value)
+                    onValueChange={(value) => {
+                      setGraphSourceId(value)
                       setSelectedGraphNodeId(null)
                       setSelectedGraphEdgeId(null)
                     }}
-                  >
-                    <option value="">{t('All loaded sources', 'Yüklenen tüm kaynaklar')}</option>
-                    {graphSources.map((source) => (
-                      <option key={source.artifactId} value={source.artifactId}>{source.label}</option>
-                    ))}
-                  </select>
+                    options={[{ value: '', label: t('All loaded sources', 'Yüklenen tüm kaynaklar') }, ...graphSources.map((source) => ({ value: source.artifactId, label: source.label }))]}
+                  />
                 </label>
                 <div className="graph-legend" aria-label={t('Graph legend', 'Grafik açıklaması')}>
                   <span><i className="graph-legend-source" />{t('Source', 'Kaynak')}</span>

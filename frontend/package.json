@@ -11,7 +11,10 @@
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@radix-ui/react-progress": "^1.2.0",
+    "@radix-ui/react-select": "^2.4.0",
     "@xyflow/react": "^12.12.0",
+    "lucide-react": "^1.55.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2"
