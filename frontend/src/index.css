@@ -4558,6 +4558,12 @@ body:has(.full-chat-page) .top-nav {
   font-weight: 650;
 }
 
+.auth-demo-limit {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 .auth-divider {
   height: 1px;
   margin: var(--space-4) 0;

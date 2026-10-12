@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     llm_answer_synthesis_enabled: bool = False
     allow_public_llm_base_url: bool = False
     demo_seed_enabled: bool = False
+    public_demo_enabled: bool = False
+    public_demo_hourly_limit: int = 10
+    trust_railway_proxy: bool = False
 
     model_config = SettingsConfigDict(env_prefix="IZGE_", env_file=".env", extra="ignore")
 

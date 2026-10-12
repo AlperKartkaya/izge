@@ -54,6 +54,9 @@ Migration entrypoint içinde, disk bağlandıktan sonra çalışır; build/pre-d
 [Railway servis/depolama modeli](https://docs.railway.com/services).
 Railway ayarları henüz provider hesabında uygulanmadı.
 
+Şifresiz Kerem/Selin demo girişi, saatlik IP kotası, website 502 kontrolü ve mevcut
+mock veri aktarımı için [Public demo](PUBLIC_DEMO.md) rehberini kullanın.
+
 ## Zorunlu konfigürasyon ve güvenlik kapıları
 
 ```dotenv

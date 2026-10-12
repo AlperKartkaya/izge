@@ -111,7 +111,12 @@ def dispatch_due_automations(db: Session, now: datetime) -> int:
         checkpoint = _scheduled_checkpoint(automation)
         if slot is None or (checkpoint is not None and checkpoint >= slot):
             continue
-        actor = db.scalar(select(User).where(User.user_id == automation.created_by, User.workspace_id == automation.workspace_id, User.is_active.is_(True)))
+        actor = db.scalar(select(User).where(
+            User.user_id == automation.created_by,
+            User.workspace_id == automation.workspace_id,
+            User.is_active.is_(True),
+            User.is_public_demo.is_(False),
+        ))
         if actor is None:
             continue
         enqueue_automation(db, automation, actor, now=now, scheduled=True)

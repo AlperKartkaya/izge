@@ -1,3 +1,9 @@
+# Railway's public edge overwrites X-Real-IP; enable only behind that edge.
+map "${IZGE_TRUST_RAILWAY_PROXY}:$http_x_real_ip" $izge_client_ip {
+  default $remote_addr;
+  ~^true:.+$ $http_x_real_ip;
+}
+
 server {
   listen ${PORT};
   server_name _;
@@ -18,7 +24,7 @@ server {
     proxy_pass http://127.0.0.1:8000;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Real-IP $izge_client_ip;
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto https;
     proxy_buffering off;
@@ -31,7 +37,7 @@ server {
     proxy_pass http://127.0.0.1:8000/api/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Real-IP $izge_client_ip;
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto https;
   }

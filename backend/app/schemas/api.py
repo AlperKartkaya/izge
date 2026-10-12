@@ -18,6 +18,22 @@ class SignInRequest(BaseModel):
     password: str
 
 
+class PublicDemoSignInRequest(BaseModel):
+    persona: Literal["kerem", "selin"]
+
+
+class PublicDemoPersonaRead(BaseModel):
+    id: Literal["kerem", "selin"]
+    name: str
+    title: str
+
+
+class PublicDemoConfigRead(BaseModel):
+    enabled: bool
+    hourly_limit: int
+    personas: list[PublicDemoPersonaRead]
+
+
 class UserBase(BaseModel):
     display_name: str
     email: str = Field(min_length=3, max_length=255)

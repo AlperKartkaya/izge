@@ -9,7 +9,12 @@ if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
   exit 1
 fi
 
-envsubst '${PORT}' < /etc/nginx/templates/izge.conf.template > /etc/nginx/conf.d/default.conf
+export IZGE_TRUST_RAILWAY_PROXY="${IZGE_TRUST_RAILWAY_PROXY:-false}"
+case "$IZGE_TRUST_RAILWAY_PROXY" in
+  true|false) ;;
+  *) echo "IZGE_TRUST_RAILWAY_PROXY must be true or false." >&2; exit 1 ;;
+esac
+envsubst '${PORT} ${IZGE_TRUST_RAILWAY_PROXY}' < /etc/nginx/templates/izge.conf.template > /etc/nginx/conf.d/default.conf
 umask 077
 mkdir -p "$IZGE_STORAGE_ROOT" "$IZGE_PASTED_TEXT_ROOT"
 python -m app.migration_tools upgrade

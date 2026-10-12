@@ -7,6 +7,9 @@ from sqlalchemy.orm import Session
 from app.models import Artifact, ArtifactPermission, Signal, User
 
 
+_PUBLIC_DEMO_SEED_BATCH = "pusula-b2b-demo-v1"
+
+
 def signal_is_visible_to_artifact_ids(signal: Signal, allowed_artifact_ids: set[str]) -> bool:
     # Derived titles and summaries can quote a different document than their primary source.
     referenced_ids = {signal.source_artifact_id} if signal.source_artifact_id else set()
@@ -36,6 +39,11 @@ def require_admin(user: User) -> None:
 def artifact_is_visible_to_user(db: Session, artifact: Artifact, user: User) -> bool:
     if artifact.workspace_id != user.workspace_id:
         return False
+    if user.is_public_demo:
+        if artifact.uploaded_by == user.user_id:
+            return True
+        seed_markers = {part.strip() for part in (artifact.review_notes or "").split(";")}
+        return artifact.visibility_scope == "workspace" and _PUBLIC_DEMO_SEED_BATCH in seed_markers
     # Conversation attachments inherit conversation membership; admin status must not open private chat files.
     if user.role == "Admin" and artifact.source_type != "team_chat_attachment":
         return True

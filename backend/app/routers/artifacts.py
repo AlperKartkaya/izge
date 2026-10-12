@@ -40,7 +40,7 @@ def _feed_memory_inline(db: Session, artifact: Artifact, actor: User) -> bool:
             db,
             artifact=artifact,
             actor=actor,
-            use_local_llm=settings.local_llm_enabled,
+            use_local_llm=settings.local_llm_enabled and not actor.is_public_demo,
             use_signal_explanations=False,
         )
         return artifact.ingestion_status == "completed"

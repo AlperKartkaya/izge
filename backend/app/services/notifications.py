@@ -73,6 +73,7 @@ def notify_team_chat_recipients(
                 select(User.user_id).where(
                     User.workspace_id == author.workspace_id,
                     User.is_active.is_(True),
+                    User.is_public_demo.is_(False),
                     User.user_id != author.user_id,
                     User.email != "izge-agent@local.invalid",
                 )
@@ -82,6 +83,7 @@ def notify_team_chat_recipients(
         User.workspace_id == author.workspace_id,
         User.user_id.in_(recipient_ids),
         User.is_active.is_(True),
+        User.is_public_demo.is_(False),
         User.email != "izge-agent@local.invalid",
     )).all()) if recipient_ids else []
     for recipient in recipients:

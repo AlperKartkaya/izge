@@ -17,6 +17,18 @@ export interface TokenResponse {
   user: UserRead
 }
 
+export type DemoPersonaId = 'kerem' | 'selin'
+
+export interface DemoConfigRead {
+  enabled: boolean
+  hourly_limit: number
+  personas: Array<{
+    id: DemoPersonaId
+    name: string
+    title: string
+  }>
+}
+
 export interface TeamChatMessageRead {
   message_id: string
   workspace_id: string

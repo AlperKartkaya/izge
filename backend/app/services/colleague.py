@@ -305,7 +305,11 @@ def enqueue_artifact_review(db: Session, *, artifact: Artifact, actor: User) -> 
 
 def enqueue_manual_review(db: Session, actor: User, *, response_language: str = "tr") -> ColleagueRun:
     agent = ensure_colleague_user(db, actor.workspace_id)
-    users = list(db.scalars(select(User).where(User.workspace_id == actor.workspace_id, User.is_active.is_(True))).all())
+    users = list(db.scalars(select(User).where(
+        User.workspace_id == actor.workspace_id,
+        User.is_active.is_(True),
+        User.is_public_demo.is_(False),
+    )).all())
     return _enqueue_review(
         db,
         workspace_id=actor.workspace_id,
@@ -329,7 +333,11 @@ def enqueue_due_evening_reviews(db: Session, now: datetime) -> int:
         if db.scalar(select(ColleagueRun).where(ColleagueRun.workspace_id == workspace.workspace_id, ColleagueRun.idempotency_key == key)):
             continue
         agent = ensure_colleague_user(db, workspace.workspace_id)
-        users = list(db.scalars(select(User).where(User.workspace_id == workspace.workspace_id, User.is_active.is_(True))).all())
+        users = list(db.scalars(select(User).where(
+            User.workspace_id == workspace.workspace_id,
+            User.is_active.is_(True),
+            User.is_public_demo.is_(False),
+        )).all())
         try:
             _enqueue_review(
                 db,
@@ -1333,6 +1341,8 @@ def dispatch_due_reminders(db: Session, now: datetime) -> int:
     for task in tasks:
         agent = ensure_colleague_user(db, task.workspace_id)
         assignee = db.get(User, task.assignee_user_id) if task.assignee_user_id else None
+        if assignee is None or assignee.is_public_demo:
+            continue
         visible_title = task.title if assignee is not None and task_sources_visible_to_readers(db, task, [assignee]) else "Erişimi kısıtlı iş"
         body = f"Hatırlatma: **{visible_title}**"
         if task.due_at:

@@ -29,6 +29,7 @@ class Workspace(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("public_demo_visitor_hash", "public_demo_persona", name="uq_public_demo_visitor_persona"),)
 
     user_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("usr"))
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace.workspace_id"), nullable=False, index=True)
@@ -37,6 +38,10 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_public_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    public_demo_persona: Mapped[str | None] = mapped_column(String(32), index=True)
+    public_demo_ip_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    public_demo_visitor_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -50,6 +55,16 @@ class UserSession(Base):
     token: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class PublicDemoQuota(Base):
+    __tablename__ = "public_demo_quotas"
+    __table_args__ = (UniqueConstraint("ip_hash", "window_started_at", name="uq_public_demo_quota_ip_window"),)
+
+    quota_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("pdq"))
+    ip_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    request_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 class Artifact(Base, TimestampMixin):

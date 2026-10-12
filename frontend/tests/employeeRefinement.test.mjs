@@ -57,6 +57,23 @@ test('sign-in fields support autofill and announce errors', () => {
   assert.match(source, /aria-describedby=\{error \? 'sign-in-error' : undefined\}/)
 })
 
+test('public demo uses accessible persona buttons while preserving administrator sign-in', () => {
+  const page = read('pages/SignInPage.tsx')
+  const api = read('lib/api.ts')
+  const auth = read('auth/AuthContext.tsx')
+  assert.match(api, /request<DemoConfigRead>\('\/auth\/demo'\)/)
+  assert.match(api, /request<TokenResponse>\('\/auth\/demo\/sign-in'/)
+  assert.match(api, /JSON\.stringify\(\{ persona \}\)/)
+  assert.match(auth, /demoSignIn: \(persona: DemoPersonaId\) => Promise<void>/)
+  assert.match(page, /demoConfig\?\.enabled \? demoConfig : null/)
+  assert.match(page, /className="quick-login-button"/)
+  assert.match(page, /Yazılım Mühendisi/)
+  assert.match(page, /Ekip Lideri/)
+  assert.match(page, /caughtError\.status === 429/)
+  assert.match(page, /Yönetici girişi/)
+  assert.match(page, /id="admin-sign-in-form"/)
+})
+
 test('automation instructions are secondary while run state stays scannable', () => {
   const source = read('pages/AutomationsPage.tsx')
   assert.match(source, /className="automation-instructions"/)

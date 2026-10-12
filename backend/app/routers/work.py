@@ -38,6 +38,7 @@ from app.schemas.work import (
 )
 from app.services.audit import log_event
 from app.services.colleague import AGENT_EMAIL, TERMINAL_RUN_STATUSES, enqueue_colleague_question, enqueue_manual_review, task_sources_visible_to_readers
+from app.services.security import consume_public_demo_quota
 from app.services.permissions import artifact_is_visible_to_user
 from app.services.agent_sources import visible_sources
 from app.services.agent_model import model_catalog
@@ -404,6 +405,18 @@ def get_agent_models(accept_language: str | None = Header(default=None, alias="A
 
 @router.post("/ask", response_model=ColleagueAskAccepted, status_code=status.HTTP_202_ACCEPTED)
 def ask_colleague(payload: ColleagueAskCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ColleagueAskAccepted:
+    if current_user.is_public_demo:
+        conversation = conversation_for_thread(db, current_user, payload.thread_id)
+        if (
+            conversation is None
+            or conversation.archived_at is not None
+            or conversation.deleted_at is not None
+            or payload.thread_kind != "direct"
+            or set(payload.participant_user_ids) - {current_user.user_id}
+            or payload.allow_external_tools
+            or payload.request_reviewer
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Genel demo yalnızca kişisel İzge konuşmasını kullanabilir.")
     options = {key: value for key, value in payload.model_dump(include={"model_profile", "reasoning_effort", "allow_external_tools", "request_reviewer"}).items() if value is not None and value is not False}
     if payload.model_profile or payload.reasoning_effort:
         catalog = model_catalog()
@@ -412,6 +425,8 @@ def ask_colleague(payload: ColleagueAskCreate, current_user: User = Depends(get_
             raise HTTPException(status_code=503, detail=profile["reason"] or "Model yapılandırılmadı.")
         if payload.reasoning_effort and payload.reasoning_effort not in profile["supported_efforts"]:
             raise HTTPException(status_code=422, detail="Bu model seçilen düşünme düzeyini desteklemiyor.")
+    if current_user.is_public_demo:
+        consume_public_demo_quota(ip_hash=current_user.public_demo_ip_hash or "")
     run = enqueue_colleague_question(
         db,
         actor=current_user,

@@ -8,6 +8,8 @@ from app.db import Base, engine as default_engine
 
 
 REQUIRED_SCHEMA_COLUMNS: dict[str, set[str]] = {
+    "users": {"user_id", "workspace_id", "role", "is_public_demo", "public_demo_persona", "public_demo_ip_hash", "public_demo_visitor_hash"},
+    "public_demo_quotas": {"quota_id", "ip_hash", "window_started_at", "request_count"},
     "assistant_conversations": {"conversation_id", "workspace_id", "owner_user_id", "thread_id", "title", "archived_at", "deleted_at"},
     "work_tasks": {"task_id", "workspace_id", "created_by", "assignee_user_id", "status", "remind_at", "source_artifact_ids", "source_snapshot"},
     "colleague_runs": {"run_id", "workspace_id", "created_by", "status", "participant_user_ids", "lease_expires_at", "sources", "context_artifact_ids", "follow_ups", "response_language"},
@@ -126,6 +128,19 @@ def ensure_legacy_schema_compatibility(target_engine: Engine = default_engine) -
 
     Base.metadata.create_all(bind=target_engine)
     with target_engine.begin() as connection:
+        user_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(users)").fetchall()}
+        if "is_public_demo" not in user_columns:
+            connection.exec_driver_sql("ALTER TABLE users ADD COLUMN is_public_demo BOOLEAN NOT NULL DEFAULT 0")
+        if "public_demo_persona" not in user_columns:
+            connection.exec_driver_sql("ALTER TABLE users ADD COLUMN public_demo_persona VARCHAR(32)")
+        if "public_demo_ip_hash" not in user_columns:
+            connection.exec_driver_sql("ALTER TABLE users ADD COLUMN public_demo_ip_hash VARCHAR(64)")
+        if "public_demo_visitor_hash" not in user_columns:
+            connection.exec_driver_sql("ALTER TABLE users ADD COLUMN public_demo_visitor_hash VARCHAR(64)")
+        connection.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_public_demo_visitor_persona "
+            "ON users(public_demo_visitor_hash, public_demo_persona)"
+        )
         for table_name in ("decisions", "assumptions", "constraints", "outcomes", "commitments"):
             columns = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()}
             if "topic_key" not in columns:

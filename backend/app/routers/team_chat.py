@@ -21,10 +21,12 @@ from app.services.notifications import notify_team_chat_recipients
 from app.services.permissions import artifact_is_visible_to_user
 from app.services.agent_sources import visible_sources
 from app.services.storage import ensure_supported_upload, persist_upload_bytes
+from app.services.security import public_demo_source_user_id
 
 router = APIRouter(prefix="/team-chat", tags=["team-chat"])
 _TYPING_TTL_SECONDS = 5
 _typing_state: dict[tuple[str, str, str], datetime] = {}
+_PUBLIC_DEMO_SEED_BATCH = "pusula-b2b-demo-v1"
 
 
 def _clean_thread_id(value: str | None) -> str:
@@ -117,11 +119,18 @@ def _participant_user_ids_from_metadata(metadata: dict[str, object]) -> set[str]
     return {str(participant).strip() for participant in raw_participants if str(participant).strip()}
 
 
-def _message_is_visible_to_user(message: CompanyChatMessage, current_user: User) -> bool:
+def _message_is_visible_to_user(message: CompanyChatMessage, current_user: User, db: Session | None = None) -> bool:
     metadata = message.message_metadata or {}
     thread_id = str(metadata.get("thread_id") or metadata.get("channel") or "company-general")
     thread_kind = str(metadata.get("thread_kind") or ("direct" if thread_id.startswith("direct:") else "channel"))
     participant_user_ids = _participant_user_ids_from_metadata(metadata)
+    if current_user.is_public_demo:
+        if current_user.user_id in participant_user_ids:
+            return True
+        if metadata.get("seeded") is not True or metadata.get("seed_batch") != _PUBLIC_DEMO_SEED_BATCH or db is None:
+            return False
+        source_user_id = public_demo_source_user_id(db, current_user)
+        return bool(source_user_id and source_user_id in participant_user_ids)
     if participant_user_ids:
         return current_user.user_id in participant_user_ids
     current_handle = _employee_handle_for_user(current_user)
@@ -151,7 +160,7 @@ def _thread_is_visible_to_user(thread_id: str, thread_kind: str, current_user: U
     ).all()
     if any(
         str((message.message_metadata or {}).get("thread_id") or (message.message_metadata or {}).get("channel")) == thread_id
-        and _message_is_visible_to_user(message, current_user)
+        and _message_is_visible_to_user(message, current_user, db)
         for message in existing_messages
     ):
         return True
@@ -227,7 +236,7 @@ def list_team_chat_messages(
     ).all()
     messages = list(reversed([
         message for message in fetched_messages
-        if _message_is_visible_to_user(message, current_user)
+        if _message_is_visible_to_user(message, current_user, db)
         and str((message.message_metadata or {}).get("thread_id") or (message.message_metadata or {}).get("channel")) not in deleted_threads
         and (thread_id is None or str((message.message_metadata or {}).get("thread_id") or (message.message_metadata or {}).get("channel")) == thread_id)
     ][:bounded_limit]))

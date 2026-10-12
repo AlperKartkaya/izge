@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import secrets
 import threading
 import time
 from datetime import datetime, timedelta
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import User, UserSession
+from app.db import engine
+from app.models import PublicDemoQuota, User, UserSession
+from app.models.domain import new_id
 
 
 def hash_password(password: str) -> str:
@@ -29,6 +33,66 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def hash_session_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def resolve_client_ip(request: Request) -> str | None:
+    raw_peer = request.scope.get("client")
+    peer = str(raw_peer[0]).strip() if isinstance(raw_peer, (tuple, list)) and raw_peer else ""
+    candidate = peer
+    if get_settings().trust_railway_proxy and peer in {"127.0.0.1", "::1"}:
+        forwarded = request.headers.get("x-real-ip", "").strip()
+        if not forwarded or "," in forwarded:
+            return None
+        candidate = forwarded
+    try:
+        address = ipaddress.ip_address(candidate)
+    except ValueError:
+        return None
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return address.compressed
+
+
+def public_demo_ip_hash(client_ip: str) -> str:
+    return hashlib.sha256(f"izge-public-demo:{client_ip}".encode("utf-8")).hexdigest()
+
+
+def public_demo_source_user_id(db: Session, user: User) -> str | None:
+    if not user.is_public_demo or user.public_demo_persona not in {"kerem", "selin"}:
+        return None
+    return db.scalar(select(User.user_id).where(
+        User.workspace_id == user.workspace_id,
+        User.email == f"{user.public_demo_persona}@pusula.demo",
+        User.is_public_demo.is_(False),
+    ))
+
+
+def consume_public_demo_quota(*, ip_hash: str, now: datetime | None = None, limit: int | None = None) -> int:
+    settings = get_settings()
+    effective_limit = max(limit if limit is not None else settings.public_demo_hourly_limit, 1)
+    current = now or datetime.utcnow()
+    window = current.replace(minute=0, second=0, microsecond=0)
+    statement = (
+        sqlite_insert(PublicDemoQuota)
+        .values(quota_id=new_id("pdq"), ip_hash=ip_hash, window_started_at=window, request_count=1)
+        .on_conflict_do_update(
+            index_elements=[PublicDemoQuota.ip_hash, PublicDemoQuota.window_started_at],
+            set_={"request_count": PublicDemoQuota.request_count + 1},
+            where=PublicDemoQuota.request_count < effective_limit,
+        )
+        .returning(PublicDemoQuota.request_count)
+    )
+    with engine.begin() as connection:
+        connection.execute(delete(PublicDemoQuota).where(PublicDemoQuota.window_started_at < window - timedelta(hours=48)))
+        count = connection.execute(statement).scalar_one_or_none()
+    if count is None:
+        retry_after = max(1, 3600 - current.minute * 60 - current.second)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Saatlik demo kullanım sınırına ulaştınız ({effective_limit} istek).",
+            headers={"Retry-After": str(retry_after)},
+        )
+    return int(count)
 
 
 def _rate_limit_key(client_host: str | None, email: str) -> str:
@@ -76,6 +140,8 @@ def record_sign_in_success(*, client_host: str | None, email: str) -> None:
 def create_session(db: Session, user: User) -> tuple[UserSession, str]:
     settings = get_settings()
     raw_token = secrets.token_urlsafe(32)
+    if user.is_public_demo:
+        db.execute(delete(UserSession).where(UserSession.user_id == user.user_id))
     session = UserSession(
         workspace_id=user.workspace_id,
         user_id=user.user_id,

@@ -7,6 +7,8 @@ import type {
   AuditEventRead,
   ContradictionItem,
   DatabaseOverviewRead,
+  DemoConfigRead,
+  DemoPersonaId,
   GraphNeighborhood,
   GraphSummary,
   GraphTimeline,
@@ -104,6 +106,17 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const api = {
+  getDemoConfig() {
+    return request<DemoConfigRead>('/auth/demo')
+  },
+
+  demoSignIn(persona: DemoPersonaId) {
+    return request<TokenResponse>('/auth/demo/sign-in', {
+      method: 'POST',
+      body: JSON.stringify({ persona }),
+    })
+  },
+
   signIn(email: string, password: string) {
     return request<TokenResponse>('/auth/sign-in', {
       method: 'POST',
