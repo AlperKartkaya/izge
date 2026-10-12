@@ -5,6 +5,7 @@ import { Callout, EmptyState, Panel } from '../components/ui'
 import { api } from '../lib/api'
 import type { UserRead, WorkTaskRead, WorkTaskStatus } from '../lib/types'
 import { useLanguage } from '../lib/i18n'
+import { splitTasksByCompletion } from '../lib/taskStatus'
 
 function toIso(value: string) { return value ? new Date(`${value}+03:00`).toISOString() : null }
 function errorMessage(error: unknown, fallback: string) { return error instanceof Error && error.message ? error.message : fallback }
@@ -24,6 +25,7 @@ export function TasksPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const { active: activeTasks, completed: completedTasks } = splitTasksByCompletion(tasks)
 
   useEffect(() => {
     if (!session?.token) return
@@ -73,25 +75,27 @@ export function TasksPage() {
 
   return (
     <div className="stack-lg">
-      <header className="employee-page-header"><div><p className="eyebrow">{t('Daily work', 'Günlük çalışma')}</p><h1>{t('My work', 'İşlerim')}</h1><p>{t('Keep your work, reminders, and notes for Izge to review at the end of the day in one place.', 'İşlerinizi, hatırlatmalarınızı ve gün sonunda İzge’nin değerlendireceği çalışma notlarınızı tek yerde tutun.')}</p></div></header>
+      <header className="employee-page-header"><div><h1>{t('My work', 'İşlerim')}</h1><p>{t('See what needs attention and keep your daily record current.', 'Sıradaki işleri görün ve günlük kaydınızı güncel tutun.')}</p></div></header>
       {error ? <Callout tone="warning">{error}</Callout> : null}{notice ? <Callout>{notice}</Callout> : null}
-      <div className="employee-two-column">
-        <Panel title={t('Open work', 'Açık işler')} description={t('Use the status control to move work between open, in progress, and completed.', 'Bir işi açık, devam ediyor ve tamamlandı durumları arasında taşımak için durum kontrolünü kullanın.')}>
-          {isLoading ? <LoadingState label={t('Loading work', 'İşler yükleniyor')} /> : tasks.length ? <TaskRows tasks={tasks} onStatusChange={updateStatus} /> : <EmptyState title={t('No work yet', 'Henüz iş yok')} description={t('Create your first task using the form on the right.', 'İlk işinizi sağdaki formdan oluşturun.')} />}
-        </Panel>
-        <Panel title={t('New task', 'Yeni iş')} description={t('Add an owner, due time, and reminder if needed.', 'Gerekliyse sorumlu, bitiş ve hatırlatma zamanı ekleyin.')}>
+      <Panel title={t('Open work', 'Açık işler')} description={t('Start with the next unfinished item.', 'Tamamlanmamış sıradaki işle başlayın.')}>
+        {isLoading ? <LoadingState label={t('Loading work', 'İşler yükleniyor')} /> : activeTasks.length ? <TaskRows tasks={activeTasks} onStatusChange={updateStatus} /> : <EmptyState title={t('No open work', 'Açık iş yok')} description={t('Your active queue is clear.', 'Aktif iş listeniz tamamlandı.')} />}
+      </Panel>
+      <details className="reasoning-disclosure">
+        <summary>{t('Create a task', 'Yeni iş oluştur')}</summary>
+        <div className="stack-md">
           <form className="form-grid" onSubmit={createTask}>
-            <label className="field"><span className="field-label">{t('Task title', 'İş başlığı')}</span><input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
-            <label className="field"><span className="field-label">{t('Description', 'Açıklama')}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} /></label>
-            <label className="field"><span className="field-label">{t('Owner', 'Sorumlu')}</span><select value={assignee} onChange={(event) => setAssignee(event.target.value)}>{colleagues.map((user) => <option key={user.user_id} value={user.user_id}>{user.display_name}</option>)}</select></label>
-            <div className="form-grid form-grid-two"><label className="field"><span className="field-label">{t('Due time (Istanbul)', 'Bitiş zamanı (İstanbul)')}</span><input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label><label className="field"><span className="field-label">{t('Reminder (Istanbul)', 'Hatırlatma (İstanbul)')}</span><input type="datetime-local" value={remindAt} onChange={(event) => setRemindAt(event.target.value)} /></label></div>
+            <label className="field"><span className="field-label">{t('Task title', 'İş başlığı')}</span><input name="task_title" autoComplete="off" value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
+            <label className="field"><span className="field-label">{t('Description', 'Açıklama')}</span><textarea name="task_description" autoComplete="off" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} /></label>
+            <label className="field"><span className="field-label">{t('Owner', 'Sorumlu')}</span><select name="task_owner" autoComplete="off" value={assignee} onChange={(event) => setAssignee(event.target.value)}>{colleagues.map((user) => <option key={user.user_id} value={user.user_id}>{user.display_name}</option>)}</select></label>
+            <div className="form-grid form-grid-two"><label className="field"><span className="field-label">{t('Due time (Istanbul)', 'Bitiş zamanı (İstanbul)')}</span><input name="task_due_at" autoComplete="off" type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label><label className="field"><span className="field-label">{t('Reminder (Istanbul)', 'Hatırlatma (İstanbul)')}</span><input name="task_remind_at" autoComplete="off" type="datetime-local" value={remindAt} onChange={(event) => setRemindAt(event.target.value)} /></label></div>
             <button className="primary-button" type="submit" disabled={isSaving}>{isSaving ? t('Saving…', 'Kaydediliyor…') : t('Create task', 'İşi oluştur')}</button>
           </form>
-        </Panel>
-      </div>
-      <Panel title={t('Daily work note', 'Günlük çalışma notu')} description={t('Write what you did today. Izge uses this record as a source in later questions and the end-of-day review.', 'Bugün yaptıklarınızı yazın. İzge bu kaydı sonraki sorularında ve gün sonu değerlendirmesinde kaynak olarak kullanır.')}>
-        <form className="daily-log-form" onSubmit={saveLog}><label className="field"><span className="field-label">{t('What did you do today, what changed, and where are you blocked?', 'Bugün ne yaptınız, ne değişti, nerede takıldınız?')}</span><textarea value={logText} onChange={(event) => setLogText(event.target.value)} rows={5} minLength={10} required /></label><button type="submit" className="primary-button" disabled={isSaving}>{isSaving ? t('Saving…', 'Kaydediliyor…') : t('Save daily note', 'Günlük notu kaydet')}</button></form>
+        </div>
+      </details>
+      <Panel title={t('Daily note', 'Günlük not')} description={t('Record changes, completed work, and blockers.', 'Değişiklikleri, tamamlanan işleri ve engelleri kaydedin.')}>
+        <form className="daily-log-form" onSubmit={saveLog}><label className="field"><span className="field-label">{t('What did you do today, what changed, and where are you blocked?', 'Bugün ne yaptınız, ne değişti, nerede takıldınız?')}</span><textarea name="daily_work_note" autoComplete="off" value={logText} onChange={(event) => setLogText(event.target.value)} rows={5} minLength={10} required /></label><button type="submit" className="primary-button" disabled={isSaving}>{isSaving ? t('Saving…', 'Kaydediliyor…') : t('Save daily note', 'Günlük notu kaydet')}</button></form>
       </Panel>
+      {completedTasks.length ? <details className="reasoning-disclosure"><summary>{t(`${completedTasks.length} completed`, `${completedTasks.length} tamamlanan`)}</summary><div className="stack-md"><TaskRows tasks={completedTasks} onStatusChange={updateStatus} /></div></details> : null}
     </div>
   )
 }

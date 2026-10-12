@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
+import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatPercent } from '../lib/format'
 import type { ReadinessAreaStatus, TargetReadinessAreaRead, TargetReadinessRead } from '../lib/types'
@@ -81,8 +81,8 @@ export function TargetReadinessPage() {
     <div className="stack-xl">
       <PageIntro
         eyebrow={t('Operational readiness', 'Operasyonel hazırlık')}
-        title={t('Check company-portable memory-system coverage', 'Şirketler arası taşınabilir hafıza sistemi kapsamını kontrol edin')}
-        description={t('This page maps product requirements to current workspace proof: evidence substrate, temporal graph, typed context packets, bounded orchestration, private AI discipline, scenario support, and Docker portability.', 'Bu sayfa ürün gereksinimlerini mevcut çalışma alanı kanıtlarıyla eşler: kanıt altyapısı, zamansal grafik, türlenmiş bağlam paketleri, sınırlı orkestrasyon, özel yapay zekâ disiplini, senaryo desteği ve Docker taşınabilirliği.')}
+        title={t('Deployment readiness', 'Kurulum hazırlığı')}
+        description={t('See what is ready, what is missing, and the next work to complete.', 'Hazır olanları, eksikleri ve tamamlanacak sonraki işleri görün.')}
         actions={
           <div className="inline-actions">
             <Link className="secondary-button" to="/memory-filesystem">{t("Inspect memory FS", "Hafıza dosya sistemini incele")}</Link>
@@ -93,15 +93,20 @@ export function TargetReadinessPage() {
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
-      <section className="metric-grid">
-        <MetricCard label={t('Target score', 'Hedef puanı')} value={readiness ? formatPercent(readiness.target_score) : '—'} detail={t('Average of implemented, partial, and planned target areas.', 'Tamamlanan, kısmi ve planlanan hedef alanlarının ortalaması.')} />
-        <MetricCard label={t('Implemented', 'Tamamlandı')} value={readiness ? statusCount(readiness, 'implemented') : '—'} detail={t('Requirements reflected in the current product surface with proof routes.', 'Kanıt yollarıyla mevcut ürün yüzeyine yansıyan gereksinimler.')} />
-        <MetricCard label={t('Partial', 'Kısmi')} value={readiness ? statusCount(readiness, 'partial') : '—'} detail={t('Visible foundations exist, but stronger persistence, runtime, and evaluation remain.', 'Görünür temeller var ancak daha güçlü kalıcılık, çalışma zamanı ve değerlendirme gerekiyor.')} />
-        <MetricCard label={t('Planned', 'Planlandı')} value={readiness ? statusCount(readiness, 'planned') : '—'} detail={t('Known target work not yet ready to claim.', 'Henüz tamamlandığı söylenemeyen bilinen hedef işleri.')} />
-        <MetricCard label={t('Workspace proof', 'Çalışma alanı kanıtı')} value={snapshotValue(snapshot, 'memory_object_count')} detail={t('Typed memory objects currently visible in this workspace.', 'Bu çalışma alanında görünen türlenmiş hafıza nesneleri.')} />
+      <section className="panel-subtle" aria-label={t('Readiness summary', 'Hazırlık özeti')}>
+        <div className="readiness-header">
+          <div><p className="table-primary">{t('Overall readiness', 'Genel hazırlık')}</p><p className="table-secondary">{readiness ? formatPercent(readiness.target_score) : '—'}</p></div>
+          <StatusBadge status={gaps.length ? 'warning' : 'success'} value={gaps.length ? t('Needs attention', 'Dikkat gerekli') : t('Ready', 'Hazır')} />
+        </div>
+        <dl className="review-ledger">
+          <div><dt>{t('Complete', 'Tamam')}</dt><dd>{readiness ? statusCount(readiness, 'implemented') : '—'}</dd></div>
+          <div><dt>{t('Partial', 'Kısmi')}</dt><dd>{readiness ? statusCount(readiness, 'partial') : '—'}</dd></div>
+          <div><dt>{t('Planned', 'Planlandı')}</dt><dd>{readiness ? statusCount(readiness, 'planned') : '—'}</dd></div>
+        </dl>
       </section>
 
-      <Panel title={t('Current workspace evidence snapshot', 'Mevcut çalışma alanı kanıt özeti')} description={t('Fast proof that the readiness score is grounded in real workspace state, not static copy.', 'Hazırlık puanının sabit metne değil gerçek çalışma alanı durumuna dayandığının hızlı kanıtı.')}>
+      <details className="employee-focus-details">
+        <summary>{t('Workspace evidence snapshot', 'Çalışma alanı kanıt özeti')}</summary>
         {readiness ? (
           <div className="detail-grid">
             <article className="panel-subtle detail-card">
@@ -148,20 +153,20 @@ export function TargetReadinessPage() {
         ) : (
           <EmptyState title={isLoading ? t('Loading readiness', 'Hazırlık durumu yükleniyor') : t('No readiness payload', 'Hazırlık verisi yok')} description={t('Izge is reading the current workspace proof state.', 'İzge mevcut çalışma alanı kanıt durumunu okuyor.')} />
         )}
-      </Panel>
+      </details>
 
       <Panel title={t('Requirement coverage', 'Gereksinim kapsamı')} description={t('Each area states the requirement, current product reflection, proof routes, and remaining work before the target is complete.', 'Her alan hedef tamamlanmadan önce gereksinimi, mevcut ürün karşılığını, kanıt yollarını ve kalan işi gösterir.')}>
         {readiness ? (
           <div className="stack-sm">
             {readiness.areas.map((area) => (
-              <article key={area.area_key} className={areaCardClass(area.status)}>
-                <div className="timeline-card-head">
-                  <div>
-                    <p className="section-label">{formatPercent(area.score)} {t('complete', 'tamamlandı')}</p>
-                    <p className="table-primary">{area.title}</p>
-                  </div>
+              <details key={area.area_key} className={areaCardClass(area.status)}>
+                <summary className="timeline-card-head">
+                  <span className="disclosure-heading">
+                    <span className="section-label">{formatPercent(area.score)} {t('complete', 'tamamlandı')}</span>
+                    <span className="table-primary">{area.title}</span>
+                  </span>
                   <StatusBadge value={area.status} />
-                </div>
+                </summary>
                 <p className="muted-copy">{area.promise}</p>
                 <p className="evidence-block">{t('Current product state', 'Mevcut ürün durumu')}: {area.demo_reflection}</p>
 
@@ -186,7 +191,7 @@ export function TargetReadinessPage() {
                   <p className="section-label">{t('Remaining work', 'Kalan iş')}</p>
                   {area.remaining_work.map((item) => <p key={item} className="muted-copy">{item}</p>)}
                 </div>
-              </article>
+              </details>
             ))}
           </div>
         ) : null}

@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import ColleagueRun, User
+from app.models import AssistantConversation, ColleagueRun, User
 from app.models.automation import Automation
 from app.services.colleague import enqueue_colleague_question
 
@@ -65,6 +65,19 @@ def next_run_at(automation: Automation, now: datetime) -> datetime | None:
     return max(target, current)
 
 
+def _active_thread_id(db: Session, automation: Automation, actor: User) -> str:
+    thread_id = f"automation:{automation.automation_id}"
+    while conversation := db.scalar(select(AssistantConversation).where(
+        AssistantConversation.workspace_id == automation.workspace_id,
+        AssistantConversation.owner_user_id == actor.user_id,
+        AssistantConversation.thread_id == thread_id,
+    )):
+        if conversation.archived_at is None and conversation.deleted_at is None:
+            return thread_id
+        thread_id = f"{thread_id[:42]}:{conversation.conversation_id}"
+    return thread_id
+
+
 def enqueue_automation(db: Session, automation: Automation, actor: User, *, now: datetime, scheduled: bool) -> ColleagueRun:
     slot = _latest_slot(automation, now) if scheduled else None
     if scheduled and slot is None:
@@ -77,7 +90,7 @@ def enqueue_automation(db: Session, automation: Automation, actor: User, *, now:
             actor=actor,
             message=automation.prompt,
             client_request_id=key,
-            thread_id=f"automation:{automation.automation_id}",
+            thread_id=_active_thread_id(db, automation, actor),
             thread_title=automation.title,
             thread_kind="direct",
             participant_user_ids=[actor.user_id],

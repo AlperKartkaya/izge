@@ -121,8 +121,8 @@ export function IngestionPage() {
     <div className="stack-xl">
       <PageIntro
         eyebrow={t('Memory construction', 'Hafıza oluşturma')}
-        title={t('Turn evidence into traceable memory objects', 'Kanıtları izlenebilir hafıza nesnelerine dönüştürün')}
-        description={t('Create a processing run for a stored source, then inspect its persisted job record as text extraction, source chunks, and graph persistence make the reasoning substrate visible.', 'Kayıtlı bir kaynak için işleme başlatın; metin çıkarımı, kaynak bölümleri ve grafik kaydı akıl yürütme altyapısını görünür kılarken kalıcı iş kaydını inceleyin.')}
+        title={t('Process a source', 'Bir kaynağı işleyin')}
+        description={t('Choose a source, start processing, and review the changes it creates.', 'Bir kaynak seçin, işlemeyi başlatın ve oluşturduğu değişiklikleri inceleyin.')}
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
@@ -136,6 +136,8 @@ export function IngestionPage() {
             <label className="field">
               <span className="field-label">{t('Artifact', 'Kaynak')}</span>
               <select
+                name="artifact"
+                autoComplete="off"
                 value={selectedArtifactId}
                 onChange={(event) => {
                   setSelectedArtifactId(event.target.value)
@@ -162,46 +164,43 @@ export function IngestionPage() {
           )}
         </Panel>
 
-        <Panel title={t('Inspect build job', 'Oluşturma işini incele')} description={t('Retrieve a specific job by ID to reopen an existing run.', 'Mevcut bir çalışmayı yeniden açmak için işi kimliğiyle getirin.')}>
+        <details className="employee-focus-details">
+          <summary>{t('Open a job by ID', 'İş kimliğiyle çalışma aç')}</summary>
           <div className="form-grid">
             <label className="field">
               <span className="field-label">{t('Job ID', 'İş kimliği')}</span>
-              <input value={manualJobId} onChange={(event) => setManualJobId(event.target.value)} placeholder="job_…" />
+              <input name="job-id" value={manualJobId} onChange={(event) => setManualJobId(event.target.value)} placeholder="job_…" autoComplete="off" spellCheck={false} />
             </label>
             <button type="button" className="secondary-button" onClick={() => void handleFetchJob()} disabled={isBusy || !manualJobId}>{t("Load status", "Durumu yükle")}</button>
           </div>
-        </Panel>
+        </details>
       </div>
 
-      <Panel title={t('Current memory build detail', 'Mevcut hafıza oluşturma ayrıntısı')} description={t('Live view of the selected processing job record.', 'Seçilen işleme kaydının canlı görünümü.')}>
-        {!job ? (
-          <EmptyState title={t('No job selected', 'İş seçilmedi')} description={t('Start processing or load a known job ID to inspect its current status.', 'Mevcut durumu incelemek için işlemeyi başlatın veya bilinen bir iş kimliğini yükleyin.')} />
-        ) : (
+      {job ? (
+        <Panel title={t('Current processing run', 'Mevcut işleme çalışması')} description={t('Live status for the selected source.', 'Seçilen kaynağın canlı durumu.')}>
           <div className="stack-lg">
-            <div className="detail-grid">
-              <article className="panel-subtle detail-card">
-                <p className="section-label">{t('Job status', 'İş durumu')}</p>
+            <div className="readiness-header">
+              <div>
+                <p className="table-primary">{artifacts.find((artifact) => artifact.artifact_id === job.artifact_id)?.title ?? job.artifact_id}</p>
+                <p className="table-secondary">{t('Stage', 'Aşama')}: {job.stage}</p>
+              </div>
                 <StatusBadge value={job.status} />
-                <p className="muted-copy">{t('Stage', 'Aşama')}: {job.stage}</p>
-              </article>
-              <article className="panel-subtle detail-card">
-                <p className="section-label">{t('Artifact', 'Kaynak')}</p>
-                <p className="table-primary">{job.artifact_id}</p>
-                <p className="muted-copy">{t('Created', 'Oluşturuldu')} {formatDateTime(job.created_at)}</p>
-              </article>
-              <article className="panel-subtle detail-card">
-                <p className="section-label">{t('Actor', 'Gerçekleştiren')}</p>
-                <p className="table-primary">{job.created_by}</p>
-                <p className="muted-copy">{t('Updated', 'Güncellendi')} {formatDateTime(job.updated_at)}</p>
-              </article>
             </div>
-            <div className="panel-subtle">
-              <p className="section-label">{t('Detail', 'Ayrıntı')}</p>
+            {job.detail ? <p className="muted-copy">{job.detail}</p> : null}
+            <details className="employee-focus-details">
+              <summary>{t('Run details', 'Çalışma ayrıntıları')}</summary>
+              <dl className="meta-list">
+                <div><dt>{t('Job ID', 'İş kimliği')}</dt><dd>{job.job_id}</dd></div>
+                <div><dt>{t('Artifact', 'Kaynak')}</dt><dd>{job.artifact_id}</dd></div>
+                <div><dt>{t('Actor', 'Gerçekleştiren')}</dt><dd>{job.created_by}</dd></div>
+                <div><dt>{t('Created', 'Oluşturuldu')}</dt><dd>{formatDateTime(job.created_at)}</dd></div>
+                <div><dt>{t('Updated', 'Güncellendi')}</dt><dd>{formatDateTime(job.updated_at)}</dd></div>
+              </dl>
               <p className="muted-copy">{job.detail || t('No additional detail was recorded.', 'Ek bir ayrıntı kaydedilmedi.')}</p>
-            </div>
+            </details>
           </div>
-        )}
-      </Panel>
+        </Panel>
+      ) : null}
 
       <Panel title={t('Proactive output from this processing', 'Bu işlemenin proaktif çıktısı')} description={t('Source-scoped contradiction, drift, supersession, and next-action signals generated against existing memory.', 'Mevcut hafızaya göre üretilen kaynak kapsamlı çelişki, değişim, geçersiz kılma ve sonraki eylem sinyalleri.')}>
         {!artifactSignals ? (
@@ -212,28 +211,11 @@ export function IngestionPage() {
               <p className="section-label">{t('Artifact impact summary', 'Kaynak etki özeti')}</p>
               <p className="muted-copy">{artifactSignals.summary}</p>
             </div>
-            <div className="detail-grid">
-              <article className="panel-subtle detail-card">
-                <p className="section-label">{t('Contradictions', 'Çelişkiler')}</p>
-                <p className="table-primary">{artifactSignals.signal_counts.contradictions ?? 0}</p>
-              </article>
-              <article className="panel-subtle detail-card">
-                <p className="section-label">{t('Drift', 'Değişim')}</p>
-                <p className="table-primary">{artifactSignals.signal_counts.assumption_drift ?? 0}</p>
-              </article>
-              <article className="panel-subtle detail-card">
-                <p className="section-label">{t('Supersessions', 'Geçersiz kılmalar')}</p>
-                <p className="table-primary">{artifactSignals.signal_counts.supersessions ?? 0}</p>
-              </article>
-              <article className="panel-subtle detail-card">
-                <p className="section-label">{t('Prior work', 'Önceki çalışma')}</p>
-                <p className="table-primary">{artifactSignals.signal_counts.prior_relevant_work ?? 0}</p>
-              </article>
-              <article className="panel-subtle detail-card">
-                <p className="section-label">{t('Next actions', 'Sonraki adımlar')}</p>
-                <p className="table-primary">{artifactSignals.signal_counts.next_actions ?? 0}</p>
-              </article>
-            </div>
+            <dl className="review-ledger">
+              <div><dt>{t('Contradictions', 'Çelişkiler')}</dt><dd>{artifactSignals.signal_counts.contradictions ?? 0}</dd></div>
+              <div><dt>{t('Drift', 'Değişim')}</dt><dd>{artifactSignals.signal_counts.assumption_drift ?? 0}</dd></div>
+              <div><dt>{t('Next actions', 'Sonraki adımlar')}</dt><dd>{artifactSignals.signal_counts.next_actions ?? 0}</dd></div>
+            </dl>
 
             {artifactSignals.persisted_signals.length > 0 ? (
               <div className="stack-sm">

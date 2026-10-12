@@ -1,11 +1,12 @@
 import { IzgeLogo } from '../components/IzgeLogo'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ButtonIcon } from '../components/ButtonIcon'
 import { api } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import { useLanguage } from '../lib/i18n'
+import { isNavigationActive } from '../lib/navigation'
 import { applyThemePreference, nextThemePreference, readInitialThemePreference, type ThemePreference } from '../lib/theme'
 
 const navigationIcons: Record<string, string> = { '/': 'home', '/query': 'ask-izge', '/team-chat': 'team-chat', '/memory': 'memory', '/tasks': 'tasks', '/automations': 'automations', '/notifications': 'notifications', '/operations': 'operations', '/ingestion': 'ingestion', '/graph': 'knowledge-graph', '/memory-filesystem': 'filesystem', '/orchestration': 'run', '/readiness': 'task-done', '/admin/data': 'memory', '/audit': 'audit', '/admin/users': 'users' }
@@ -35,11 +36,20 @@ export function AppShell() {
   const isChatPage = pathname === '/query' || pathname === '/team-chat'
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [theme, setTheme] = useState<ThemePreference>(() => readInitialThemePreference())
+  const mainRef = useRef<HTMLElement>(null)
+  const previousPath = useRef(pathname)
   const [unreadCount, setUnreadCount] = useState(0)
   const isAdmin = session?.user.role === 'Admin'
   const navigationItems = isAdmin ? [...adminNavigation, { to: '/admin/data', label: ['Data', 'Veri'] as const }, { to: '/audit', label: ['Audit', 'Denetim'] as const }, { to: '/admin/users', label: ['Users', 'Kullanıcılar'] as const }] : employeeNavigation
   const nextTheme = nextThemePreference(theme)
   const sidebarAction = sidebarExpanded ? t('Collapse menu', 'Menüyü daralt') : t('Expand menu', 'Menüyü genişlet')
+
+  useEffect(() => {
+    if (previousPath.current !== pathname) {
+      mainRef.current?.focus({ preventScroll: true })
+      previousPath.current = pathname
+    }
+  }, [pathname])
 
   useEffect(() => { applyThemePreference(theme) }, [theme])
   useEffect(() => {
@@ -52,8 +62,8 @@ export function AppShell() {
   }, [session?.token, pathname])
 
   return <div className={`${isChatPage ? 'app-frame app-frame-chat' : 'app-frame'}${sidebarExpanded ? ' app-frame-sidebar-expanded' : ''}`}>
-    <div className="site-atmosphere" aria-hidden="true"><span className="atmosphere-plane atmosphere-plane-one" /><span className="atmosphere-plane atmosphere-plane-two" /><span className="atmosphere-scanline" /></div>
-    <header className="top-nav app-sidebar">
+    <a className="skip-link" href="#main-content">{t('Skip to content', 'İçeriğe geç')}</a>
+    <header className="top-nav app-sidebar" onKeyDown={(event) => { if (event.key === 'Escape') { setSidebarExpanded(false); event.currentTarget.querySelector<HTMLButtonElement>('.sidebar-toggle')?.focus() } }}>
       <button type="button" className="sidebar-toggle" onClick={() => setSidebarExpanded((value) => !value)} aria-expanded={sidebarExpanded} aria-label={sidebarAction} title={sidebarAction}>
         <span className="brand-sigil"><IzgeLogo /></span>
         <span className="sidebar-brand-copy"><span className="brand-kicker">{isAdmin ? t('Memory operations', 'Hafıza operasyonları') : t('Company memory', 'Şirket hafızası')}</span><span className="brand-name">Izge</span></span>
@@ -61,7 +71,8 @@ export function AppShell() {
       </button>
       <nav className="nav-group" aria-label={t('Main navigation', 'Ana menü')}>{navigationItems.map((item) => {
         const label = t(item.label[0], item.label[1])
-        return <NavLink key={item.to} to={item.to} end={'end' in item ? item.end : false} aria-label={label} title={sidebarExpanded ? undefined : label} className={({ isActive }) => isActive ? 'nav-link nav-link-active' : 'nav-link'}><ButtonIcon name={navigationIcons[item.to]} /><span className="nav-link-label">{label}</span>{item.to === '/notifications' && unreadCount ? <span className="nav-badge" aria-label={t(`${unreadCount} unread notifications`, `${unreadCount} okunmamış bildirim`)}>{unreadCount > 99 ? '99+' : unreadCount}</span> : null}</NavLink>
+        const active = isNavigationActive(pathname, item.to)
+        return <NavLink key={item.to} to={item.to} end={'end' in item ? item.end : false} onClick={() => { if (window.matchMedia('(max-width: 700px)').matches) setSidebarExpanded(false) }} aria-label={label} title={sidebarExpanded ? undefined : label} aria-current={active ? 'page' : undefined} className={active ? 'nav-link nav-link-active' : 'nav-link'}><ButtonIcon name={navigationIcons[item.to]} /><span className="nav-link-label">{label}</span>{item.to === '/notifications' && unreadCount ? <span className="nav-badge" aria-label={t(`${unreadCount} unread notifications`, `${unreadCount} okunmamış bildirim`)}>{unreadCount > 99 ? '99+' : unreadCount}</span> : null}</NavLink>
       })}</nav>
       <div className="session-cluster">
         <label className="language-select sidebar-control" title={t('Language', 'Dil')}><ButtonIcon name="language" /><span className="sr-only">{t('Language', 'Dil')}</span><select value={language} onChange={(event) => setLanguage(event.target.value === 'en' ? 'en' : 'tr')} aria-label={t('Language', 'Dil')}><option value="tr">Türkçe</option><option value="en">English</option></select></label>
@@ -70,6 +81,6 @@ export function AppShell() {
         <button type="button" className="text-button sidebar-control" aria-label={t('Sign out', 'Çıkış yap')} title={t('Sign out', 'Çıkış yap')} onClick={signOut}><ButtonIcon name="sign-out" /><span className="sidebar-control-label">{t('Sign out', 'Çıkış yap')}</span></button>
       </div>
     </header>
-    <main className="workspace-column"><section className="workspace-content"><Outlet /></section></main>
+    <main id="main-content" ref={mainRef} tabIndex={-1} className="workspace-column"><section className="workspace-content"><Outlet /></section></main>
   </div>
 }

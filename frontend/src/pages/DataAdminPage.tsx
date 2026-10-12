@@ -7,6 +7,7 @@ import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatLabel } from '../lib/format'
 import type { ArtifactStorageAdminRead, DatabaseOverviewRead } from '../lib/types'
 import { useLanguage } from '../lib/i18n'
+import { filterSourceList } from '../lib/sourceList'
 
 function formatBytes(value: number | null, missing: string): string {
   if (value === null) {
@@ -27,6 +28,8 @@ export function DataAdminPage() {
   const isAdmin = session?.user.role === 'Admin'
   const [overview, setOverview] = useState<DatabaseOverviewRead | null>(null)
   const [selectedArtifactId, setSelectedArtifactId] = useState('')
+  const [sourceSearch, setSourceSearch] = useState('')
+  const [sourceSort, setSourceSort] = useState<'title' | 'recent'>('recent')
   const [titleDraft, setTitleDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -80,6 +83,8 @@ export function DataAdminPage() {
     [overview?.artifacts, selectedArtifactId],
   )
 
+  const visibleArtifacts = filterSourceList(overview?.artifacts ?? [], sourceSearch, sourceSort, t('en-GB', 'tr-TR'))
+
   const totalRows = useMemo(() => overview?.tables.reduce((sum, table) => sum + table.row_count, 0) ?? 0, [overview?.tables])
   const totalSourceBytes = useMemo(
     () => overview?.artifacts.reduce((sum, artifact) => sum + (artifact.byte_size ?? 0), 0) ?? 0,
@@ -115,7 +120,7 @@ export function DataAdminPage() {
 
   if (!isAdmin) {
     return (
-      <div className="stack-xl">
+      <div className="stack-xl data-admin-page">
         <PageIntro
           eyebrow={t('Admin data', 'Yönetici verileri')}
           title={t('Database inspection requires an admin account', 'Veritabanı incelemesi için yönetici hesabı gerekir')}
@@ -127,11 +132,11 @@ export function DataAdminPage() {
   }
 
   return (
-    <div className="stack-xl">
+    <div className="stack-xl data-admin-page">
       <PageIntro
         eyebrow={t('Data and storage', 'Veri ve depolama')}
-        title={t('Inspect the workspace database and artifact storage', 'Çalışma alanı veritabanını ve kaynak depolamasını inceleyin')}
-        description={t('Use this page to see where uploaded documents are stored, which tables hold workspace state, and which artifact fields can be safely modified.', 'Yüklenen belgelerin nerede saklandığını, hangi tabloların çalışma alanı durumunu tuttuğunu ve hangi kaynak alanlarının güvenle değiştirilebildiğini görün.')}
+        title={t('Stored sources', 'Kayıtlı kaynaklar')}
+        description={t('Review source storage, coverage, and supported metadata changes.', 'Kaynak depolamasını, kapsamını ve desteklenen üst veri değişikliklerini inceleyin.')}
         actions={
           <div className="inline-actions">
             <button type="button" className="secondary-button" onClick={() => void loadOverview(selectedArtifactId)} disabled={isBusy || !session?.token}>{t("Refresh", "Yenile")}</button>
@@ -143,58 +148,44 @@ export function DataAdminPage() {
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {success ? <Callout>{success}</Callout> : null}
 
-      <section className="data-overview-grid" aria-label={t('Database overview', 'Veritabanı özeti')}>
-        <article className="data-overview-card panel-subtle">
-          <p className="metric-label">{t('Database revision', 'Veritabanı sürümü')}</p>
-          <code className="data-overview-value">{overview?.alembic_revision ?? t('Not loaded', 'Yüklenmedi')}</code>
-          <p className="metric-detail">{t('Current database migration version.', 'Bu veritabanının mevcut geçiş sürümü.')}</p>
-        </article>
-        <article className="data-overview-card panel-subtle">
-          <p className="metric-label">{t('Tables', 'Tablolar')}</p>
-          <p className="data-overview-number">{overview?.tables.length ?? '—'}</p>
-          <p className="metric-detail">{totalRows} {t('total stored rows across application tables.', 'uygulama tablolarında toplam kayıtlı satır.')} </p>
-        </article>
-        <article className="data-overview-card panel-subtle">
-          <p className="metric-label">{t('Artifacts', 'Kaynaklar')}</p>
-          <p className="data-overview-number">{overview?.artifacts.length ?? '—'}</p>
-          <p className="metric-detail">{formatBytes(totalSourceBytes, t('Missing', 'Eksik'))} {t('stored source data visible to admins.', 'yöneticilere görünür kaynak verisi.')} </p>
-        </article>
-        <article className="data-overview-card panel-subtle">
-          <p className="metric-label">{t('Workspace', 'Çalışma alanı')}</p>
-          <code className="data-overview-value">{overview?.workspace_id ?? '—'}</code>
-          <p className="metric-detail">{t('Single-company workspace boundary for this deployment.', 'Bu kurulumun tek şirket çalışma alanı sınırı.')}</p>
-        </article>
-      </section>
+      <dl className="review-ledger" aria-label={t('Storage summary', 'Depolama özeti')}>
+        <div><dt>{t('Sources', 'Kaynaklar')}</dt><dd>{overview?.artifacts.length ?? '—'}</dd></div>
+        <div><dt>{t('Stored data', 'Kayıtlı veri')}</dt><dd>{formatBytes(totalSourceBytes, t('Missing', 'Eksik'))}</dd></div>
+        <div><dt>{t('Database rows', 'Veritabanı kayıtları')}</dt><dd>{totalRows}</dd></div>
+      </dl>
 
       <div className="two-column-layout wide-right-column">
         <Panel title={t('Stored artifacts', 'Kayıtlı kaynaklar')} description={t('Admin view of source storage, memory coverage, review state, and supported metadata changes.', 'Kaynak depolama, hafıza kapsamı, inceleme durumu ve desteklenen üst veri değişikliklerinin yönetici görünümü.')}>
+          <div className="source-list-controls">
+            <label className="field"><span className="field-label">{t('Find source', 'Kaynak ara')}</span><input type="search" name="source-search" autoComplete="off" value={sourceSearch} onChange={(event) => setSourceSearch(event.target.value)} placeholder={t('Search by title…', 'Başlığa göre ara…')} /></label>
+            <label className="field"><span className="field-label">{t('Sort', 'Sıralama')}</span><select value={sourceSort} onChange={(event) => setSourceSort(event.target.value as 'title' | 'recent')}><option value="recent">{t('Recently updated', 'Son güncellenen')}</option><option value="title">{t('Title', 'Başlık')}</option></select></label>
+          </div>
+          {overview && sourceSearch && !visibleArtifacts.length ? <p role="status" className="muted-copy">{t('No matching sources. Try another title.', 'Eşleşen kaynak yok. Başka bir başlık deneyin.')}</p> : null}
           {!overview || overview.artifacts.length === 0 ? (
             <EmptyState title={t('No stored artifacts', 'Kayıtlı kaynak yok')} description={t('Upload or paste evidence to populate the storage inventory.', 'Depolama envanterini doldurmak için kanıt yükleyin veya yapıştırın.')} />
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap" role="region" aria-label={t('Stored sources', 'Kayıtlı kaynaklar')} tabIndex={0}>
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>{t('Artifact', 'Kaynak')}</th>
+                    <th aria-sort={sourceSort === 'title' ? 'ascending' : 'none'}>{t('Artifact', 'Kaynak')}</th>
                     <th>{t('Storage', 'Depolama')}</th>
                     <th>{t('Memory', 'Hafıza')}</th>
                     <th>{t('Review', 'İnceleme')}</th>
-                    <th>{t('Updated', 'Güncellendi')}</th>
+                    <th aria-sort={sourceSort === 'recent' ? 'descending' : 'none'}>{t('Updated', 'Güncellendi')}</th>
                     <th>{t('Actions', 'İşlemler')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {overview.artifacts.map((artifact) => (
+                  {visibleArtifacts.map((artifact) => (
                     <tr
                       key={artifact.artifact_id}
                       className={artifact.artifact_id === selectedArtifactId ? 'row-selected' : undefined}
-                      onClick={() => handleSelectArtifact(artifact)}
                     >
                       <td>
                         <button type="button" className="row-title-button" onClick={() => handleSelectArtifact(artifact)}>
                           {artifact.title}
                         </button>
-                        <p className="table-secondary">{artifact.artifact_id}</p>
                       </td>
                       <td>
                         <StatusBadge value={artifact.storage_exists ? t('Stored', 'Kayıtlı') : t('Missing', 'Eksik')} />
@@ -206,7 +197,7 @@ export function DataAdminPage() {
                       </td>
                       <td>{formatDateTime(artifact.updated_at)}</td>
                       <td>
-                        <div className="table-action-group" onClick={(event) => event.stopPropagation()}>
+                        <div className="table-action-group">
                           <SourcePreviewButton artifactId={artifact.artifact_id} title={artifact.title} className="table-action-link">{t('Preview', 'Önizle')}</SourcePreviewButton>
                           <a className="table-action-link" href={api.artifactDownloadUrl(artifact.artifact_id)}>{t("Download", "İndir")}</a>
                         </div>
@@ -232,18 +223,6 @@ export function DataAdminPage() {
 
               <dl className="meta-list">
                 <div>
-                  <dt>{t('Logical locator', 'Mantıksal konum')}</dt>
-                  <dd>{selectedArtifact.logical_locator}</dd>
-                </div>
-                <div>
-                  <dt>{t('Source path', 'Kaynak yolu')}</dt>
-                  <dd>{selectedArtifact.source_path}</dd>
-                </div>
-                <div>
-                  <dt>{t('Checksum', 'Sağlama toplamı')}</dt>
-                  <dd>{selectedArtifact.checksum_sha256 ?? t('Not recorded', 'Kaydedilmedi')}</dd>
-                </div>
-                <div>
                   <dt>{t('Source type', 'Kaynak türü')}</dt>
                   <dd>{formatLabel(selectedArtifact.source_type)}</dd>
                 </div>
@@ -259,10 +238,20 @@ export function DataAdminPage() {
                 </div>
               </dl>
 
+              <details className="employee-focus-details">
+                <summary>{t('Technical storage details', 'Teknik depolama ayrıntıları')}</summary>
+                <dl className="meta-list">
+                  <div><dt>{t('Artifact ID', 'Kaynak kimliği')}</dt><dd>{selectedArtifact.artifact_id}</dd></div>
+                  <div><dt>{t('Logical locator', 'Mantıksal konum')}</dt><dd>{selectedArtifact.logical_locator}</dd></div>
+                  <div><dt>{t('Source path', 'Kaynak yolu')}</dt><dd>{selectedArtifact.source_path}</dd></div>
+                  <div><dt>{t('Checksum', 'Sağlama toplamı')}</dt><dd>{selectedArtifact.checksum_sha256 ?? t('Not recorded', 'Kaydedilmedi')}</dd></div>
+                </dl>
+              </details>
+
               <form className="form-grid panel-subtle" onSubmit={handleTitleSave}>
                 <label className="field">
                   <span className="field-label">{t('Artifact title', 'Kaynak başlığı')}</span>
-                  <input value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} required />
+                  <input name="artifact-title" value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} autoComplete="off" required />
                 </label>
                 <button type="submit" className="secondary-button" disabled={isBusy}>
                   {isBusy ? t('Saving…', 'Kaydediliyor…') : t('Save title', 'Başlığı kaydet')}
@@ -277,7 +266,8 @@ export function DataAdminPage() {
         </Panel>
       </div>
 
-      <Panel title={t('Database tables', 'Veritabanı tabloları')} description={t('Operational table inventory with row counts and the application surfaces that write and read each area.', 'Satır sayıları ve her alanı yazıp okuyan uygulama yüzeyleriyle operasyonel tablo envanteri.')}>
+      <details className="employee-focus-details">
+        <summary>{t('Database tables', 'Veritabanı tabloları')}</summary>
         {!overview ? (
           <EmptyState title={t('Loading database overview', 'Veritabanı özeti yükleniyor')} description={t('The table inventory will appear after the admin endpoint responds.', 'Yönetici hizmeti yanıt verdiğinde tablo envanteri görünecek.')} />
         ) : (
@@ -304,9 +294,10 @@ export function DataAdminPage() {
             </table>
           </div>
         )}
-      </Panel>
+      </details>
 
-      <Panel title={t('How this database is managed', 'Bu veritabanı nasıl yönetilir')} description={t('Use supported application surfaces first; direct database tools are for operator diagnostics only.', 'Önce desteklenen uygulama yüzeylerini kullanın; doğrudan veritabanı araçları yalnızca operatör tanılaması içindir.')}>
+      <details className="employee-focus-details">
+        <summary>{t('Database diagnostics', 'Veritabanı tanılama bilgileri')}</summary>
         <div className="detail-grid">
           <article className="panel-subtle detail-card">
             <p className="section-label">{t('SQLite database', 'SQLite veritabanı')}</p>
@@ -326,7 +317,7 @@ export function DataAdminPage() {
             <li key={note}>{note}</li>
           ))}
         </ul>
-      </Panel>
+      </details>
     </div>
   )
 }

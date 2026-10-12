@@ -2,9 +2,9 @@ import { translate } from '../lib/language'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
+import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import { formatDateTime, formatLabel, formatPercent } from '../lib/format'
+import { formatSystemText, formatDateTime, formatLabel, formatPercent } from '../lib/format'
 import type { OperationsHealthStatus, OperationsOverviewRead, OperationsSectionRead } from '../lib/types'
 import { useLanguage } from '../lib/i18n'
 
@@ -34,7 +34,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function formatBytes(value: unknown): string {
   if (typeof value !== 'number') {
-    return 'Unavailable'
+    return translate('Unavailable', 'Kullanılamıyor')
   }
   if (value < 1024) {
     return `${value} B`
@@ -47,7 +47,7 @@ function formatBytes(value: unknown): string {
 
 function formatAge(value: unknown): string {
   if (typeof value !== 'number') {
-    return 'None'
+    return translate('None', 'Yok')
   }
   if (value < 60) {
     return `${value}s`
@@ -63,7 +63,7 @@ function formatAge(value: unknown): string {
 
 function formatMetricValue(key: string, value: unknown): string {
   if (value === null || value === undefined || value === '') {
-    return 'Unavailable'
+    return translate('Unavailable', 'Kullanılamıyor')
   }
   if (key.endsWith('_bytes')) {
     return formatBytes(value)
@@ -77,7 +77,7 @@ function formatMetricValue(key: string, value: unknown): string {
     }
   }
   if (typeof value === 'boolean') {
-    return value ? 'Yes' : 'No'
+    return value ? translate('Yes', 'Evet') : translate('No', 'Hayır')
   }
   if (typeof value === 'number') {
     return new Intl.NumberFormat().format(value)
@@ -87,22 +87,22 @@ function formatMetricValue(key: string, value: unknown): string {
   }
   if (isRecord(value)) {
     const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== 0 && entryValue !== false && entryValue !== null && entryValue !== undefined)
-    return entries.length ? entries.map(([entryKey, entryValue]) => `${formatLabel(entryKey)} ${String(entryValue)}`).join(' · ') : 'None'
+    return entries.length ? entries.map(([entryKey, entryValue]) => `${formatLabel(entryKey)} ${String(entryValue)}`).join(' · ') : translate('None', 'Yok')
   }
   if (Array.isArray(value)) {
-    return value.length ? value.map(String).join(', ') : 'None'
+    return value.length ? value.map(String).join(', ') : translate('None', 'Yok')
   }
   return String(value)
 }
 
 function severityLabel(status: OperationsHealthStatus): string {
   if (status === 'critical') {
-    return 'Critical'
+    return translate('Critical', 'Kritik')
   }
   if (status === 'warning') {
     return translate("Needs attention", "Dikkat gerekli")
   }
-  return 'Healthy'
+  return translate('Healthy', 'Sağlıklı')
 }
 
 function orderedSections(overview: OperationsOverviewRead): Array<[string, OperationsSectionRead]> {
@@ -196,8 +196,8 @@ export function OperationsPage() {
     <div className="stack-xl operations-page">
       <PageIntro
         eyebrow={t('Operations', 'Operasyonlar')}
-        title={t('Control room for data, memory, workers, and LLM state', 'Veri, hafıza, çalışanlar ve LLM durumu için kontrol odası')}
-        description={t('A read-only admin view of what is actually running, indexed, missing, stale, queued, or ready. Use it before making infrastructure or data changes.', 'Çalışan, indekslenen, eksik, eski, sırada veya hazır durumların salt okunur yönetici görünümü. Altyapı veya veri değişikliklerinden önce kullanın.')}
+        title={t('System operations', 'Sistem operasyonları')}
+        description={t('See what needs attention and continue from the right workspace.', 'Dikkat gerektiren durumları görün ve doğru çalışma alanından devam edin.')}
         actions={
           <button type="button" className="secondary-button" onClick={() => void loadOverview()} disabled={isRefreshing || !session?.token}>
             {isRefreshing ? t('Refreshing…', 'Yenileniyor…') : t('Refresh', 'Yenile')}
@@ -209,23 +209,34 @@ export function OperationsPage() {
 
       {overview ? (
         <>
-          <section className="metric-grid" aria-label={t('Operations status', 'Operasyon durumu')}>
-            <MetricCard label={t('Overall status', 'Genel durum')} value={severityLabel(overview.overall_status)} detail={`${warningCount} ${t('sections need attention', 'bölüm dikkat gerektiriyor')}`} />
-            <MetricCard label={t('Health score', 'Sağlık puanı')} value={formatPercent(overview.health_score)} detail={t('Derived from read-only checks; warnings lower the score.', 'Salt okunur kontrollerden hesaplanır; uyarılar puanı düşürür.')} />
-            <MetricCard label={t('Workspace', 'Çalışma alanı')} value={overview.workspace_id.slice(0, 14)} detail={t('Single-company data boundary for this deployment.', 'Bu kurulumun tek şirket veri sınırı.')} />
-            <MetricCard label={t('Generated', 'Oluşturuldu')} value={formatDateTime(overview.generated_at)} detail={overview.schema_version} />
+          <section className="panel-subtle" aria-label={t('Operations status', 'Operasyon durumu')}>
+            <div className="readiness-header">
+              <div>
+                <p className="table-primary">{warningCount ? t('Attention required', 'İnceleme gerekli') : t('No active operational issue', 'Etkin operasyon sorunu yok')}</p>
+                <p className="table-secondary">{warningCount} {t('sections need attention', 'bölüm dikkat gerektiriyor')} · {formatPercent(overview.health_score)}</p>
+              </div>
+              <StatusBadge status={overview.overall_status === 'healthy' ? 'success' : overview.overall_status} value={severityLabel(overview.overall_status)} />
+            </div>
+            <details className="employee-focus-details">
+              <summary>{t('Technical snapshot', 'Teknik özeti göster')}</summary>
+              <dl className="meta-list">
+                <div><dt>{t('Technical workspace ID', 'Teknik çalışma alanı kimliği')}</dt><dd>{overview.workspace_id}</dd></div>
+                <div><dt>{t('Generated', 'Oluşturuldu')}</dt><dd>{formatDateTime(overview.generated_at)}</dd></div>
+                <div><dt>{t('Schema', 'Şema')}</dt><dd>{overview.schema_version}</dd></div>
+              </dl>
+            </details>
           </section>
 
           <Panel title={t('Operator next actions', 'Operatör için sonraki adımlar')} description={t('These are the actions Izge recommends before deployment or further memory work.', 'İzge’nin kurulum veya sonraki hafıza çalışmasından önce önerdiği eylemler.')}>
             <div className="operations-action-list">
               {overview.next_actions.map((action) => (
-                <article key={`${action.title}-${action.route}`} className={`panel-subtle operations-action operations-action-${action.severity}`}>
+                <article key={`${formatSystemText(action.title)}-${action.route}`} className={`panel-subtle operations-action operations-action-${action.severity}`}>
                   <div>
-                    <StatusBadge value={severityLabel(action.severity)} />
-                    <p className="table-primary">{action.title}</p>
-                    <p className="table-secondary">{action.description}</p>
+                    <StatusBadge status={action.severity === 'healthy' ? 'success' : action.severity} value={severityLabel(action.severity)} />
+                    <p className="table-primary">{formatSystemText(action.title)}</p>
+                    <p className="table-secondary">{formatSystemText(action.description)}</p>
                   </div>
-                  <Link className="secondary-button" to={action.route}>{t('Open', 'Aç')}</Link>
+                  <Link className="secondary-button" to={action.route}>{t('Open action', 'İşlemi aç')}</Link>
                 </article>
               ))}
             </div>
@@ -234,15 +245,15 @@ export function OperationsPage() {
           <Panel title={t('System sections', 'Sistem bölümleri')} description={t('Each section is derived from existing database and runtime state. Resolve critical and warning states before release.', 'Her bölüm mevcut veritabanı ve çalışma durumundan üretilir. Yayından önce kritik durumları ve uyarıları çözün.')}>
             <div className="operations-section-list">
               {orderedSections(overview).map(([sectionKey, section]) => (
-                <article key={sectionKey} className="panel-subtle operations-section">
-                  <div className="timeline-card-head">
-                    <div>
-                      <p className="section-label">{formatLabel(sectionKey)}</p>
-                      <p className="table-primary">{section.title}</p>
-                    </div>
-                    <StatusBadge value={severityLabel(section.status)} />
-                  </div>
-                  <p className="muted-copy">{section.summary}</p>
+                <details key={sectionKey} className="panel-subtle operations-section">
+                  <summary className="timeline-card-head">
+                    <span className="disclosure-heading">
+                      <span className="section-label">{formatLabel(sectionKey)}</span>
+                      <span className="table-primary">{formatSystemText(section.title)}</span>
+                    </span>
+                    <StatusBadge status={section.status === 'healthy' ? 'success' : section.status} value={severityLabel(section.status)} />
+                  </summary>
+                  <p className="muted-copy">{formatSystemText(section.summary)}</p>
                   <SectionMetrics sectionKey={sectionKey} section={section} />
                   {section.issues.length > 0 ? (
                     <div className="table-wrap">
@@ -301,7 +312,7 @@ export function OperationsPage() {
                       </table>
                     </div>
                   ) : null}
-                </article>
+                </details>
               ))}
             </div>
           </Panel>

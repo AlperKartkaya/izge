@@ -8,7 +8,7 @@ from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, get_db
@@ -43,7 +43,7 @@ from app.services.agent_sources import visible_sources
 from app.services.agent_model import model_catalog
 from app.services.agent_tools import available_mcp_tools
 from app.config import get_settings
-from app.services.conversations import DEFAULT_ASSISTANT_THREAD_ID, archive_conversation, conversation_for_thread, ensure_personal_conversation, get_owned_conversation
+from app.services.conversations import DEFAULT_ASSISTANT_THREAD_ID, archive_conversation, conversation_for_thread, empty_active_conversation, ensure_personal_conversation, get_owned_conversation
 
 
 router = APIRouter(prefix="/work", tags=["work"])
@@ -125,6 +125,11 @@ def create_conversation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AssistantConversationRead:
+    # Serialize creation per user so two tabs reuse the same empty draft.
+    db.execute(update(User).where(User.user_id == current_user.user_id).values(updated_at=User.updated_at))
+    existing = empty_active_conversation(db, current_user)
+    if existing is not None:
+        return _conversation_read(existing)
     conversation = AssistantConversation(
         workspace_id=current_user.workspace_id,
         owner_user_id=current_user.user_id,

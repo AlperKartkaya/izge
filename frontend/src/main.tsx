@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './auth/AuthContext'
 import './index.css'
+import './refinement.css'
 import { LanguageProvider } from './lib/i18n'
 
 createRoot(document.getElementById('root')!).render(

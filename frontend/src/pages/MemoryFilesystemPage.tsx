@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { Callout, EmptyState, MetricCard, PageIntro, Panel, StatusBadge } from '../components/ui'
+import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatLabel } from '../lib/format'
 import type { MemoryFilesystemArtifact, MemoryFilesystemRead } from '../lib/types'
@@ -63,20 +63,20 @@ export function MemoryFilesystemPage() {
     <div className="stack-xl">
       <PageIntro
         eyebrow={t('Memory file-system', 'Hafıza dosya sistemi')}
-        title={t('See how company memory is organized', 'Şirket hafızasının nasıl düzenlendiğini görün')}
-        description={t('Source artifacts become chunks, chunks become typed memory, and memory becomes graph edges, signals, traces, and evidence-backed answers. Admins can inspect physical storage paths on the Data page.', 'Kaynaklar bölümlere, bölümler türlenmiş hafızaya; hafıza da grafik bağlantılarına, sinyallere, izlere ve kanıt destekli yanıtlara dönüşür. Yöneticiler fiziksel depolama yollarını Veri sayfasında inceleyebilir.')}
+        title={t('Memory sources', 'Hafıza kaynakları')}
+        description={t('Browse each source and the memory coverage created from it.', 'Her kaynağı ve ondan oluşturulan hafıza kapsamını inceleyin.')}
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
-      <section className="metric-grid">
-        <MetricCard label={t('Visible artifacts', 'Görünür kaynaklar')} value={totals.artifacts || '—'} detail={t('Source roots in your permission scope.', 'İzin alanınızdaki kaynak kökleri.')} />
-        <MetricCard label={t('Indexed chunks', 'İndekslenen bölümler')} value={totals.chunks || '—'} detail={t('Retrieval leaves under the evidence substrate.', 'Kanıt katmanındaki erişim bölümleri.')} />
-        <MetricCard label={t('Memory objects', 'Hafıza nesneleri')} value={totals.memory || '—'} detail={t('Decision, assumption, constraint, outcome, commitment rows.', 'Karar, varsayım, kısıt, sonuç ve taahhüt kayıtları.')} />
-        <MetricCard label={t('Artifact signals', 'Kaynak sinyalleri')} value={totals.signals || '—'} detail={t('Persisted contradiction, drift, continuity, and action signals.', 'Kaydedilen çelişki, değişim, süreklilik ve eylem sinyalleri.')} />
-      </section>
+      <dl className="review-ledger" aria-label={t('Memory coverage', 'Hafıza kapsamı')}>
+        <div><dt>{t('Sources', 'Kaynaklar')}</dt><dd>{totals.artifacts}</dd></div>
+        <div><dt>{t('Memory objects', 'Hafıza nesneleri')}</dt><dd>{totals.memory}</dd></div>
+        <div><dt>{t('Signals', 'Sinyaller')}</dt><dd>{totals.signals}</dd></div>
+      </dl>
 
-      <Panel title={t('Database organization guide', 'Veritabanı düzenleme rehberi')} description={t('Step-by-step organization rule for making Izge portable to any company workspace.', 'İzge’yi herhangi bir şirket çalışma alanına taşımak için adım adım düzenleme kuralı.')}>
+      <details className="employee-focus-details">
+        <summary>{t('How memory is organized', 'Hafıza nasıl düzenlenir?')}</summary>
         {filesystem ? (
           <div className="stack-sm">
             {filesystem.organization_guide.map((step) => (
@@ -90,7 +90,7 @@ export function MemoryFilesystemPage() {
         ) : (
           <EmptyState title={t('Loading organization guide', 'Düzenleme rehberi yükleniyor')} description={t('Izge is reading the current workspace memory layers.', 'İzge mevcut çalışma alanının hafıza katmanlarını okuyor.')} />
         )}
-      </Panel>
+      </details>
 
       <div className="two-column-layout wide-right-column">
         <Panel title={t('Memory roots', 'Hafıza kökleri')} description={t('The high-level folders of the internal memory database.', 'Dahili hafıza veritabanının üst düzey klasörleri.')}>
@@ -129,7 +129,6 @@ export function MemoryFilesystemPage() {
                     <StatusBadge value={artifact.retrieval_state} />
                   </div>
                   <p className="table-secondary">{artifact.organization_path.join(' / ')}</p>
-                  <p className="muted-copy">{artifact.storage_locator}</p>
                   <div className="timeline-stats">
                     <span>{artifact.chunk_count} {t('chunks', 'bölüm')}</span>
                     <span>{totalMemoryObjects(artifact)} {t('memory objects', 'hafıza nesnesi')}</span>
@@ -147,14 +146,6 @@ export function MemoryFilesystemPage() {
           <div className="stack-md">
             <div className="detail-grid">
               <article className="panel-subtle detail-card">
-                <p className="section-label">{t('Logical locator', 'Mantıksal konum')}</p>
-                <p className="table-primary">{selectedArtifact.storage_locator}</p>
-              </article>
-              <article className="panel-subtle detail-card">
-                <p className="section-label">{t('Checksum', 'Sağlama toplamı')}</p>
-                <p className="table-primary">{selectedArtifact.checksum_sha256?.slice(0, 16) ?? t('Unavailable', 'Kullanılamıyor')}…</p>
-              </article>
-              <article className="panel-subtle detail-card">
                 <p className="section-label">{t('Trust boundary', 'Güven sınırı')}</p>
                 <p className="table-primary">{formatLabel(selectedArtifact.review_status)}</p>
               </article>
@@ -163,6 +154,14 @@ export function MemoryFilesystemPage() {
                 <p className="table-primary">{formatDateTime(selectedArtifact.updated_at)}</p>
               </article>
             </div>
+
+            <details className="employee-focus-details">
+              <summary>{t('Technical source details', 'Teknik kaynak ayrıntıları')}</summary>
+              <dl className="meta-list">
+                <div><dt>{t('Logical locator', 'Mantıksal konum')}</dt><dd>{selectedArtifact.storage_locator}</dd></div>
+                <div><dt>{t('Checksum', 'Sağlama toplamı')}</dt><dd>{selectedArtifact.checksum_sha256 ?? t('Unavailable', 'Kullanılamıyor')}</dd></div>
+              </dl>
+            </details>
 
             <div className="panel-subtle stack-sm">
               <p className="section-label">{t('Trust boundary', 'Güven sınırı')}</p>
@@ -194,7 +193,8 @@ export function MemoryFilesystemPage() {
         )}
       </Panel>
 
-      <Panel title={t('Database blueprint', 'Veritabanı planı')} description={t('How the current SQLite database should be organized for any company deployment.', 'Mevcut SQLite veritabanının herhangi bir şirket kurulumu için nasıl düzenlenmesi gerektiği.')}>
+      <details className="employee-focus-details">
+        <summary>{t('Database blueprint', 'Veritabanı planı')}</summary>
         {filesystem ? (
           <div className="stack-sm">
             {filesystem.database_blueprint.map((layer) => (
@@ -211,7 +211,7 @@ export function MemoryFilesystemPage() {
             ))}
           </div>
         ) : null}
-      </Panel>
+      </details>
     </div>
   )
 }

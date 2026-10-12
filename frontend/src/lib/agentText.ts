@@ -4,6 +4,8 @@ export type AgentInlineToken =
   | { kind: 'source'; value: string; sourceIndex: number }
 
 export function tokenizeAgentText(value: string, sourceCount = Infinity): AgentInlineToken[] {
+  // Legacy notification truncation can leave an opening bold marker on the final line.
+  value = value.replace(/(^|\n)(\s*)\*\*([^*\n]+)$/u, '$1$2$3')
   const tokens: AgentInlineToken[] = []
   const matcher = /(`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|\[(\d+)\]|@[iİı]zge\b)/giu
   let cursor = 0
@@ -48,6 +50,21 @@ export function insertIzgeMentionAtCaret(value: string, selectionStart: number, 
 
 export function buildIzgeFollowUp(question: string) {
   return `@izge ${question.trim()} `
+}
+
+export function compactMarkdownPreview(value: string, maxLength = 180) {
+  const plain = value
+    .replace(/```[\s\S]*?```/gu, ' ')
+    .replace(/\[([^\]\n]+)\]\(https?:\/\/[^\s)]+\)/giu, '$1')
+    .replace(/^#{1,6}\s+/gmu, '')
+    .replace(/^\s*(?:[-*+]|\d+\.)\s+/gmu, '')
+    .replace(/[*_`>|]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  if (plain.length <= maxLength) return plain
+  const slice = plain.slice(0, maxLength)
+  const bounded = slice.slice(0, slice.lastIndexOf(' ')).trim() || plain.slice(0, maxLength).trim()
+  return `${bounded}…`
 }
 
 export function focusComposerAtEnd(element: HTMLTextAreaElement | null) {

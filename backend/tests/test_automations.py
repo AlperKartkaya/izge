@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.db import Base
-from app.models import ColleagueRun, User, Workspace
+from app.models import AssistantConversation, ColleagueRun, User, Workspace
 from app.models.automation import Automation
 from app.routers.automations import create_automation, delete_automation, list_automations, run_automation, update_automation
 from app.schema import ensure_legacy_schema_compatibility
@@ -117,6 +117,53 @@ class AutomationsTest(unittest.TestCase):
         due = datetime(2026, 10, 10, 13, 0, tzinfo=UTC)
         self.assertEqual(dispatch_due_automations(self.db, due), 1)
         self.assertEqual(len(self.db.scalars(select(ColleagueRun)).all()), 2)
+
+    def test_archived_automation_conversation_gets_one_active_successor(self):
+        item = self.create()
+        due = datetime(2026, 10, 9, 13, 0, tzinfo=UTC)
+        self.assertEqual(dispatch_due_automations(self.db, due), 1)
+        original = self.db.scalar(select(AssistantConversation).where(
+            AssistantConversation.thread_id == f"automation:{item.automation_id}",
+        ))
+        assert original is not None
+        original.archived_at = datetime(2026, 10, 9, 14, 0)
+        self.db.commit()
+
+        self.assertEqual(dispatch_due_automations(self.db, due + timedelta(days=1)), 1)
+        self.assertEqual(dispatch_due_automations(self.db, due + timedelta(days=2)), 1)
+
+        conversations = self.db.scalars(select(AssistantConversation).order_by(AssistantConversation.created_at)).all()
+        self.assertEqual(len(conversations), 2)
+        self.assertEqual(conversations[0].archived_at, datetime(2026, 10, 9, 14, 0))
+        self.assertIsNone(conversations[1].archived_at)
+        self.assertIsNone(conversations[1].deleted_at)
+        self.assertLessEqual(len(conversations[1].thread_id), 80)
+        self.assertNotEqual(conversations[1].thread_id, conversations[0].thread_id)
+        runs = self.db.scalars(select(ColleagueRun).order_by(ColleagueRun.created_at)).all()
+        self.assertEqual(runs[1].thread_id, conversations[1].thread_id)
+        self.assertEqual(runs[2].thread_id, conversations[1].thread_id)
+        listed = list_automations(self.alice, self.db).items[0]
+        self.assertEqual(listed.last_run_id, runs[2].run_id)
+        self.assertEqual(listed.last_run_status, "queued")
+
+    def test_deleted_automation_conversation_gets_active_successor(self):
+        item = self.create()
+        due = datetime(2026, 10, 9, 13, 0, tzinfo=UTC)
+        self.assertEqual(dispatch_due_automations(self.db, due), 1)
+        original = self.db.scalar(select(AssistantConversation).where(
+            AssistantConversation.thread_id == f"automation:{item.automation_id}",
+        ))
+        assert original is not None
+        original.deleted_at = datetime(2026, 10, 9, 14, 0)
+        self.db.commit()
+
+        self.assertEqual(dispatch_due_automations(self.db, due + timedelta(days=1)), 1)
+
+        conversations = self.db.scalars(select(AssistantConversation).order_by(AssistantConversation.created_at)).all()
+        self.assertEqual(len(conversations), 2)
+        self.assertEqual(conversations[0].deleted_at, datetime(2026, 10, 9, 14, 0))
+        self.assertIsNone(conversations[1].archived_at)
+        self.assertIsNone(conversations[1].deleted_at)
 
     def test_last_run_resolution_excludes_another_users_spoofed_thread(self):
         item = self.create()

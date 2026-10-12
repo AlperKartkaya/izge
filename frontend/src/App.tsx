@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthGate, useAuth } from './auth/AuthContext'
 import { AppShell } from './layout/AppShell'
@@ -6,7 +6,6 @@ import { AdminPage } from './pages/AdminPage'
 import { AuditPage } from './pages/AuditPage'
 import { DataAdminPage } from './pages/DataAdminPage'
 import { HomePage } from './pages/HomePage'
-import { GraphPage } from './pages/GraphPage'
 import { IngestionPage } from './pages/IngestionPage'
 import { MemoryFilesystemPage } from './pages/MemoryFilesystemPage'
 import { MemoryDetailPage } from './pages/MemoryDetailPage'
@@ -22,6 +21,11 @@ import { MemoryPage } from './pages/MemoryPage'
 import { TasksPage } from './pages/TasksPage'
 import { AutomationsPage } from './pages/AutomationsPage'
 import { NotificationsPage } from './pages/NotificationsPage'
+import { useLanguage } from './lib/i18n'
+
+const GraphPage = lazy(() =>
+  import('./pages/GraphPage').then((module) => ({ default: module.GraphPage })),
+)
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -44,6 +48,8 @@ function AdminOnlyRoute({ children }: { children: ReactNode }) {
 }
 
 function App() {
+  const { t } = useLanguage()
+
   return (
     <>
       <ScrollToTop />
@@ -76,7 +82,7 @@ function App() {
           <Route path="query/:queryRunId" element={<AdminOnlyRoute><QueryResultPage /></AdminOnlyRoute>} />
           <Route path="signals/:signalId" element={<SignalDetailPage />} />
           <Route path="memory/:memoryType/:memoryId" element={<AdminOnlyRoute><MemoryDetailPage /></AdminOnlyRoute>} />
-          <Route path="graph" element={<AdminOnlyRoute><GraphPage /></AdminOnlyRoute>} />
+          <Route path="graph" element={<AdminOnlyRoute><Suspense fallback={<p role="status">{t('Loading knowledge graph…', 'Bilgi grafiği yükleniyor…')}</p>}><GraphPage /></Suspense></AdminOnlyRoute>} />
           <Route
             path="operations"
             element={

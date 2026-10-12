@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import AssistantConversation, User
+from app.models import AssistantConversation, ColleagueRun, CompanyChatMessage, User
 
 
 DEFAULT_ASSISTANT_THREAD_ID = "izge-colleague"
@@ -31,6 +31,27 @@ def conversation_for_thread(db: Session, actor: User, thread_id: str) -> Assista
         AssistantConversation.owner_user_id == actor.user_id,
         AssistantConversation.thread_id == thread_id,
     ))
+
+
+def empty_active_conversation(db: Session, actor: User) -> AssistantConversation | None:
+    has_run = select(ColleagueRun.run_id).where(
+        ColleagueRun.workspace_id == actor.workspace_id,
+        ColleagueRun.created_by == actor.user_id,
+        ColleagueRun.thread_id == AssistantConversation.thread_id,
+    ).exists()
+    has_attachment = select(CompanyChatMessage.message_id).where(
+        CompanyChatMessage.workspace_id == actor.workspace_id,
+        CompanyChatMessage.author_user_id == actor.user_id,
+        CompanyChatMessage.message_metadata["thread_id"].as_string() == AssistantConversation.thread_id,
+    ).exists()
+    return db.scalar(select(AssistantConversation).where(
+        AssistantConversation.workspace_id == actor.workspace_id,
+        AssistantConversation.owner_user_id == actor.user_id,
+        AssistantConversation.archived_at.is_(None),
+        AssistantConversation.deleted_at.is_(None),
+        ~has_run,
+        ~has_attachment,
+    ).order_by(AssistantConversation.created_at.desc()).limit(1))
 
 
 def ensure_personal_conversation(

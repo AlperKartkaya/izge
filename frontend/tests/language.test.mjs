@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getLanguage, readInitialLanguage, setCurrentLanguage, translate } from '../src/lib/language.ts'
-import { formatDateTime, formatStatus, formatSystemText } from '../src/lib/format.ts'
+import { formatDateTime, formatLabel, formatStatus, formatSystemText } from '../src/lib/format.ts'
 
 test('Turkish is the default; unsupported or inaccessible preferences cannot break it', () => {
   assert.equal(readInitialLanguage(), 'tr')
@@ -36,4 +36,21 @@ test('system stage translations never rewrite arbitrary source or company text',
   assert.equal(formatSystemText('Atlas müşteri talebi'), 'Atlas müşteri talebi')
   setCurrentLanguage('tr')
   assert.equal(formatSystemText('Şirket bilgileri taranıyor'), 'Şirket bilgileri taranıyor')
+})
+
+test('known operational messages are localized without altering source titles', () => {
+  setCurrentLanguage('tr')
+  assert.equal(formatSystemText('Review pending artifacts'), 'Bekleyen kaynakları inceleyin')
+  assert.equal(formatSystemText('Database and source storage'), 'Veritabanı ve kaynak depolaması')
+  assert.equal(formatSystemText('Atlas customer evidence'), 'Atlas customer evidence')
+  setCurrentLanguage('en')
+  assert.equal(formatSystemText('Bekleyen kaynakları inceleyin'), 'Review pending artifacts')
+  setCurrentLanguage('tr')
+})
+
+
+test('processing stages use operational Turkish labels', () => {
+  setCurrentLanguage('tr')
+  assert.equal(formatLabel('contradiction_interrogator'), 'Çelişki incelemesi')
+  assert.equal(formatLabel('provenance_verifier'), 'Kaynak doğrulama')
 })

@@ -123,7 +123,7 @@ export function QueryPage() {
     try {
       if (action === 'new') {
         const created = await api.createAssistantConversation(session.token)
-        setConversations((items) => [created, ...items]); selectThread(created.thread_id)
+        setConversations((items) => [created, ...items.filter((item) => item.conversation_id !== created.conversation_id)]); selectThread(created.thread_id)
       } else if (conversation) {
         if (action === 'archive') {
           const updated = await api.updateAssistantConversation(session.token, conversation.conversation_id, { archived: !conversation.archived_at })
@@ -135,7 +135,7 @@ export function QueryPage() {
           if (conversation.thread_id === threadId) {
             const next = items.find((item) => !item.archived_at)
             if (next) selectThread(next.thread_id)
-            else { const created = await api.createAssistantConversation(session.token); setConversations((items) => [created, ...items]); selectThread(created.thread_id) }
+            else { const created = await api.createAssistantConversation(session.token); setConversations((items) => [created, ...items.filter((item) => item.conversation_id !== created.conversation_id)]); selectThread(created.thread_id) }
           }
         }
       }
@@ -193,6 +193,7 @@ export function QueryPage() {
     ...orderedRuns.map((run) => ({ kind: 'run' as const, id: run.run_id, date: run.created_at, run })),
     ...attachments.filter((message) => loadedThreadId === threadId && message.message_metadata?.thread_id === threadId).map((message) => ({ kind: 'attachment' as const, id: message.message_id, date: message.created_at, message })),
   ].sort((left, right) => Date.parse(left.date) - Date.parse(right.date)), [attachments, loadedThreadId, orderedRuns, threadId])
+  const currentConversationEmpty = !isLoading && loadedThreadId === threadId && runs.length === 0 && attachments.length === 0 && !readOnly
   const fillFollowUp = (question: string) => {
     setDraft(buildIzgeFollowUp(question))
     focusComposerAtEnd(composerRef.current)
@@ -201,13 +202,13 @@ export function QueryPage() {
   return (
     <div className="assistant-page employee-agent-page">
       <header className="employee-page-header">
-        <div><p className="eyebrow">{t('Your always-on colleague', 'Uyumayan ekip arkadaşınız')}</p><h1>{t('Ask Izge', 'İzge’ye sor')}</h1><p>{t('Finds accessible sources in company files, daily logs, and tasks to answer your questions.', 'Şirket dosyalarından, günlüklerden ve görevlerden erişebildiği kaynakları bularak yanıt verir.')}</p></div>
-        <div className="query-header-actions"><button type="button" className="icon-button" aria-label={t('Show conversation history', 'Konuşma geçmişini göster')} title={t('Show conversation history', 'Konuşma geçmişini göster')} aria-expanded={historyOpen} onClick={() => setHistoryOpen((open) => !open)}><ButtonIcon name="team-chat" /></button><button type="button" className="icon-button" aria-label={t('New conversation', 'Yeni konuşma')} title={t('New conversation', 'Yeni konuşma')} disabled={isManaging || isUploading || isSending} onClick={() => void manageConversation('new')}><ButtonIcon name="add" /></button><span className="language-chip">{language === 'en' ? 'English' : 'Türkçe'}</span></div>
+        <div><h1>{t('Ask Izge', 'İzge’ye sor')}</h1><p>{t('Answers use only company evidence you can access.', 'Yanıtlar yalnızca erişebildiğiniz şirket kanıtlarını kullanır.')}</p></div>
+        <div className="query-header-actions"><button type="button" className="icon-button" aria-label={t('Show conversation history', 'Konuşma geçmişini göster')} title={t('Show conversation history', 'Konuşma geçmişini göster')} aria-expanded={historyOpen} onClick={() => setHistoryOpen((open) => !open)}><ButtonIcon name="team-chat" /></button><span className="language-chip">{language === 'en' ? 'English' : 'Türkçe'}</span></div>
       </header>
       {error ? <Callout tone="warning">{error}</Callout> : null}
       <div className={`query-chat-layout${historyOpen ? ' query-chat-layout-history' : ''}`}>
       {historyOpen ? <aside className="query-history" aria-label={t('Conversation history', 'Konuşma geçmişi')}>
-        <div className="query-history-head"><strong>{t('Conversations', 'Konuşmalar')}</strong><button type="button" className="text-button" aria-pressed={showArchived} onClick={() => setShowArchived((value) => !value)}>{showArchived ? t('Active', 'Aktif') : t('Archived', 'Arşiv')}</button></div>
+        <div className="query-history-head"><strong>{t('Conversations', 'Konuşmalar')}</strong><div className="query-history-actions"><button type="button" className="text-button" aria-pressed={showArchived} onClick={() => setShowArchived((value) => !value)}>{showArchived ? t('Active', 'Aktif') : t('Archived', 'Arşiv')}</button><button type="button" className="icon-button" aria-label={t('New conversation', 'Yeni konuşma')} title={currentConversationEmpty ? t('Send a message before opening another conversation.', 'Yeni bir konuşma açmadan önce bu konuşmaya mesaj gönderin.') : t('New conversation', 'Yeni konuşma')} disabled={isManaging || isUploading || isSending || currentConversationEmpty} onClick={() => void manageConversation('new')}><ButtonIcon name="add" /></button></div></div>
         <div className="conversation-list">{conversations.filter((item) => Boolean(item.archived_at) === showArchived).map((item) => <article key={item.conversation_id} className={`query-history-item${item.thread_id === threadId ? ' query-history-item-active' : ''}`}>
           <button type="button" className="query-history-select" disabled={isUploading || isSending} onClick={() => selectThread(item.thread_id)}><strong>{item.title}</strong><small>{formatDateTime(item.updated_at)}</small></button>
           <div><button type="button" className="icon-button" disabled={isManaging || isUploading || isSending || (item.thread_id === threadId && Boolean(activeRunId))} aria-label={item.archived_at ? t('Restore conversation', 'Konuşmayı geri al') : t('Archive conversation', 'Konuşmayı arşivle')} title={item.archived_at ? t('Restore conversation', 'Konuşmayı geri al') : t('Archive conversation', 'Konuşmayı arşivle')} onClick={() => void manageConversation('archive', item)}><ButtonIcon name={item.archived_at ? 'refresh' : 'save'} /></button><button type="button" className="icon-button" disabled={isManaging || isUploading || isSending || (item.thread_id === threadId && Boolean(activeRunId))} aria-label={t('Delete conversation', 'Konuşmayı sil')} title={t('Delete conversation', 'Konuşmayı sil')} onClick={() => void manageConversation('delete', item)}><ButtonIcon name="delete" /></button></div>

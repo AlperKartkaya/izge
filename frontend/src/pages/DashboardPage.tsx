@@ -618,9 +618,8 @@ export function DashboardPage() {
     <div className="stack-xl dashboard-page">
       <section className="dashboard-hero" aria-labelledby="dashboard-title">
         <div className="dashboard-hero-copy">
-          <p className="eyebrow">{t('Operations dashboard', 'Operasyon gösterge paneli')}</p>
-          <h1 id="dashboard-title" className="brand-title">{t("Company memory control center", "Şirket hafızası kontrol merkezi")}</h1>
-          <p className="page-description">{t("A practical operating view for source intake, evidence governance, memory reconstruction, signal review, and grounded answers.", "Kaynak ekleme, kanıt yönetimi, hafızayı yeniden oluşturma, sinyal inceleme ve kaynaklı yanıtlar için operasyon görünümü.")}</p>
+          <h1 id="dashboard-title" className="brand-title">{t('Workspace overview', 'Çalışma alanı özeti')}</h1>
+          <p className="page-description">{workspaceReadiness.detail}</p>
           <div className="inline-actions">
             <Link className="primary-button" to={workspaceReadiness.actionTo}>
               {workspaceReadiness.actionLabel}
@@ -636,8 +635,9 @@ export function DashboardPage() {
             </div>
             <StatusBadge value={workspaceReadiness.status} />
           </div>
-          <p className="muted-copy">{workspaceReadiness.detail}</p>
-          <dl className="dashboard-meta-list">
+          <details className="employee-focus-details">
+            <summary>{t('Workspace details', 'Çalışma alanı ayrıntıları')}</summary>
+            <dl className="dashboard-meta-list">
             <div>
               <dt>{t('User', 'Kullanıcı')}</dt>
               <dd>{session?.user.display_name ?? t('Unavailable', 'Kullanılamıyor')}</dd>
@@ -647,35 +647,33 @@ export function DashboardPage() {
               <dd>{session?.user.role ?? t('Unavailable', 'Kullanılamıyor')}</dd>
             </div>
             <div>
-              <dt>{t('Workspace', 'Çalışma alanı')}</dt>
+              <dt>{t('Technical workspace ID', 'Teknik çalışma alanı kimliği')}</dt>
               <dd>{summary?.workspace_id ?? session?.user.workspace_id ?? t('Unavailable', 'Kullanılamıyor')}</dd>
             </div>
             <div>
               <dt>{t('Stance', 'Yaklaşım')}</dt>
               <dd>{t('Reconstruct first. Compare second. Recommend last.', 'Önce yeniden kur. Sonra karşılaştır. En son öner.')}</dd>
             </div>
-          </dl>
+            </dl>
+          </details>
         </aside>
       </section>
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
-      <section className="dashboard-kpi-strip" aria-label={t('Current workspace health', 'Mevcut çalışma alanı sağlığı')}>
-        {dashboardStats.map((metric) => (
-          <article key={metric.label} className="dashboard-kpi">
-            <p className="section-label">{metric.label}</p>
-            <p className="dashboard-kpi-value">{metric.value}</p>
-            <p className="table-secondary">{metric.detail}</p>
-          </article>
-        ))}
-      </section>
+      <details className="employee-focus-details">
+        <summary>{t('Workspace counts', 'Çalışma alanı sayıları')}</summary>
+        <dl className="review-ledger" aria-label={t('Current workspace health', 'Mevcut çalışma alanı sağlığı')}>
+          {dashboardStats.map((metric) => <div key={metric.label}><dt>{metric.label}</dt><dd>{metric.value}</dd></div>)}
+        </dl>
+      </details>
 
       <div className="dashboard-main-grid">
         <Panel
           title={t('Operating path', 'Çalışma yolu')}
           description={t('The next operational step should be clear without forcing employees through many similar cards.', 'Sonraki operasyonel adım, çalışanları benzer kartlara boğmadan açık olmalıdır.')}
           aside={
-            <Link className="secondary-button" to={workspaceReadiness.actionTo}>{t("Continue", "Devam et")}</Link>
+            <Link className="secondary-button" to={workspaceReadiness.actionTo}>{workspaceReadiness.actionLabel}</Link>
           }
         >
           <ol className="workflow-step-list">
@@ -692,7 +690,7 @@ export function DashboardPage() {
                   </div>
                   <p className="muted-copy">{step.detail}</p>
                 </div>
-                <Link className="text-button" to={step.to}>{t("Open", "Aç")}</Link>
+                <Link className="text-button" to={step.to}>{t('Open step', 'Adımı aç')}</Link>
               </li>
             ))}
           </ol>
@@ -746,7 +744,8 @@ export function DashboardPage() {
       </div>
 
       <div className="dashboard-analysis-grid">
-        <Panel title={t('Reasoning modes', 'Akıl yürütme modları')} description={t('Modes are operational tools, not marketing copy or chat personas.', 'Modlar pazarlama metni veya sohbet karakteri değil, operasyonel araçlardır.')}>
+        <details className="employee-focus-details">
+          <summary>{t('Reasoning modes', 'Akıl yürütme modları')}</summary>
           <div className="table-wrap mode-table-wrap">
             <table className="data-table mode-table">
               <thead>
@@ -767,7 +766,7 @@ export function DashboardPage() {
               </tbody>
             </table>
           </div>
-        </Panel>
+        </details>
 
         <Panel title={t('Memory composition', 'Hafıza bileşimi')} description={t('A compact graph of what processing reconstructed from company sources.', 'İşlemenin şirket kaynaklarından yeniden kurduğu bilgilerin küçük grafiği.')}>
           {memoryComposition.length === 0 ? (
@@ -862,7 +861,6 @@ export function DashboardPage() {
                     <td>
                       <div>
                         <p className="table-primary">{artifact.title}</p>
-                        <p className="table-secondary">{artifact.artifact_id}</p>
                       </div>
                     </td>
                     <td>{artifact.visibility_scope}</td>

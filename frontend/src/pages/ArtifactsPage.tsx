@@ -3,7 +3,7 @@ import { SourcePreviewButton } from '../components/SourcePreviewButton'
 import { useEffect, useMemo, useState, type FormEventHandler } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { Callout, EmptyState, Panel, StatusBadge } from "../components/ui";
+import { Callout, EmptyState, PageIntro, Panel, StatusBadge } from "../components/ui";
 import { api, ApiError } from "../lib/api";
 import { formatDateTime, formatLabel } from "../lib/format";
 import { useLanguage } from '../lib/i18n'
@@ -166,45 +166,6 @@ export function ArtifactsPage() {
         (artifact) => artifact.artifact_id === selectedArtifactId,
       ) ?? null,
     [memoryFilesystem?.artifacts, selectedArtifactId],
-  );
-
-  const memoryStats = useMemo(() => {
-    const filesystemArtifacts = memoryFilesystem?.artifacts ?? [];
-    const sourceCount = filesystemArtifacts.length || artifacts.length;
-    const chunkCount = filesystemArtifacts.reduce(
-      (total, artifact) => total + artifact.chunk_count,
-      0,
-    );
-    const memoryObjectCount = filesystemArtifacts.reduce(
-      (total, artifact) => total + sumMemoryCounts(artifact),
-      0,
-    );
-    const signalTotal = filesystemArtifacts.reduce(
-      (total, artifact) => total + artifact.signal_count,
-      0,
-    );
-    const needsReview = artifacts.filter(
-      (artifact) =>
-        artifact.review_status === "submitted" ||
-        artifact.review_status === "needs_review",
-    ).length;
-    return {
-      sourceCount,
-      chunkCount,
-      memoryObjectCount,
-      signalTotal,
-      needsReview,
-    };
-  }, [artifacts, memoryFilesystem?.artifacts]);
-
-  const memoryVitals = useMemo(
-    () => [
-      { label: "sources", value: memoryStats.sourceCount },
-      { label: translate("objects", "nesne"), value: memoryStats.memoryObjectCount },
-      { label: "signals", value: memoryStats.signalTotal },
-      { label: "review", value: memoryStats.needsReview },
-    ],
-    [memoryStats],
   );
 
   function toggleUserSelection(
@@ -385,51 +346,35 @@ export function ArtifactsPage() {
 
   return (
     <div className="stack-xl memory-page">
-      <section className="memory-live-hero" aria-label={t('Living company memory', 'Canlı şirket hafızası')}>
-        <div className="memory-heart-card">
-          <div className="memory-heart-orb" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
-          <div className="memory-heart-copy">
-            <p className="eyebrow">{t('Memory', 'Hafıza')}</p>
-            <h2>{t('Living workspace memory', 'Canlı çalışma alanı hafızası')}</h2>
-          </div>
-        </div>
-
-        <div className="memory-vitals-grid" aria-label={t('Memory vitals', 'Hafıza göstergeleri')}>
-          {memoryVitals.map((vital) => (
-            <article key={vital.label} className="memory-vital-card">
-              <span>{vital.label}</span>
-              <strong>{vital.value}</strong>
-            </article>
-          ))}
-        </div>
-      </section>
+      <PageIntro
+        title={t('Company memory', 'Şirket hafızası')}
+        description={t('Review sources, permissions, trust, and extracted evidence.', 'Kaynakları, izinleri, güven durumunu ve çıkarılan kanıtları yönetin.')}
+      />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {success ? <Callout>{success}</Callout> : null}
 
-      <section className="memory-feed-station panel" aria-label={t('Feed memory', 'Hafızayı besle')}>
+      <details className="reasoning-disclosure">
+        <summary>{t('Add a source', 'Kaynak ekle')}</summary>
+      <section className="memory-feed-station" aria-label={t('Add a source', 'Kaynak ekle')}>
         <div className="memory-feed-head">
           <div>
-            <p className="eyebrow">{t('Add source', 'Kaynak ekle')}</p>
             <h3>{t('File or note', 'Dosya veya not')}</h3>
           </div>
-          <span>{isBusy ? "processing" : "ready"}</span>
+          <span>{isBusy ? t('Processing', 'İşleniyor') : t('Ready', 'Hazır')}</span>
         </div>
 
         <div className="memory-feed-cards">
           <form className="memory-feed-card" onSubmit={handleUpload}>
             <div className="memory-feed-card-head">
-              <span aria-hidden="true">⇧</span>
               <strong>{t('File', 'Dosya')}</strong>
               <small>PDF · MD · TXT</small>
             </div>
             <label className="field memory-quiet-field">
               <span className="field-label">{t('Title', 'Başlık')}</span>
               <input
+                name="upload_title"
+                autoComplete="off"
                 value={uploadState.title}
                 onChange={(event) =>
                   setUploadState((current) => ({
@@ -437,7 +382,7 @@ export function ArtifactsPage() {
                     title: event.target.value,
                   }))
                 }
-                placeholder={t('e.g. April coverage note', 'Örn. Nisan kapsam notu')}
+                placeholder={t('e.g. April coverage note…', 'Örn. Nisan kapsam notu…')}
                 required
               />
             </label>
@@ -449,17 +394,15 @@ export function ArtifactsPage() {
                     : "file-drop-zone memory-drop-zone"
                 }
               >
-                <span className="file-upload-icon" aria-hidden="true">
-                  +
-                </span>
                 <span className="file-drop-copy">
                   <strong>
                     {uploadFile ? uploadFile.name : translate("Choose file", "Dosya seç")}
                   </strong>
-                  <span>{uploadFile ? "Ready." : translate("Drag or click.", "Sürükleyin veya tıklayın.")}</span>
+                  <span>{uploadFile ? t('Ready', 'Hazır') : t('Drag or click', 'Sürükleyin veya tıklayın')}</span>
                 </span>
                 <input
                   className="file-input"
+                  name="upload_file"
                   type="file"
                   accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf"
                   onChange={(event) =>
@@ -472,6 +415,8 @@ export function ArtifactsPage() {
             <label className="field memory-quiet-field">
               <span className="field-label">{t('Visibility', 'Görünürlük')}</span>
               <select
+                name="upload_visibility"
+                autoComplete="off"
                 value={uploadState.visibility_scope}
                 onChange={(event) =>
                   setUploadState((current) => ({
@@ -495,6 +440,7 @@ export function ArtifactsPage() {
                 {selectableUsers.map((user) => (
                   <label key={user.user_id} className="checkbox-row">
                     <input
+                      name="upload_permitted_users"
                       type="checkbox"
                       checked={uploadState.permitted_user_ids.includes(
                         user.user_id,
@@ -517,7 +463,7 @@ export function ArtifactsPage() {
               </fieldset>
             ) : null}
             <button type="submit" className="primary-button" disabled={isBusy}>
-              {isBusy ? "Feeding…" : translate("Feed file", "Dosyayı ekle")}
+              {isBusy ? t('Adding…', 'Ekleniyor…') : t('Add file', 'Dosyayı ekle')}
             </button>
           </form>
 
@@ -526,13 +472,14 @@ export function ArtifactsPage() {
             onSubmit={handlePastedText}
           >
             <div className="memory-feed-card-head">
-              <span aria-hidden="true">✎</span>
               <strong>{t('Note', 'Not')}</strong>
-              <small>meeting · handoff · decision</small>
+              <small>{t('Meeting, handoff, or decision', 'Toplantı, devir veya karar')}</small>
             </div>
             <label className="field memory-quiet-field">
               <span className="field-label">{t('Title', 'Başlık')}</span>
               <input
+                name="note_title"
+                autoComplete="off"
                 value={pasteState.title}
                 onChange={(event) =>
                   setPasteState((current) => ({
@@ -540,13 +487,15 @@ export function ArtifactsPage() {
                     title: event.target.value,
                   }))
                 }
-                placeholder={t('e.g. Customer call summary', 'Örn. Müşteri görüşmesi özeti')}
+                placeholder={t('e.g. Customer call summary…', 'Örn. Müşteri görüşmesi özeti…')}
                 required
               />
             </label>
             <label className="field field-block memory-quiet-field">
               <span className="field-label">{t('Text', 'Metin')}</span>
               <textarea
+                name="note_text"
+                autoComplete="off"
                 value={pasteState.text}
                 onChange={(event) =>
                   setPasteState((current) => ({
@@ -555,13 +504,15 @@ export function ArtifactsPage() {
                   }))
                 }
                 rows={6}
-                placeholder={t('Paste the useful part. Izge will keep provenance and permissions attached.', 'Yararlı bölümü yapıştırın. İzge kaynak ve izin bilgilerini bağlı tutar.')}
+                placeholder={t('Paste the useful part…', 'Yararlı bölümü yapıştırın…')}
                 required
               />
             </label>
             <label className="field memory-quiet-field">
               <span className="field-label">{t('Visibility', 'Görünürlük')}</span>
               <select
+                name="note_visibility"
+                autoComplete="off"
                 value={pasteState.visibility_scope}
                 onChange={(event) =>
                   setPasteState((current) => ({
@@ -585,6 +536,7 @@ export function ArtifactsPage() {
                 {selectableUsers.map((user) => (
                   <label key={user.user_id} className="checkbox-row">
                     <input
+                      name="note_permitted_users"
                       type="checkbox"
                       checked={pasteState.permitted_user_ids.includes(
                         user.user_id,
@@ -607,11 +559,12 @@ export function ArtifactsPage() {
               </fieldset>
             ) : null}
             <button type="submit" className="primary-button" disabled={isBusy}>
-              {isBusy ? "Feeding…" : translate("Feed note", "Notu ekle")}
+              {isBusy ? t('Adding…', 'Ekleniyor…') : t('Add note', 'Notu ekle')}
             </button>
           </form>
         </div>
       </section>
+      </details>
 
       <div className="two-column-layout wide-right-column memory-source-grid">
         <Panel
@@ -640,9 +593,6 @@ export function ArtifactsPage() {
                       void handleArtifactSelection(artifact.artifact_id)
                     }
                   >
-                    <span className="memory-source-icon" aria-hidden="true">
-                      {artifact.source_type === "pasted_text" ? "✎" : "▣"}
-                    </span>
                     <span className="memory-source-summary-copy">
                       <strong>{artifact.title}</strong>
                       <small>{artifact.original_filename ?? translate("Pasted text", "Yapıştırılan metin")}</small>
@@ -695,7 +645,7 @@ export function ArtifactsPage() {
                 onClick={() => void handleRunIngestion()}
                 disabled={isBusy}
               >
-                {isBusy ? "Processing…" : translate("Process now", "Şimdi işle")}
+                {isBusy ? t('Processing…', 'İşleniyor…') : t('Process now', 'Şimdi işle')}
               </button>
             ) : null
           }
@@ -788,6 +738,8 @@ export function ArtifactsPage() {
                     <label className="field">
                       <span className="field-label">{t('Review status', 'İnceleme durumu')}</span>
                       <select
+                        name="review_status"
+                        autoComplete="off"
                         value={reviewState.review_status}
                         onChange={(event) =>
                           setReviewState((current) => ({
@@ -805,6 +757,8 @@ export function ArtifactsPage() {
                     <label className="field field-block">
                       <span className="field-label">{t('Notes', 'Notlar')}</span>
                       <textarea
+                        name="review_notes"
+                        autoComplete="off"
                         value={reviewState.review_notes}
                         onChange={(event) =>
                           setReviewState((current) => ({
@@ -813,7 +767,7 @@ export function ArtifactsPage() {
                           }))
                         }
                         rows={3}
-                        placeholder={t('Reason for trust, rejection, or review hold.', 'Güven, ret veya inceleme bekletme nedeni.')}
+                        placeholder={t('Reason for trust, rejection, or review hold…', 'Güven, ret veya inceleme bekletme nedeni…')}
                       />
                     </label>
                     <button
@@ -822,7 +776,7 @@ export function ArtifactsPage() {
                       onClick={() => void handleReviewUpdate()}
                       disabled={isBusy}
                     >
-                      {isBusy ? "Updating…" : translate("Save trust state", "Güven durumunu kaydet")}
+                      {isBusy ? t('Updating…', 'Güncelleniyor…') : t('Save trust state', 'Güven durumunu kaydet')}
                     </button>
                   </>
                 ) : (

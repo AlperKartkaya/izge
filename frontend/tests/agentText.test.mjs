@@ -64,3 +64,10 @@ test('provider Markdown links render safe destinations, never javascript or code
   assert.deepEqual(tokenizeAgentText('[unsafe](javascript:alert)'), [{ kind: 'text', value: '[unsafe](javascript:alert)' }])
   assert.deepEqual(tokenizeAgentText('`[Python](https://python.org/docs)`'), [{ kind: 'code', value: '[Python](https://python.org/docs)' }])
 })
+
+test('a truncated final bold heading does not leak its unmatched opening marker', () => {
+  assert.deepEqual(tokenizeAgentText('**Yarın İçin En Yararlı Üç'), [{ kind: 'text', value: 'Yarın İçin En Yararlı Üç' }])
+  assert.deepEqual(tokenizeAgentText('**Tam başlık**'), [{ kind: 'bold', value: 'Tam başlık' }])
+  assert.deepEqual(tokenizeAgentText('`**literal`'), [{ kind: 'code', value: '**literal' }])
+  assert.deepEqual(tokenizeAgentText('2**3'), [{ kind: 'text', value: '2**3' }])
+})

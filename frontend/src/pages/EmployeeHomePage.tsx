@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { LoadingState, TaskRows } from '../components/AgentPrimitives'
-import { Callout, EmptyState, MetricCard, Panel } from '../components/ui'
+import { Callout, EmptyState, Panel } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import type { AgentRunRead, ArtifactRead, SignalRead, WorkTaskRead, WorkTaskStatus } from '../lib/types'
@@ -73,22 +73,31 @@ export function EmployeeHomePage() {
 
   return (
     <div className="stack-lg">
-      <header className="employee-home-hero"><div><p className="eyebrow">{t('Your workspace', 'Çalışma alanınız')}</p><h1>{homeGreeting(session?.user.display_name ?? '', language, now)}</h1><p>{t('Izge tracks files, decisions, and work, highlighting important changes with their sources.', 'İzge dosyaları, kararları ve işleri takip eder; sizin için önemli değişiklikleri kaynaklarıyla öne çıkarır.')}</p></div><Link className="primary-button" to="/query">{t('Ask Izge', 'İzge’ye sor')}</Link></header>
+      <header className="employee-home-hero"><div><h1>{homeGreeting(session?.user.display_name ?? '', language, now)}</h1><p>{t('Start with the work that needs your attention.', 'Önce dikkatinizi bekleyen işlerden başlayın.')}</p></div><Link className="primary-button" to="/query">{t('Ask Izge', 'İzge’ye sor')}</Link></header>
       {error ? <Callout tone="warning">{error}</Callout> : null}
       {loading ? <LoadingState label={t('Preparing workspace', 'Çalışma alanı hazırlanıyor')} /> : (
-        <div className="metric-grid"><MetricCard label={t('Open work', 'Açık iş')} value={openTasks.length} detail={t('Work that needs follow-up', 'Takip edilmesi gereken işler')} /><MetricCard label={t('Sources', 'Kaynak')} value={artifacts.length} detail={t('Files and notes in company memory', 'Şirket hafızasındaki dosya ve notlar')} /><MetricCard label={t('New signals', 'Yeni sinyal')} value={signals.length} detail={t('Changes, conflicts, and recommendations', 'Değişiklik, çelişki ve öneriler')} /></div>
+        <div className="employee-home-summary" role="status">
+          <strong>{openTasks.length ? t(`${openTasks.length} open work items`, `${openTasks.length} açık iş`) : t('No open work', 'Açık iş yok')}</strong>
+          <span>{signals.length ? t(`${signals.length} changes to review`, `İncelenecek ${signals.length} değişiklik`) : t('No new changes', 'Yeni değişiklik yok')}</span>
+        </div>
       )}
+      <nav className="employee-home-actions" aria-label={t('Quick actions', 'Hızlı işlemler')}>
+        <Link to="/tasks">{t('Review work', 'İşleri gözden geçir')}</Link>
+        <Link to="/team-chat">{t('Open team chat', 'Ekip sohbetini aç')}</Link>
+        <Link to="/memory">{t(`Browse ${artifacts.length} sources`, `${artifacts.length} kaynağı incele`)}</Link>
+        <Link to={recentSignals[0] ? `/signals/${recentSignals[0].signal_id}` : '/memory'}>{recentSignals[0] ? t('Review latest change', 'Son değişikliği incele') : t('Explore company memory', 'Şirket hafızasını keşfet')}</Link>
+      </nav>
       <div className="employee-two-column">
-        <Panel title={t("Today's work", 'Bugünün işleri')} description={t('Track Izge reminders and work assigned to you here.', 'İzge hatırlatmaları ve size atanan işleri burada takip eder.')} aside={<Link to="/tasks">{t('Open all', 'Tümünü aç')}</Link>}>
+        <Panel title={t("Today's work", 'Bugünün işleri')} aside={<Link to="/tasks">{t('Open all', 'Tümünü aç')}</Link>}>
           {openTasks.length ? <TaskRows tasks={openTasks.slice(0, 5)} onStatusChange={updateTask} /> : <EmptyState title={t('No open work', 'Açık iş yok')} description={t('You can add a new task or reminder.', 'Yeni bir iş veya hatırlatma ekleyebilirsiniz.')} />}
         </Panel>
-        <Panel title={t("Izge's daily review", 'İzge’nin günlük değerlendirmesi')} description={t('Prepared from file, daily log, and work changes throughout the day.', 'Gün içindeki dosya, günlük ve iş değişikliklerinden hazırlanır.')} aside={<button type="button" className="text-button" disabled={Boolean(reviewRun && (reviewRun.status === 'queued' || reviewRun.status === 'running'))} onClick={() => void startReview()}>{t('Review now', 'Şimdi değerlendir')}</button>}>
+        <Panel title={t("Izge's daily review", 'İzge’nin günlük değerlendirmesi')} aside={<button type="button" className="text-button" disabled={Boolean(reviewRun && (reviewRun.status === 'queued' || reviewRun.status === 'running'))} onClick={() => void startReview()}>{t('Review now', 'Şimdi değerlendir')}</button>}>
           {reviewRun && (reviewRun.status === 'queued' || reviewRun.status === 'running') ? <LoadingState label={reviewRun.stages.at(-1)?.label ?? t('Reviewing the day', 'Gün değerlendiriliyor')} /> : null}
           {reviewRun?.status === 'failed' ? <Callout tone="warning">{reviewRun.error || t('Daily review could not be completed.', 'Günlük değerlendirme tamamlanamadı.')}</Callout> : null}
           {latestReview ? <ReviewContextCards review={latestReview} /> : !reviewRun ? <EmptyState title={t('No review yet', 'Henüz değerlendirme yok')} description={t('Izge prepares an end-of-day review as daily notes and work are added.', 'Günlük not ve işler eklendikçe İzge gün sonu değerlendirmesi hazırlar.')} /> : null}
         </Panel>
       </div>
-      <Panel title={t('Recent changes', 'Son değişiklikler')} description={t('Decision, assumption, and work signals that need review.', 'İncelenmesi gereken karar, varsayım ve iş sinyalleri.')}>
+      <Panel title={t('Recent changes', 'Son değişiklikler')}>
         {recentSignals.length ? <div className="employee-signal-list">{recentSignals.slice(0, 5).map((signal) => <Link key={signal.signal_id} to={`/signals/${signal.signal_id}`}><strong>{signal.title}</strong><span>{signal.summary}</span><small>{formatDateTime(signal.created_at)}</small></Link>)}</div> : <EmptyState title={t('No new changes', 'Yeni değişiklik yok')} description={t('When Izge finds a new conflict or risk, it will appear here.', 'İzge yeni bir çelişki veya risk bulduğunda burada gösterir.')} />}
       </Panel>
     </div>

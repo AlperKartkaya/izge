@@ -11,6 +11,13 @@ export function nextTaskStatus(status: WorkTaskStatus) {
   return taskStatusCycle[status]
 }
 
+export function splitTasksByCompletion<T extends { status: WorkTaskStatus }>(tasks: T[]) {
+  return {
+    active: tasks.filter((task) => task.status !== 'done'),
+    completed: tasks.filter((task) => task.status === 'done'),
+  }
+}
+
 export function taskStatusLabel(status: WorkTaskStatus, language: Language) {
   if (status === 'open') return translate('Open', 'Açık', language)
   if (status === 'in_progress') return translate('In progress', 'Devam ediyor', language)

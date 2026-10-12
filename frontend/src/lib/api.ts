@@ -403,8 +403,20 @@ export const api = {
     return request<{ items: NotificationRead[]; unread_count: number }>(`/notifications?limit=50&unread_only=${unreadOnly}`, { token })
   },
 
+  getNotification(token: string, notificationId: string) {
+    return request<NotificationRead>(`/notifications/${encodeURIComponent(notificationId)}`, { token })
+  },
+
   markNotificationRead(token: string, notificationId: string) {
-    return request<NotificationRead>(`/notifications/${notificationId}/read`, { method: 'PATCH', token })
+    return request<NotificationRead>(`/notifications/${encodeURIComponent(notificationId)}/read`, { method: 'PATCH', token })
+  },
+
+  markNotificationUnread(token: string, notificationId: string) {
+    return request<NotificationRead>(`/notifications/${encodeURIComponent(notificationId)}/unread`, { method: 'PATCH', token })
+  },
+
+  deleteNotification(token: string, notificationId: string) {
+    return request<void>(`/notifications/${encodeURIComponent(notificationId)}`, { method: 'DELETE', token })
   },
 
   listAutomations(token: string) {

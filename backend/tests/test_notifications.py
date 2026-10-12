@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.db import Base
 from app.models import Artifact, ArtifactChunk, ArtifactPermission, ColleagueRun, CompanyChatMessage, Notification, User, Workspace
-from app.routers.notifications import list_notifications, mark_notification_read
+from app.routers.notifications import _read, delete_notification, get_notification, list_notifications, mark_notification_read, mark_notification_unread
 from app.routers.artifacts import create_pasted_text_artifact
 from app.routers.team_chat import create_team_chat_message, list_team_chat_messages
 from app.routers.work import list_runs
@@ -24,6 +24,7 @@ from app.schemas.api import PastedTextCreate, TeamChatMessageCreate
 from app.services.colleague import (
     _evaluate_artifact_review,
     _generate_follow_ups,
+    _notification_preview,
     claim_next_colleague_run,
     enqueue_artifact_review,
     enqueue_colleague_question,
@@ -31,6 +32,7 @@ from app.services.colleague import (
     retrieve_shared_context,
 )
 from app.services.llm import LocalLLMError
+from app.services.notifications import create_notification
 
 
 class NotificationFlowTest(unittest.TestCase):
@@ -114,11 +116,91 @@ class NotificationFlowTest(unittest.TestCase):
         bob_list = list_notifications(50, False, self.bob, self.db)
         self.assertEqual(1, bob_list.unread_count)
         with self.assertRaises(HTTPException) as raised:
+            get_notification(notifications[0].notification_id, self.carol, self.db)
+        self.assertEqual(404, raised.exception.status_code)
+        with self.assertRaises(HTTPException) as raised:
             mark_notification_read(notifications[0].notification_id, self.carol, self.db)
         self.assertEqual(404, raised.exception.status_code)
         read = mark_notification_read(notifications[0].notification_id, self.bob, self.db)
         self.assertIsNotNone(read.read_at)
         self.assertEqual(0, list_notifications(50, False, self.bob, self.db).unread_count)
+        unread = mark_notification_unread(notifications[0].notification_id, self.bob, self.db)
+        self.assertIsNone(unread.read_at)
+        with self.assertRaises(HTTPException) as raised:
+            delete_notification(notifications[0].notification_id, self.carol, self.db)
+        self.assertEqual(404, raised.exception.status_code)
+        delete_notification(notifications[0].notification_id, self.bob, self.db)
+        self.assertIsNone(self.db.get(Notification, notifications[0].notification_id))
+
+    def test_notification_body_keeps_complete_markdown_for_expansion(self) -> None:
+        body = "## Durum\n\n" + ("Uzun bildirim satırı. " * 90) + "\n\n**Son öneri**"
+        create_team_chat_message(
+            TeamChatMessageCreate(
+                body=body,
+                thread_id=f"direct:{self.alice.user_id}:{self.bob.user_id}",
+                thread_title="Alice / Bob",
+                thread_kind="direct",
+                message_metadata={"participant_user_ids": [self.bob.user_id]},
+            ),
+            self.alice,
+            self.db,
+        )
+        notification = list_notifications(50, False, self.bob, self.db).items[0]
+        self.assertLessEqual(len(notification.body), 321)
+        self.assertEqual(body, get_notification(notification.notification_id, self.bob, self.db).body)
+        self.assertLessEqual(len(_notification_preview(body)), 1200)
+        linked = self.db.get(Notification, notification.notification_id)
+        self.assertIsNotNone(linked)
+        if linked is None:
+            self.fail("Notification was not persisted")
+        self.assertLessEqual(len(linked.body), 1200)
+        linked.body = body[:1200]
+        self.db.commit()
+        self.assertEqual(body, _read(linked, self.db, self.bob).body)
+        run = ColleagueRun(
+            workspace_id=self.workspace.workspace_id,
+            created_by=self.alice.user_id,
+            kind="evening_review",
+            client_request_id="legacy-notification-run",
+            thread_id="izge-colleague",
+            thread_title="İzge",
+            participant_user_ids=[self.bob.user_id],
+            question="Değerlendir",
+            status="completed",
+            answer=body,
+        )
+        self.db.add(run)
+        self.db.flush()
+        legacy = Notification(
+            workspace_id=self.workspace.workspace_id,
+            recipient_user_id=self.bob.user_id,
+            kind="agent",
+            title="Eski bildirim",
+            body=body[:1200],
+            source_key="legacy:truncated",
+            thread_id=run.thread_id,
+            run_id=run.run_id,
+        )
+        self.db.add(legacy)
+        self.db.commit()
+        self.assertEqual(body, _read(legacy, self.db, self.bob).body)
+        self.assertEqual(body, get_notification(legacy.notification_id, self.bob, self.db).body)
+
+    def test_standalone_notification_keeps_its_only_complete_copy(self) -> None:
+        body = "Bağımsız bildirim. " * 100
+        standalone = create_notification(
+            self.db,
+            recipient=self.bob,
+            kind="agent",
+            title="Bağımsız",
+            body=body,
+            source_key="standalone:complete",
+        )
+        self.db.commit()
+        self.assertEqual(body, standalone.body)
+        listed = next(item for item in list_notifications(50, False, self.bob, self.db).items if item.notification_id == standalone.notification_id)
+        self.assertLessEqual(len(listed.body), 321)
+        self.assertEqual(body, get_notification(standalone.notification_id, self.bob, self.db).body)
 
     def test_scoped_channel_notifies_only_explicit_participants(self) -> None:
         create_team_chat_message(
@@ -246,6 +328,7 @@ class NotificationFlowTest(unittest.TestCase):
         self.db.commit()
         redacted = list_notifications(50, False, self.bob, self.db).items[0]
         self.assertIn("erişiminiz değişti", redacted.body)
+        self.assertIn("erişiminiz değişti", get_notification(notification.notification_id, self.bob, self.db).body)
         redacted_run = list_runs(40, self.bob, self.db, run.thread_id).items[0]
         self.assertEqual("Yeni kayıt değerlendirildi.", redacted_run.question)
         self.assertEqual("İzge ile çalışma", redacted_run.thread_title)

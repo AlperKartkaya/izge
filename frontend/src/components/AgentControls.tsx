@@ -9,12 +9,17 @@ export function AgentControls({ controls, disabled = false }: { controls: Contro
   const { t } = useLanguage()
   if (!controls.catalog) return controls.loadError ? <small className="agent-controls-status">{t('Model choices could not be loaded; the default will be used.', 'Model seçenekleri yüklenemedi; varsayılan kullanılacak.')}</small> : null
   return (
+    <>
+    <details className="agent-settings">
+      <summary>{t('Response settings', 'Yanıt ayarları')}</summary>
     <fieldset className="agent-controls" disabled={disabled}>
       <legend className="sr-only">{t('Izge work settings', 'İzge çalışma ayarları')}</legend>
       <label><span>{t('Model', 'Model')}</span><select value={controls.modelProfile} onChange={(event) => controls.setModelProfile(event.target.value as AgentModelProfileId)}>{!controls.modelProfile ? <option value="">{t('No configured model', 'Yapılandırılmış model yok')}</option> : null}{controls.catalog.profiles.map((profile) => <option key={profile.id} value={profile.id} disabled={!profile.enabled}>{profile.label}{profile.enabled ? '' : ` — ${profile.reason ?? t('Not configured', 'Yapılandırılmadı')}`}</option>)}</select></label>
       {controls.selected?.supported_efforts.some((effort) => effort !== 'none') ? <label><span>{t('Effort', 'Efor')}</span><select value={controls.reasoningEffort ?? ''} onChange={(event) => controls.setReasoningEffort(event.target.value)}><option value="">{t('Default', 'Varsayılan')}</option>{controls.selected.supported_efforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}</select></label> : null}
-      {controls.selected?.data_boundary === 'cloud' ? <small className="agent-controls-warning">{t('The prompt and selected context are sent to the cloud model provider.', 'İstem ve seçilen bağlam bulut model sağlayıcısına gönderilir.')}</small> : null}
     </fieldset>
+    </details>
+    {controls.selected?.data_boundary === 'cloud' ? <small className="agent-controls-warning">{t('The prompt and selected context are sent to the cloud model provider.', 'İstem ve seçilen bağlam bulut model sağlayıcısına gönderilir.')}</small> : null}
+    </>
   )
 }
 

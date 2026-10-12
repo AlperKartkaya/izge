@@ -25,14 +25,16 @@ def _owned(db: Session, actor: User, automation_id: str) -> Automation:
 
 
 def _read(db: Session, item: Automation) -> AutomationRead:
-    run_scope = (
+    owner_scope = (
         ColleagueRun.workspace_id == item.workspace_id,
         ColleagueRun.created_by == item.created_by,
-        ColleagueRun.thread_id == f"automation:{item.automation_id}",
     )
-    latest_run = db.scalar(select(ColleagueRun).where(*run_scope, ColleagueRun.run_id == item.last_run_id)) if item.last_run_id else None
+    latest_run = db.scalar(select(ColleagueRun).where(*owner_scope, ColleagueRun.run_id == item.last_run_id)) if item.last_run_id else None
     if latest_run is None:
-        latest_run = db.scalar(select(ColleagueRun).where(*run_scope).order_by(ColleagueRun.created_at.desc()).limit(1))
+        latest_run = db.scalar(select(ColleagueRun).where(
+            *owner_scope,
+            ColleagueRun.thread_id == f"automation:{item.automation_id}",
+        ).order_by(ColleagueRun.created_at.desc()).limit(1))
     last_run_id = latest_run.run_id if latest_run else None
     last_run_at = latest_run.started_at if latest_run else item.last_run_at
     return AutomationRead.model_validate({

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEventHandler, ty
 import { insertIzgeMentionAtCaret, tokenizeAgentText } from '../lib/agentText'
 import { markdownBlocks } from '../lib/markdownBlocks'
 import { useLanguage } from '../lib/i18n'
-import { formatSystemText } from '../lib/format'
+import { formatDateTime, formatSystemText } from '../lib/format'
 import { nextTaskStatus, taskStatusAction, taskStatusLabel } from '../lib/taskStatus'
 import { latestAgentStages, safeHttpUrl } from '../lib/agentRun'
 import type { AgentRunStageRead, AgentSourceRead, WorkTaskRead, WorkTaskStatus } from '../lib/types'
@@ -46,15 +46,16 @@ export function ThinkingState({ stages, status }: { stages: AgentRunStageRead[];
   return (
     <div className="agent-thinking">
       <button type="button" className="agent-thinking-toggle" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
-        <span aria-hidden="true">✦</span>
+        <span className="agent-thinking-mark" aria-hidden="true"><IzgeLogo /></span>
         <span className={working ? 'agent-shimmer' : ''}>{working ? t('Izge is thinking', 'İzge düşünüyor') : status === 'completed' ? t('Work completed', 'Çalışma tamamlandı') : t('Work failed', 'Çalışma başarısız')}</span>
-        <span aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
+        <span className="disclosure-indicator" aria-hidden="true" />
       </button>
       {expanded ? (
         <ol className="agent-stage-list">
           {visibleStages.map((stage) => (
             <li key={`${stage.sequence}-${stage.key}`} data-status={stage.status}>
-              <span aria-hidden="true">{stage.status === 'completed' ? '✓' : stage.status === 'failed' ? '×' : '•'}</span>
+              <span className="agent-stage-mark" aria-hidden="true">{stage.status === 'completed' ? '✓' : stage.status === 'failed' ? '×' : stage.status === 'running' ? '…' : '○'}</span>
+              <span className="sr-only">{stage.status === 'completed' ? t('Completed', 'Tamamlandı') : stage.status === 'failed' ? t('Failed', 'Başarısız') : stage.status === 'running' ? t('Running', 'Çalışıyor') : t('Pending', 'Bekliyor')}</span>
               <span><strong>{formatSystemText(stage.label)}</strong>{stage.summary ? <small>{formatSystemText(stage.summary)}</small> : null}</span>
             </li>
           ))}
@@ -81,10 +82,12 @@ function InlineText({ text, sources = [] }: { text: string; sources?: AgentSourc
     if (token.kind === 'source') {
       const source = sources[token.sourceIndex]
       if (!source) return token.value
+      const sourceLabel = `[${token.sourceIndex + 1}]`
+      const citation = <>{sourceLabel}<span className="sr-only">{source.title}</span></>
       const url = source.source_type === 'web' ? safeHttpUrl(source.url) : null
-      if (url) return <a key={index} href={url} target="_blank" rel="noreferrer" className="agent-inline-source">{source.title}</a>
-      if (source.source_type === 'mcp' || source.source_type === 'web') return <span key={index} className="agent-inline-source">{source.title}</span>
-      return <SourcePreviewButton key={index} artifactId={source.artifact_id} title={source.title} className="agent-inline-source">{source.title}</SourcePreviewButton>
+      if (url) return <a key={index} href={url} target="_blank" rel="noreferrer" className="agent-inline-source" title={source.title}>{citation}</a>
+      if (source.source_type === 'mcp' || source.source_type === 'web') return <span key={index} className="agent-inline-source" title={source.title}>{citation}</span>
+      return <SourcePreviewButton key={index} artifactId={source.artifact_id} title={source.title} className="agent-inline-source">{citation}</SourcePreviewButton>
     }
     return token.value
   })
@@ -117,16 +120,16 @@ export function AgentAnswer({ text, sources = [], followUps = [], onFollowUp, ac
   const { t } = useLanguage()
   return <div className="agent-answer">
     <div className="agent-answer-copy"><AgentText text={text} sources={sources} />{active ? <span className="agent-streaming-cursor" aria-label={t('Writing response', 'Yanıt yazılıyor')} /> : null}</div>
-    {sources.length ? <div className="agent-context-cards" aria-label={t('Sources used in the response', 'Yanıtta kullanılan kaynaklar')}>{sources.map((source, index) => {
+    {sources.length ? <details className="agent-evidence"><summary>{sources.length} {t('sources', 'kaynak')}</summary><div className="agent-evidence-list" aria-label={t('Sources used in the response', 'Yanıtta kullanılan kaynaklar')}>{sources.map((source, index) => {
       const url = source.source_type === 'web' ? safeHttpUrl(source.url) : null
-      return <article className="agent-context-card" key={`${source.source_type ?? 'artifact'}-${source.artifact_id}-${source.chunk_id ?? index}`}><strong>{source.title}</strong><div className="agent-context-excerpt markdown-content"><AgentText text={source.quote} /></div>{url ? <a href={url} target="_blank" rel="noreferrer">{t('Open web source', 'Web kaynağını aç')}</a> : source.source_type === 'mcp' ? <small>{t('Company tool context', 'Şirket aracı bağlamı')}</small> : source.source_type === 'web' ? <small>{t('Web address unavailable', 'Web adresi kullanılamıyor')}</small> : <SourcePreviewButton artifactId={source.artifact_id} title={source.title} />}</article>
-    })}</div> : null}
+      return <details className="agent-evidence-source" key={`${source.source_type ?? 'artifact'}-${source.artifact_id}-${source.chunk_id ?? index}`}><summary><span className="agent-evidence-index">{index + 1}</span><span className="agent-evidence-title">{source.title}</span></summary><div className="agent-evidence-detail"><div className="agent-context-excerpt markdown-content" tabIndex={0} role="region" aria-label={t(`Excerpt: ${source.title}`, `Alıntı: ${source.title}`)}><AgentText text={source.quote} /></div>{url ? <a href={url} target="_blank" rel="noreferrer">{t('Open web source', 'Web kaynağını aç')}</a> : source.source_type === 'mcp' ? <small>{t('Company tool context', 'Şirket aracı bağlamı')}</small> : source.source_type === 'web' ? <small>{t('Web address unavailable', 'Web adresi kullanılamıyor')}</small> : <SourcePreviewButton artifactId={source.artifact_id} title={source.title} />}</div></details>
+    })}</div></details> : null}
     {followUps.length && onFollowUp ? <div className="agent-follow-ups"><strong>{t('Would you like to continue?', 'Devam etmek ister misiniz?')}</strong>{followUps.map((question) => <button type="button" key={question} onClick={() => onFollowUp(question)}>{question}</button>)}</div> : null}
   </div>
 }
 
 export function TaskRows({ tasks, onStatusChange }: { tasks: WorkTaskRead[]; onStatusChange: (task: WorkTaskRead, status: WorkTaskStatus) => Promise<void> }) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const [pendingTasks, setPendingTasks] = useState<Set<string>>(new Set())
   const pendingRef = useRef(new Set<string>())
   async function changeStatus(task: WorkTaskRead) {
@@ -155,6 +158,7 @@ export function TaskRows({ tasks, onStatusChange }: { tasks: WorkTaskRead[]; onS
           <div className="agent-task-copy">
             <strong>{task.title}</strong>
             {task.description ? <span>{task.description}</span> : null}
+            <small className="task-metadata"><span>{task.assignee_display_name ?? t('Unassigned', 'Atanmamış')}</span>{task.due_at ? <time dateTime={task.due_at}>{t('Due', 'Bitiş')}: {formatDateTime(task.due_at)}</time> : null}</small>
           </div>
           <span className={`agent-task-status agent-task-status-${task.status}`}>{taskStatusLabel(task.status, language)}</span>
         </article>

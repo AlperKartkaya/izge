@@ -32,7 +32,7 @@ def create_notification(
         recipient_user_id=recipient.user_id,
         kind=kind,
         title=title[:255],
-        body=body,
+        body=body[:1200] if run_id or message_id else body,
         source_key=source_key,
         thread_id=thread_id,
         run_id=run_id,

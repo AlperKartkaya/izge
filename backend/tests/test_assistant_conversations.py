@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 import tempfile
+from threading import Barrier
 import unittest
 from unittest.mock import patch
 
@@ -69,6 +71,11 @@ class AssistantConversationTest(unittest.TestCase):
     def test_default_and_created_conversations_are_private_per_user(self) -> None:
         default = list_conversations(False, self.alice, self.db).items[0]
         self.assertEqual("izge-colleague", default.thread_id)
+        enqueue_colleague_question(
+            self.db, actor=self.alice, message="Start", client_request_id="default-first-message",
+            thread_id=default.thread_id, thread_title=default.title, thread_kind="direct",
+            participant_user_ids=[self.alice.user_id],
+        )
         created = self._create()
         self.assertTrue(created.thread_id.startswith("assistant-cowork:"))
 
@@ -78,6 +85,48 @@ class AssistantConversationTest(unittest.TestCase):
             with self.subTest(reader=reader.display_name), self.assertRaises(HTTPException) as denied:
                 get_conversation(created.conversation_id, reader, self.db)
             self.assertEqual(404, denied.exception.status_code)
+
+    def test_new_conversation_reuses_empty_draft_but_not_a_draft_with_an_attachment(self) -> None:
+        empty = self._create("Empty draft")
+
+        reused = create_conversation(AssistantConversationCreate(title="Another draft"), self.alice, self.db)
+
+        self.assertEqual(empty.conversation_id, reused.conversation_id)
+        upload = UploadFile(
+            filename="context.txt",
+            file=BytesIO(b"Context makes this draft meaningful."),
+            headers=Headers({"content-type": "text/plain"}),
+        )
+        target = Path(self.temp_dir.name) / "context.txt"
+
+        def persist(content: bytes, *, artifact_id: str, filename: str | None) -> tuple[str, str]:
+            target.write_bytes(content)
+            return str(target), "checksum"
+
+        with (
+            patch("app.routers.team_chat.persist_upload_bytes", side_effect=persist),
+            patch("app.routers.artifacts._feed_memory_inline", return_value=True),
+        ):
+            asyncio.run(attach_conversation_file(empty.conversation_id, upload, self.alice, self.db))
+
+        created = create_conversation(AssistantConversationCreate(title="After attachment"), self.alice, self.db)
+        self.assertNotEqual(empty.conversation_id, created.conversation_id)
+
+    def test_simultaneous_create_requests_share_one_empty_draft(self) -> None:
+        user_id = self.alice.user_id
+        start = Barrier(2)
+
+        def create_from_separate_session(title: str) -> str:
+            with Session(self.engine) as session:
+                actor = session.get(User, user_id)
+                assert actor is not None
+                start.wait()
+                return create_conversation(AssistantConversationCreate(title=title), actor, session).conversation_id
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            conversation_ids = list(pool.map(create_from_separate_session, ["First tab", "Second tab"]))
+
+        self.assertEqual(1, len(set(conversation_ids)))
 
     def test_legacy_personal_threads_are_discovered_without_importing_shared_direct_threads(self) -> None:
         personal = ColleagueRun(

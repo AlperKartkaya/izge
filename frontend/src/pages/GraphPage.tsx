@@ -1,24 +1,36 @@
 import { translate } from '../lib/language'
 import { SourcePreviewButton } from '../components/SourcePreviewButton'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  useEffect,
-  useMemo,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
-} from 'react'
+  Background,
+  Controls,
+  MarkerType,
+  MiniMap,
+  Position,
+  ReactFlow,
+  type Edge,
+  type Node,
+  type ReactFlowInstance,
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
 import { useLanguage } from '../lib/i18n'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
   Callout,
   EmptyState,
-  MetricCard,
   PageIntro,
   Panel,
   StatusBadge,
 } from '../components/ui'
 import { api, ApiError } from '../lib/api'
+import {
+  buildEvidenceGraph,
+  resolveGraphSelection,
+  scopeEvidenceGraph,
+  type EvidenceGraphEdge,
+  type EvidenceGraphNode,
+} from '../lib/graphLayout'
 import {
   formatDate,
   formatDateTime,
@@ -33,286 +45,32 @@ import type {
   GraphTimelineItem,
   NextActionSignalItem,
   SignalRead,
-  TemporalGraphLink,
-  TemporalGraphOccurrence,
   TemporalGraphRead,
 } from '../lib/types'
 
-interface InteractiveGraphNode {
+interface GraphSearchItem {
   id: string
-  kind: 'artifact' | 'memory'
   label: string
   subtitle: string
-  x: number
-  y: number
-  memoryType?: string
-  memoryId?: string
-  occurrence?: TemporalGraphOccurrence
-  artifactId?: string
-  artifactTitle?: string
-  confidenceScore?: number
 }
 
-interface InteractiveGraphEdge {
-  id: string
-  fromId: string
-  toId: string
-  edgeType: string
-  confidenceScore: number
-  sourceLink?: TemporalGraphLink
+type FlowNode = Node<{ graphNode: EvidenceGraphNode; label: ReactNode }>
+type FlowEdge = Edge<{ graphEdge: EvidenceGraphEdge }>
+
+const graphRelationshipLabels: Record<string, readonly [string, string]> = {
+  mentioned_in: ['Mentioned in', 'İçinde geçer'],
+  based_on: ['Based on', 'Dayanır'],
+  constrained_by: ['Constrained by', 'Kısıtlanır'],
+  resulted_in: ['Resulted in', 'Sonuçlandı'],
+  relates_to: ['Related to', 'İlişkili'],
+  supersedes: ['Updates', 'Günceller'],
+  contradicts: ['Contradicts', 'Çelişir'],
+  source_artifact: ['Extracted from', 'Kaynağından çıkarıldı'],
 }
 
-interface InteractiveGraphModel {
-  nodes: InteractiveGraphNode[]
-  edges: InteractiveGraphEdge[]
-}
-
-interface GraphViewport {
-  x: number
-  y: number
-  scale: number
-}
-
-interface GraphDragState {
-  pointerId: number
-  startClientX: number
-  startClientY: number
-  originX: number
-  originY: number
-}
-
-const GRAPH_VIEWBOX_WIDTH = 980
-const GRAPH_VIEWBOX_HEIGHT = 620
-const GRAPH_MIN_SCALE = 0.55
-const GRAPH_MAX_SCALE = 3.4
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max)
-}
-
-function truncateGraphLabel(value: string, limit = 30): string {
-  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value
-}
-
-type GraphClusterKey =
-  | 'launch'
-  | 'security'
-  | 'customer'
-  | 'engineering'
-  | 'operations'
-  | 'general'
-
-const GRAPH_CLUSTER_ANCHORS: Record<
-  GraphClusterKey,
-  { x: number; y: number; label: string }
-> = {
-  launch: { x: 260, y: 210, label: "Launch cluster" },
-  security: { x: 675, y: 190, label: "Security cluster" },
-  customer: { x: 690, y: 430, label: "Customer cluster" },
-  engineering: { x: 455, y: 315, label: "Engineering cluster" },
-  operations: { x: 265, y: 455, label: "Operations cluster" },
-  general: { x: 500, y: 520, label: "Company memory" },
-}
-
-function graphClusterKey(title: string): GraphClusterKey {
-  const normalizedTitle = title.toLowerCase()
-  if (
-    normalizedTitle.includes('security') ||
-    normalizedTitle.includes('payroll') ||
-    normalizedTitle.includes('access') ||
-    normalizedTitle.includes('pii')
-  ) {
-    return 'security'
-  }
-  if (
-    normalizedTitle.includes('support') ||
-    normalizedTitle.includes('customer') ||
-    normalizedTitle.includes('faq') ||
-    normalizedTitle.includes('escalation')
-  ) {
-    return 'customer'
-  }
-  if (
-    normalizedTitle.includes('engineering') ||
-    normalizedTitle.includes('analytics') ||
-    normalizedTitle.includes('incident') ||
-    normalizedTitle.includes('vendor')
-  ) {
-    return 'engineering'
-  }
-  if (
-    normalizedTitle.includes('finance') ||
-    normalizedTitle.includes('hiring') ||
-    normalizedTitle.includes('coverage') ||
-    normalizedTitle.includes('people') ||
-    normalizedTitle.includes('pto') ||
-    normalizedTitle.includes('remote')
-  ) {
-    return 'operations'
-  }
-  if (
-    normalizedTitle.includes('roadmap') ||
-    normalizedTitle.includes('onboarding') ||
-    normalizedTitle.includes('strategy') ||
-    normalizedTitle.includes('runbook') ||
-    normalizedTitle.includes('launch')
-  ) {
-    return 'launch'
-  }
-  return 'general'
-}
-
-function buildInteractiveGraph(
-  temporalGraph: TemporalGraphRead | null,
-): InteractiveGraphModel {
-  if (!temporalGraph || temporalGraph.occurrences.length === 0) {
-    return { nodes: [], edges: [] }
-  }
-
-  const artifactMap = new Map<string, string>()
-  temporalGraph.occurrences.forEach((occurrence) => {
-    artifactMap.set(
-      occurrence.source_artifact_id,
-      occurrence.source_artifact_title,
-    )
-  })
-  const artifactEntries = Array.from(artifactMap.entries()).slice(0, 14)
-  const visibleArtifactIds = new Set(artifactEntries.map(([artifactId]) => artifactId))
-  const occurrencesByArtifact = new Map<string, TemporalGraphOccurrence[]>()
-  temporalGraph.occurrences
-    .filter((occurrence) => visibleArtifactIds.has(occurrence.source_artifact_id))
-    .slice(0, 72)
-    .forEach((occurrence) => {
-      const current = occurrencesByArtifact.get(occurrence.source_artifact_id) ?? []
-      if (current.length < 7) {
-        current.push(occurrence)
-        occurrencesByArtifact.set(occurrence.source_artifact_id, current)
-      }
-    })
-  const nodes: InteractiveGraphNode[] = []
-  const visibleOccurrences: TemporalGraphOccurrence[] = []
-
-  const artifactEntriesByCluster = new Map<
-    GraphClusterKey,
-    Array<[string, string]>
-  >()
-  artifactEntries.forEach((entry) => {
-    const key = graphClusterKey(entry[1])
-    artifactEntriesByCluster.set(key, [
-      ...(artifactEntriesByCluster.get(key) ?? []),
-      entry,
-    ])
-  })
-
-  Array.from(artifactEntriesByCluster.entries()).forEach(([clusterKey, entries]) => {
-    const anchor = GRAPH_CLUSTER_ANCHORS[clusterKey]
-    entries.forEach(([artifactId, artifactTitle], index) => {
-      const angle = -Math.PI / 2 + (index / Math.max(entries.length, 1)) * Math.PI * 2
-      const radius = entries.length === 1 ? 0 : 62 + Math.min(entries.length, 4) * 8
-      const artifactX = anchor.x + Math.cos(angle) * radius
-      const artifactY = anchor.y + Math.sin(angle) * radius * 0.72
-      const artifactOccurrences = occurrencesByArtifact.get(artifactId) ?? []
-      nodes.push({
-        id: `artifact:${artifactId}`,
-        kind: 'artifact',
-        label: artifactTitle,
-        subtitle: GRAPH_CLUSTER_ANCHORS[clusterKey].label,
-        x: clamp(artifactX, 80, GRAPH_VIEWBOX_WIDTH - 80),
-        y: clamp(artifactY, 86, GRAPH_VIEWBOX_HEIGHT - 76),
-        artifactId,
-        artifactTitle,
-      })
-
-      artifactOccurrences.forEach((occurrence, occurrenceIndex) => {
-        visibleOccurrences.push(occurrence)
-        const occurrenceAngle =
-          -Math.PI / 2 +
-          (occurrenceIndex / Math.max(artifactOccurrences.length, 1)) *
-            Math.PI *
-            2
-        const occurrenceRadius =
-          occurrence.memory_type === 'constraint' ||
-          occurrence.memory_type === 'decision'
-            ? 54
-            : 72
-        nodes.push({
-          id: occurrence.occurrence_id,
-          kind: 'memory',
-          label: occurrence.title_or_label,
-          subtitle: `${formatLabel(occurrence.memory_type)} · ${formatLabel(occurrence.status)}`,
-          x: clamp(
-            artifactX + Math.cos(occurrenceAngle) * occurrenceRadius,
-            42,
-            GRAPH_VIEWBOX_WIDTH - 42,
-          ),
-          y: clamp(
-            artifactY + Math.sin(occurrenceAngle) * occurrenceRadius,
-            42,
-            GRAPH_VIEWBOX_HEIGHT - 42,
-          ),
-          memoryType: occurrence.memory_type,
-          memoryId: occurrence.memory_id,
-          occurrence,
-          artifactId: occurrence.source_artifact_id,
-          artifactTitle: occurrence.source_artifact_title,
-          confidenceScore: occurrence.confidence_score,
-        })
-      })
-    })
-  })
-
-  const nodeIds = new Set(nodes.map((node) => node.id))
-  const occurrenceArtifactById = new Map(
-    visibleOccurrences.map((occurrence) => [
-      occurrence.occurrence_id,
-      occurrence.source_artifact_id,
-    ]),
-  )
-  const edges: InteractiveGraphEdge[] = []
-  const artifactEdgeKeys = new Set<string>()
-
-  visibleOccurrences.forEach((occurrence) => {
-    const fromId = `artifact:${occurrence.source_artifact_id}`
-    if (!nodeIds.has(fromId) || !nodeIds.has(occurrence.occurrence_id)) {
-      return
-    }
-    edges.push({
-      id: `source:${occurrence.occurrence_id}`,
-      fromId,
-      toId: occurrence.occurrence_id,
-      edgeType: 'source_artifact',
-      confidenceScore: occurrence.confidence_score,
-    })
-  })
-
-  temporalGraph.links.forEach((link) => {
-    const fromArtifactId = occurrenceArtifactById.get(link.from_occurrence_id)
-    const toArtifactId = occurrenceArtifactById.get(link.to_occurrence_id)
-    if (!fromArtifactId || !toArtifactId || fromArtifactId === toArtifactId) {
-      return
-    }
-    const fromId = `artifact:${fromArtifactId}`
-    const toId = `artifact:${toArtifactId}`
-    if (!nodeIds.has(fromId) || !nodeIds.has(toId)) {
-      return
-    }
-    const [leftArtifactId, rightArtifactId] = [fromArtifactId, toArtifactId].sort()
-    const edgeKey = `${leftArtifactId}:${rightArtifactId}:${link.edge_type}`
-    if (artifactEdgeKeys.has(edgeKey)) {
-      return
-    }
-    artifactEdgeKeys.add(edgeKey)
-    edges.push({
-      id: `artifact-link:${edgeKey}`,
-      fromId,
-      toId,
-      edgeType: link.edge_type,
-      confidenceScore: link.confidence_score,
-      sourceLink: link,
-    })
-  })
-
-  return { nodes, edges }
+function formatGraphRelationship(value: string): string {
+  const labels = graphRelationshipLabels[value.toLowerCase()]
+  return labels ? translate(labels[0], labels[1]) : formatLabel(value.toLowerCase())
 }
 
 export function GraphPage() {
@@ -339,18 +97,11 @@ export function GraphPage() {
   const [selectedGraphEdgeId, setSelectedGraphEdgeId] = useState<string | null>(
     null,
   )
-  const [hoveredGraphNodeId, setHoveredGraphNodeId] = useState<string | null>(
-    null,
-  )
-  const [graphViewport, setGraphViewport] = useState<GraphViewport>({
-    x: 0,
-    y: 0,
-    scale: 1,
-  })
-  const [graphDragState, setGraphDragState] = useState<GraphDragState | null>(
-    null,
-  )
+  const [graphInstance, setGraphInstance] = useState<ReactFlowInstance<FlowNode, FlowEdge> | null>(null)
   const [isNeighborhoodLoading, setIsNeighborhoodLoading] = useState(false)
+  const [graphSearch, setGraphSearch] = useState('')
+  const [graphSourceId, setGraphSourceId] = useState('')
+  const pendingGraphFocusId = useRef<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -415,108 +166,129 @@ export function GraphPage() {
       null,
     [selectedMemoryId, timelineItems],
   )
-  const interactiveGraph = useMemo(
-    () => buildInteractiveGraph(temporalGraph),
+  const fullEvidenceGraph = useMemo(
+    () => buildEvidenceGraph(temporalGraph),
     [temporalGraph],
   )
-  const selectedGraphNode = useMemo(
-    () =>
-      selectedGraphEdgeId
-        ? null
-        : (interactiveGraph.nodes.find(
-            (node) => node.id === selectedGraphNodeId,
-          ) ?? null),
-    [interactiveGraph.nodes, selectedGraphEdgeId, selectedGraphNodeId],
+  const evidenceGraph = useMemo(
+    () => scopeEvidenceGraph(fullEvidenceGraph, graphSourceId),
+    [fullEvidenceGraph, graphSourceId],
   )
-  const selectedGraphEdge = useMemo(
-    () =>
-      interactiveGraph.edges.find((edge) => edge.id === selectedGraphEdgeId) ??
-      null,
-    [interactiveGraph.edges, selectedGraphEdgeId],
+  const graphSources = useMemo(
+    () => fullEvidenceGraph.nodes.filter((node) => node.kind === 'artifact'),
+    [fullEvidenceGraph.nodes],
   )
-  const nodeById = useMemo(
-    () => new Map(interactiveGraph.nodes.map((node) => [node.id, node])),
-    [interactiveGraph.nodes],
+  const graphNodeById = useMemo(
+    () => new Map(evidenceGraph.nodes.map((node) => [node.id, node])),
+    [evidenceGraph.nodes],
   )
+  const fullGraphNodeById = useMemo(
+    () => new Map(fullEvidenceGraph.nodes.map((node) => [node.id, node])),
+    [fullEvidenceGraph.nodes],
+  )
+  const graphEdgeById = useMemo(
+    () => new Map(evidenceGraph.edges.map((edge) => [edge.id, edge])),
+    [evidenceGraph.edges],
+  )
+  const selectedGraphNode = selectedGraphEdgeId
+    ? null
+    : graphNodeById.get(selectedGraphNodeId ?? '') ?? null
+  const selectedGraphEdge = graphEdgeById.get(selectedGraphEdgeId ?? '') ?? null
+  const graphNodes = useMemo<FlowNode[]>(
+    () => evidenceGraph.nodes.map((node) => ({
+      id: node.id,
+      position: node.position,
+      className: `evidence-flow-node evidence-flow-node-${node.kind}`,
+      ariaLabel: t(
+        `${node.kind === 'artifact' ? 'Source' : 'Memory'}: ${node.label}`,
+        `${node.kind === 'artifact' ? 'Kaynak' : 'Hafıza'}: ${node.label}`,
+      ),
+      data: {
+        graphNode: node,
+        label: <div className="evidence-flow-node-copy"><strong>{node.label}</strong><span>{node.kind === 'artifact' ? t(`${node.recordCount} memory records`, `${node.recordCount} hafıza kaydı`) : `${formatLabel(node.occurrence?.memory_type ?? '')} · ${formatLabel(node.occurrence?.status ?? '')}`}</span></div>,
+      },
+      selected: selectedGraphNodeId === node.id,
+      draggable: false,
+      selectable: true,
+      sourcePosition: node.kind === 'artifact' ? Position.Right : undefined,
+      targetPosition: node.kind === 'memory' ? Position.Left : undefined,
+    })),
+    [evidenceGraph.nodes, selectedGraphNodeId, t],
+  )
+  const graphEdges = useMemo<FlowEdge[]>(
+    () => evidenceGraph.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.fromId,
+      target: edge.toId,
+      type: edge.edgeType === 'source_artifact' ? 'smoothstep' : 'default',
+      className: `evidence-flow-edge evidence-flow-edge-${edge.edgeType.toLowerCase()}`,
+      ariaLabel: t(
+        `Relationship: ${formatGraphRelationship(edge.edgeType)}`,
+        `İlişki: ${formatGraphRelationship(edge.edgeType)}`,
+      ),
+      data: { graphEdge: edge },
+      label: edge.edgeType === 'source_artifact' ? undefined : formatGraphRelationship(edge.edgeType),
+      markerEnd: edge.edgeType === 'source_artifact' ? undefined : { type: MarkerType.ArrowClosed },
+      selected: selectedGraphEdgeId === edge.id,
+      focusable: true,
+      selectable: true,
+      animated: false,
+    })),
+    [evidenceGraph.edges, selectedGraphEdgeId, t],
+  )
+  const graphSearchIndex = useMemo<GraphSearchItem[]>(
+    () => fullEvidenceGraph.nodes.map((node) => ({
+      id: node.id,
+      label: node.label,
+      subtitle: node.kind === 'artifact'
+        ? t('Source artifact', 'Kaynak dosya')
+        : `${formatLabel(node.occurrence?.memory_type ?? '')} · ${node.artifactTitle}`,
+    })),
+    [fullEvidenceGraph.nodes, t],
+  )
+  const graphSearchResults = useMemo(() => {
+    const query = graphSearch.trim().toLocaleLowerCase()
+    if (!query) return []
+    return graphSearchIndex
+      .filter((item) => `${item.label} ${item.subtitle}`.toLocaleLowerCase().includes(query))
+      .slice(0, 8)
+  }, [graphSearch, graphSearchIndex])
 
-  function zoomGraph(
-    multiplier: number,
-    center = { x: GRAPH_VIEWBOX_WIDTH / 2, y: GRAPH_VIEWBOX_HEIGHT / 2 },
-  ) {
-    setGraphViewport((current) => {
-      const nextScale = clamp(
-        current.scale * multiplier,
-        GRAPH_MIN_SCALE,
-        GRAPH_MAX_SCALE,
-      )
-      const scaleRatio = nextScale / current.scale
-      return {
-        scale: nextScale,
-        x: center.x - (center.x - current.x) * scaleRatio,
-        y: center.y - (center.y - current.y) * scaleRatio,
-      }
-    })
+  function showGraphNodeDetail(node: EvidenceGraphNode) {
+    setSelectedGraphNodeId(node.id)
+    setSelectedGraphEdgeId(null)
+    if (node.occurrence?.memory_id) setSelectedMemoryId(node.occurrence.memory_id)
   }
 
-  function resetGraphViewport() {
-    setGraphViewport({ x: 0, y: 0, scale: 1 })
-    setGraphDragState(null)
-  }
-
-  function handleGraphWheel(event: ReactWheelEvent<SVGSVGElement>) {
-    if (!event.ctrlKey && !event.metaKey) {
+  function selectGraphNode(node: EvidenceGraphNode) {
+    showGraphNodeDetail(node)
+    if (!graphNodeById.has(node.id)) {
+      pendingGraphFocusId.current = node.id
+      setGraphSourceId(node.artifactId)
       return
     }
-    event.preventDefault()
-    const bounds = event.currentTarget.getBoundingClientRect()
-    const center = {
-      x: ((event.clientX - bounds.left) / bounds.width) * GRAPH_VIEWBOX_WIDTH,
-      y: ((event.clientY - bounds.top) / bounds.height) * GRAPH_VIEWBOX_HEIGHT,
-    }
-    zoomGraph(event.deltaY < 0 ? 1.14 : 0.88, center)
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    void graphInstance?.fitView({ nodes: [{ id: node.id }], duration: reduceMotion ? 0 : 350, maxZoom: 1.25, padding: 1.8 })
   }
 
-  function handleGraphPointerDown(event: ReactPointerEvent<SVGSVGElement>) {
-    const target = event.target as Element
-    if (
-      target.closest('.graph-svg-node, .graph-svg-edge, .graph-toolbar-button')
-    ) {
-      return
-    }
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setGraphDragState({
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      originX: graphViewport.x,
-      originY: graphViewport.y,
-    })
+  function selectGraphEdge(edge: EvidenceGraphEdge) {
+    setSelectedGraphEdgeId(edge.id)
+    setSelectedGraphNodeId(null)
   }
 
-  function handleGraphPointerMove(event: ReactPointerEvent<SVGSVGElement>) {
-    if (!graphDragState || graphDragState.pointerId !== event.pointerId) {
-      return
-    }
-    const bounds = event.currentTarget.getBoundingClientRect()
-    const deltaX =
-      ((event.clientX - graphDragState.startClientX) / bounds.width) *
-      GRAPH_VIEWBOX_WIDTH
-    const deltaY =
-      ((event.clientY - graphDragState.startClientY) / bounds.height) *
-      GRAPH_VIEWBOX_HEIGHT
-    setGraphViewport((current) => ({
-      ...current,
-      x: graphDragState.originX + deltaX,
-      y: graphDragState.originY + deltaY,
-    }))
-  }
+  useEffect(() => {
+    if (!graphInstance) return
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    void graphInstance.fitView({ duration: reduceMotion ? 0 : 300, padding: 0.16, maxZoom: 1 })
+  }, [graphInstance, graphSourceId, graphNodes.length])
 
-  function handleGraphPointerEnd(event: ReactPointerEvent<SVGSVGElement>) {
-    if (graphDragState?.pointerId === event.pointerId) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-      setGraphDragState(null)
-    }
-  }
+  useEffect(() => {
+    const nodeId = pendingGraphFocusId.current
+    if (!graphInstance || !nodeId || !graphNodeById.has(nodeId)) return
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    void graphInstance.fitView({ nodes: [{ id: nodeId }], duration: reduceMotion ? 0 : 350, maxZoom: 1.25, padding: 1.8 })
+    pendingGraphFocusId.current = null
+  }, [graphInstance, graphNodeById])
 
   useEffect(() => {
     let cancelled = false
@@ -566,329 +338,219 @@ export function GraphPage() {
   return (
     <div className="stack-xl">
       <PageIntro
-        eyebrow={t('Knowledge graph', 'Bilgi grafiği')}
         title={t('Company knowledge graph', 'Şirket bilgi grafiği')}
-        description={t('Explore how sources, memory records, contradictions, drift signals, and follow-up actions connect.', 'Kaynakların, hafıza kayıtlarının, çelişkilerin, değişim sinyallerinin ve takip eylemlerinin nasıl bağlandığını keşfedin.')}
+        description={t('Find a source or memory record, then inspect its evidence and relationships.', 'Bir kaynak veya hafıza kaydı bulun; ardından kanıtlarını ve ilişkilerini inceleyin.')}
       />
 
       {error ? <Callout tone="warning">{error}</Callout> : null}
 
-      <section className="metric-grid">
-        <MetricCard
-          label={t('Trusted sources', 'Güvenilir kaynaklar')}
-          value={summary?.artifact_count ?? '—'}
-        />
-        <MetricCard
-          label={t('Timeline cards', 'Zaman çizelgesi kartları')}
-          value={timelineItems.length || '—'}
-        />
-        <MetricCard
-          label={t('Relationship types', 'İlişki türleri')}
-          value={Object.keys(summary?.edge_counts ?? {}).length || '—'}
-        />
-        <MetricCard
-          label={t('Contradictions surfaced', 'Bulunan çelişkiler')}
-          value={contradictions.length}
-        />
-        <MetricCard
-          label={t('Persisted signals', 'Kaydedilen sinyaller')}
-          value={persistedSignals.length || nextActions.length}
-        />
-        <MetricCard
-          label={t('Temporal claims', 'Zamansal ifadeler')}
-          value={temporalGraph?.occurrences.length ?? '—'}
-          detail={t(`${temporalGraph?.families.length ?? 0} persisted families`, `${temporalGraph?.families.length ?? 0} kayıtlı grup`)}
-        />
-      </section>
+      <dl className="meta-list compact-meta-list" aria-label={t('Graph summary', 'Grafik özeti')}>
+        <div><dt>{t('Sources', 'Kaynaklar')}</dt><dd>{summary?.artifact_count ?? '—'}</dd></div>
+        <div><dt>{t('Memory records', 'Hafıza kayıtları')}</dt><dd>{temporalGraph?.occurrences.length ?? '—'}</dd></div>
+        <div><dt>{t('Signals needing attention', 'İlgi bekleyen sinyaller')}</dt><dd>{persistedSignals.length || nextActions.length}</dd></div>
+      </dl>
 
       <Panel
-        title={t('Interactive evidence graph', 'Etkileşimli kanıt grafiği')}
-        description={t('Pan, zoom, hover, and select nodes to inspect sources and memory records.', 'Kaynakları ve hafıza kayıtlarını incelemek için grafiği kaydırın, yakınlaştırın ve düğümleri seçin.')}
+        title={t('Evidence map', 'Kanıt haritası')}
+        description={t('Trace which source produced each memory record and how records change or contradict one another.', 'Her hafıza kaydının hangi kaynaktan üretildiğini ve kayıtların birbirini nasıl değiştirdiğini ya da çeliştiğini izleyin.')}
       >
-        {interactiveGraph.nodes.length > 0 ? (
-          <div className="graph-interactive-shell">
-            <div
-              className="graph-svg-panel"
-              aria-label={t('Interactive artifact and memory graph', 'Etkileşimli kaynak ve hafıza grafiği')}
-            >
+        {evidenceGraph.nodes.length > 0 ? (
+          <div className="graph-interactive-shell evidence-flow-shell">
+            <div className="graph-svg-panel evidence-flow-panel">
               <div className="graph-toolbar" aria-label={t('Graph controls', 'Grafik kontrolleri')}>
-                <button
-                  type="button"
-                  className="secondary-button graph-toolbar-button"
-                  onClick={() => zoomGraph(1.2)}
-                >{t("Zoom in", "Yakınlaştır")}</button>
-                <button
-                  type="button"
-                  className="secondary-button graph-toolbar-button"
-                  onClick={() => zoomGraph(0.84)}
-                >{t("Zoom out", "Uzaklaştır")}</button>
-                <button
-                  type="button"
-                  className="secondary-button graph-toolbar-button"
-                  onClick={resetGraphViewport}
-                >{t("Reset", "Sıfırla")}</button>
-              </div>
-              <svg
-                className="graph-svg-canvas"
-                data-dragging={graphDragState ? 'true' : 'false'}
-                viewBox={`0 0 ${GRAPH_VIEWBOX_WIDTH} ${GRAPH_VIEWBOX_HEIGHT}`}
-                role="img"
-                aria-labelledby="interactive-graph-title interactive-graph-description"
-                onWheel={handleGraphWheel}
-                onPointerDown={handleGraphPointerDown}
-                onPointerMove={handleGraphPointerMove}
-                onPointerUp={handleGraphPointerEnd}
-                onPointerCancel={handleGraphPointerEnd}
-                onPointerLeave={handleGraphPointerEnd}
-              >
-                <title id="interactive-graph-title">{t("Izge artifact and memory graph", "İzge kaynak ve hafıza grafiği")}</title>
-                <desc id="interactive-graph-description">{t("Source artifacts connect to extracted memory and relationship edges.", "Kaynaklar, çıkarılan hafıza kayıtları ve ilişki bağlantılarıyla birleşir.")}</desc>
-                <defs>
-                  <marker
-                    id="graph-arrow"
-                    viewBox="0 0 10 10"
-                    refX="9"
-                    refY="5"
-                    markerWidth="6"
-                    markerHeight="6"
-                    orient="auto-start-reverse"
+                <div className="graph-search-control">
+                  <label className="field">
+                    <span className="field-label">{t('Find a source or memory', 'Kaynak veya hafıza bul')}</span>
+                    <input
+                      type="search"
+                      name="graph_search"
+                      autoComplete="off"
+                      value={graphSearch}
+                      onChange={(event) => setGraphSearch(event.target.value)}
+                      onKeyDown={(event) => {
+                        const firstResult = graphSearchResults[0]
+                        const graphNode = firstResult ? fullGraphNodeById.get(firstResult.id) : null
+                        if (event.key === 'Enter' && graphNode) {
+                          event.preventDefault()
+                          selectGraphNode(graphNode)
+                        }
+                      }}
+                      placeholder={t('Search all visible records…', 'Tüm görünür kayıtlarda ara…')}
+                    />
+                  </label>
+                  {graphSearchResults.length > 0 ? (
+                    <div className="graph-search-results" role="region" aria-label={t('Graph search results', 'Grafik arama sonuçları')}>
+                      {graphSearchResults.map((item) => {
+                        const graphNode = fullGraphNodeById.get(item.id)
+                        return graphNode ? (
+                          <button
+                            key={item.id}
+                            type="button"
+                            aria-pressed={selectedGraphNodeId === item.id}
+                            onClick={() => selectGraphNode(graphNode)}
+                          >
+                            <strong>{item.label}</strong>
+                            <span>{item.subtitle}</span>
+                          </button>
+                        ) : null
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+                <label className="field graph-source-filter">
+                  <span className="field-label">{t('Source scope', 'Kaynak kapsamı')}</span>
+                  <select
+                    name="graph_source"
+                    value={graphSourceId}
+                    onChange={(event) => {
+                      setGraphSourceId(event.target.value)
+                      setSelectedGraphNodeId(null)
+                      setSelectedGraphEdgeId(null)
+                    }}
                   >
-                    <path d="M 0 0 L 10 5 L 0 10 z" />
-                  </marker>
-                </defs>
-                <g
-                  className="graph-viewport-layer"
-                  transform={`translate(${graphViewport.x} ${graphViewport.y}) scale(${graphViewport.scale})`}
+                    <option value="">{t('All loaded sources', 'Yüklenen tüm kaynaklar')}</option>
+                    {graphSources.map((source) => (
+                      <option key={source.artifactId} value={source.artifactId}>{source.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="graph-legend" aria-label={t('Graph legend', 'Grafik açıklaması')}>
+                  <span><i className="graph-legend-source" />{t('Source', 'Kaynak')}</span>
+                  <span><i className="graph-legend-memory" />{t('Memory', 'Hafıza')}</span>
+                  <span><i className="graph-legend-relation" />{t('Relationship', 'İlişki')}</span>
+                </div>
+              </div>
+              <p className="table-secondary graph-scope-note">
+                {t(
+                  `${evidenceGraph.nodes.filter((node) => node.kind === 'artifact').length} sources, ${evidenceGraph.nodes.filter((node) => node.kind === 'memory').length} loaded memory records and ${evidenceGraph.edges.filter((edge) => edge.sourceLink).length} recorded relationships are shown. A source scope also includes directly related records from other sources.`,
+                  `${evidenceGraph.nodes.filter((node) => node.kind === 'artifact').length} kaynak, yüklenen ${evidenceGraph.nodes.filter((node) => node.kind === 'memory').length} hafıza kaydı ve ${evidenceGraph.edges.filter((edge) => edge.sourceLink).length} kayıtlı ilişki gösteriliyor. Kaynak kapsamı, diğer kaynaklardaki doğrudan ilişkili kayıtları da içerir.`,
+                )}
+              </p>
+              <div
+                className="evidence-flow-canvas"
+                aria-label={t('Interactive source and memory graph', 'Etkileşimli kaynak ve hafıza grafiği')}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    setSelectedGraphNodeId(null)
+                    setSelectedGraphEdgeId(null)
+                  }
+                }}
+              >
+                <ReactFlow<FlowNode, FlowEdge>
+                  nodes={graphNodes}
+                  edges={graphEdges}
+                  onInit={setGraphInstance}
+                  onNodeClick={(_, node) => showGraphNodeDetail(node.data.graphNode)}
+                  onEdgeClick={(_, edge) => {
+                    if (edge.data) selectGraphEdge(edge.data.graphEdge)
+                  }}
+                  onNodesChange={(changes) => {
+                    const nextId = resolveGraphSelection(changes, selectedGraphNodeId)
+                    if (nextId === selectedGraphNodeId) return
+                    const graphNode = nextId ? graphNodeById.get(nextId) : null
+                    if (graphNode) showGraphNodeDetail(graphNode)
+                    else setSelectedGraphNodeId(null)
+                  }}
+                  onEdgesChange={(changes) => {
+                    const nextId = resolveGraphSelection(changes, selectedGraphEdgeId)
+                    if (nextId === selectedGraphEdgeId) return
+                    const graphEdge = nextId ? graphEdgeById.get(nextId) : null
+                    if (graphEdge) selectGraphEdge(graphEdge)
+                    else setSelectedGraphEdgeId(null)
+                  }}
+                  onPaneClick={() => {
+                    setSelectedGraphNodeId(null)
+                    setSelectedGraphEdgeId(null)
+                  }}
+                  fitView
+                  fitViewOptions={{ padding: 0.16, maxZoom: 1 }}
+                  minZoom={0.18}
+                  maxZoom={1.5}
+                  nodesConnectable={false}
+                  nodesDraggable={false}
+                  elementsSelectable
+                  proOptions={{ hideAttribution: true }}
+                  ariaLabelConfig={{
+                    'node.a11yDescription.default': t('Press Enter or Space to inspect this record.', 'Bu kaydı incelemek için Enter veya Boşluk tuşuna basın.'),
+                    'node.a11yDescription.keyboardDisabled': t('This read-only graph does not allow moving records.', 'Bu salt okunur grafikte kayıtlar taşınamaz.'),
+                    'node.a11yDescription.ariaLiveMessage': ({ x, y }) => t(`Selected graph record at ${x}, ${y}.`, `${x}, ${y} konumundaki grafik kaydı seçildi.`),
+                    'edge.a11yDescription.default': t('Press Enter or Space to inspect this relationship.', 'Bu ilişkiyi incelemek için Enter veya Boşluk tuşuna basın.'),
+                    'controls.ariaLabel': t('Graph view controls', 'Grafik görünüm kontrolleri'),
+                    'controls.zoomIn.ariaLabel': t('Zoom in', 'Yakınlaştır'),
+                    'controls.zoomOut.ariaLabel': t('Zoom out', 'Uzaklaştır'),
+                    'controls.fitView.ariaLabel': t('Fit graph to view', 'Grafiği görünüme sığdır'),
+                    'minimap.ariaLabel': t('Graph overview', 'Grafik genel görünümü'),
+                  }}
                 >
-                  {interactiveGraph.edges.map((edge) => {
-                    const fromNode = nodeById.get(edge.fromId)
-                    const toNode = nodeById.get(edge.toId)
-                    if (!fromNode || !toNode) {
-                      return null
-                    }
-                    return (
-                      <g key={edge.id}>
-                        <line
-                          className={
-                            selectedGraphEdge?.id === edge.id
-                              ? `graph-svg-edge graph-svg-edge-${edge.edgeType} graph-svg-edge-active`
-                              : `graph-svg-edge graph-svg-edge-${edge.edgeType}`
-                          }
-                          x1={fromNode.x}
-                          y1={fromNode.y}
-                          x2={toNode.x}
-                          y2={toNode.y}
-                          markerEnd={
-                            edge.edgeType === 'source_artifact'
-                              ? undefined
-                              : 'url(#graph-arrow)'
-                          }
-                          onClick={() => {
-                            setSelectedGraphEdgeId(edge.id)
-                            setSelectedGraphNodeId(null)
-                          }}
-                        />
-                      </g>
-                    )
-                  })}
-                  {interactiveGraph.nodes.map((node) => {
-                    const labelVisible =
-                      hoveredGraphNodeId === node.id ||
-                      selectedGraphNode?.id === node.id
-                    return (
-                      <g
-                        key={node.id}
-                        className={
-                          selectedGraphNode?.id === node.id
-                            ? 'graph-svg-node graph-svg-node-active'
-                            : `graph-svg-node graph-svg-node-${node.kind}`
-                        }
-                        role="button"
-                        tabIndex={0}
-                        aria-label={t(`${node.kind === 'artifact' ? 'Artifact' : 'Memory'} node: ${node.label}`, `${node.kind === 'artifact' ? 'Kaynak' : 'Hafıza'} düğümü: ${node.label}`)}
-                        transform={`translate(${node.x} ${node.y})`}
-                        onPointerEnter={() => setHoveredGraphNodeId(node.id)}
-                        onPointerLeave={() =>
-                          setHoveredGraphNodeId((current) =>
-                            current === node.id ? null : current,
-                          )
-                        }
-                        onFocus={() => setHoveredGraphNodeId(node.id)}
-                        onBlur={() =>
-                          setHoveredGraphNodeId((current) =>
-                            current === node.id ? null : current,
-                          )
-                        }
-                        onClick={() => {
-                          setSelectedGraphNodeId(node.id)
-                          setSelectedGraphEdgeId(null)
-                          if (node.memoryId) {
-                            setSelectedMemoryId(node.memoryId)
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            setSelectedGraphNodeId(node.id)
-                            setSelectedGraphEdgeId(null)
-                            if (node.memoryId) {
-                              setSelectedMemoryId(node.memoryId)
-                            }
-                          }
-                        }}
-                      >
-                        <circle
-                          className="graph-node-halo"
-                          r={node.kind === 'artifact' ? 28 : 22}
-                        />
-                        <circle
-                          className="graph-node-circle"
-                          r={node.kind === 'artifact' ? 17 : 14}
-                        />
-                        {labelVisible ? (
-                          <g className="graph-node-tooltip" aria-hidden="true">
-                            <text
-                              className="graph-node-label"
-                              x={node.kind === 'artifact' ? 26 : 20}
-                              y="-3"
-                            >
-                              {truncateGraphLabel(node.label)}
-                            </text>
-                            <text
-                              className="graph-node-subtitle"
-                              x={node.kind === 'artifact' ? 26 : 20}
-                              y="14"
-                            >
-                              {truncateGraphLabel(formatLabel(node.subtitle), 24)}
-                            </text>
-                          </g>
-                        ) : null}
-                      </g>
-                    )
-                  })}
-                </g>
-              </svg>
+                  <Background gap={24} size={1} />
+                  <MiniMap<FlowNode>
+                    pannable
+                    zoomable
+                    nodeColor={(node) => node.data.graphNode.kind === 'artifact' ? '#d7a85d' : '#86a7ff'}
+                  />
+                  <Controls showInteractive={false} />
+                </ReactFlow>
+              </div>
             </div>
 
-            <aside
-              className="graph-detail-panel panel-subtle"
-              aria-label={t('Selected graph item detail', 'Seçilen grafik öğesi ayrıntısı')}
-            >
-              {selectedGraphEdge ? (
-                <div className="stack-md">
-                  <div>
-                    <p className="section-label">{t('Selected edge', 'Seçilen bağlantı')}</p>
-                    <h4 className="section-title">
-                      {formatLabel(selectedGraphEdge.edgeType)}
-                    </h4>
-                    <p className="table-secondary">{t("Confidence", "Güven")}{' '}
-                      {formatPercent(selectedGraphEdge.confidenceScore)}
-                    </p>
-                  </div>
-                  <dl className="meta-list compact-meta-list">
+            {selectedGraphEdge || selectedGraphNode ? (
+              <aside className="graph-detail-panel panel-subtle" aria-label={t('Selected graph item detail', 'Seçilen grafik öğesi ayrıntısı')}>
+                {selectedGraphEdge ? (
+                  <div className="stack-md">
                     <div>
-                      <dt>{t('From', 'Başlangıç')}</dt>
-                      <dd>
-                        {nodeById.get(selectedGraphEdge.fromId)?.label ??
-                          selectedGraphEdge.fromId}
-                      </dd>
+                      <p className="section-label">{t('Recorded relationship', 'Kayıtlı ilişki')}</p>
+                      <h4 className="section-title">{formatGraphRelationship(selectedGraphEdge.edgeType)}</h4>
+                      <p className="table-secondary">{t('Confidence', 'Güven')}: {formatPercent(selectedGraphEdge.confidenceScore)}</p>
                     </div>
-                    <div>
-                      <dt>{t('To', 'Bitiş')}</dt>
-                      <dd>
-                        {nodeById.get(selectedGraphEdge.toId)?.label ??
-                          selectedGraphEdge.toId}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t('Evidence artifact', 'Kanıt kaynağı')}</dt>
-                      <dd>
-                        {selectedGraphEdge.sourceLink?.evidence_artifact_id ??
-                          t('Source projection', 'Kaynak yansıtması')}
-                      </dd>
-                    </div>
-                  </dl>
-                  <p className="muted-copy">{t("Edges show how Izge's graph context lets orchestration compare claims, detect contradictions, and carry evidence into answer synthesis.", "Bağlantılar, İzge’nin iddiaları karşılaştırmak, çelişkileri tespit etmek ve yanıtları kaynaklandırmak için kullandığı grafiği gösterir.")}</p>
-                </div>
-              ) : selectedGraphNode ? (
-                <div className="stack-md">
-                  <div>
-                    <p className="section-label">
-                      {selectedGraphNode.kind === 'artifact'
-                        ? translate("Source artifact", "Kaynak dosya")
-                        : translate("Memory node", "Hafıza düğümü")}
-                    </p>
-                    <h4 className="section-title">{selectedGraphNode.label}</h4>
-                    <p className="table-secondary">
-                      {formatLabel(selectedGraphNode.subtitle)}
-                    </p>
-                  </div>
-                  {selectedGraphNode.kind === 'artifact' &&
-                  selectedGraphNode.artifactId ? (
-                    <div className="graph-detail-actions inline-actions">
-                      <SourcePreviewButton artifactId={selectedGraphNode.artifactId} title={selectedGraphNode.label} className="primary-button">{t('Preview artifact', 'Kaynağı önizle')}</SourcePreviewButton>
-                      <a
+                    <dl className="meta-list compact-meta-list">
+                      <div><dt>{t('From', 'Başlangıç')}</dt><dd>{graphNodeById.get(selectedGraphEdge.fromId)?.label ?? selectedGraphEdge.fromId}</dd></div>
+                      <div><dt>{t('To', 'Bitiş')}</dt><dd>{graphNodeById.get(selectedGraphEdge.toId)?.label ?? selectedGraphEdge.toId}</dd></div>
+                    </dl>
+                    {selectedGraphEdge.sourceLink?.evidence_artifact_id ? (
+                      <SourcePreviewButton
+                        artifactId={selectedGraphEdge.sourceLink.evidence_artifact_id}
+                        title={t('Relationship evidence', 'İlişki kanıtı')}
                         className="secondary-button"
-                        href={api.artifactDownloadUrl(
-                          selectedGraphNode.artifactId,
-                        )}
-                      >{t("Download", "İndir")}</a>
+                      >{t('Open relationship evidence', 'İlişki kanıtını aç')}</SourcePreviewButton>
+                    ) : (
+                      <p className="muted-copy">{t('This line represents extraction from the selected source.', 'Bu çizgi, kaynaktan çıkarılan hafıza kaydını gösterir.')}</p>
+                    )}
+                  </div>
+                ) : selectedGraphNode ? (
+                  <div className="stack-md">
+                    <div>
+                      <p className="section-label">{selectedGraphNode.kind === 'artifact' ? t('Source', 'Kaynak') : t('Memory record', 'Hafıza kaydı')}</p>
+                      <h4 className="section-title">{selectedGraphNode.label}</h4>
+                      <p className="table-secondary">{selectedGraphNode.kind === 'artifact' ? t(`${selectedGraphNode.recordCount} memory records`, `${selectedGraphNode.recordCount} hafıza kaydı`) : `${formatLabel(selectedGraphNode.occurrence?.memory_type ?? '')} · ${formatLabel(selectedGraphNode.occurrence?.status ?? '')}`}</p>
                     </div>
-                  ) : null}
-                  {selectedGraphNode.kind === 'memory' &&
-                  selectedGraphNode.memoryType &&
-                  selectedGraphNode.memoryId ? (
-                    <div className="stack-sm">
-                      <p className="muted-copy">
-                        {selectedGraphNode.occurrence?.evidence_span ??
-                          translate("No evidence span recorded for this occurrence.", "Bu kayıt için kaynak alıntısı yok.")}
-                      </p>
-                      <dl className="meta-list compact-meta-list">
-                        <div>
-                          <dt>{t('Source', 'Kaynak')}</dt>
-                          <dd>{selectedGraphNode.artifactTitle}</dd>
-                        </div>
-                        <div>
-                          <dt>{t('Observed', 'Gözlemlendi')}</dt>
-                          <dd>
-                            {formatDateTime(
-                              selectedGraphNode.occurrence?.observed_at,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>{t('Confidence', 'Güven')}</dt>
-                          <dd>
-                            {formatPercent(
-                              selectedGraphNode.confidenceScore ?? 0,
-                            )}
-                          </dd>
-                        </div>
-                      </dl>
+                    {selectedGraphNode.kind === 'artifact' ? (
                       <div className="graph-detail-actions inline-actions">
-                        <Link
-                          className="primary-button"
-                          to={`/memory/${selectedGraphNode.memoryType}/${selectedGraphNode.memoryId}`}
-                        >{t("Open memory", "Hafızayı aç")}</Link>
-                        {selectedGraphNode.artifactId ? (
-                          <SourcePreviewButton artifactId={selectedGraphNode.artifactId} title={selectedGraphNode.label} className="secondary-button">{t('Preview source', 'Kaynağı önizle')}</SourcePreviewButton>
-                        ) : null}
+                        <SourcePreviewButton artifactId={selectedGraphNode.artifactId} title={selectedGraphNode.label} className="primary-button">{t('Preview source', 'Kaynağı önizle')}</SourcePreviewButton>
+                        <a className="secondary-button" href={api.artifactDownloadUrl(selectedGraphNode.artifactId)}>{t('Download', 'İndir')}</a>
                       </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <EmptyState
-                  title={t('Select a node', 'Bir düğüm seçin')}
-                  description={t('Hover nodes to enlarge them, then click to inspect source and memory details.', 'Düğümleri büyütmek için üzerine gelin; kaynak ve hafıza ayrıntılarını incelemek için tıklayın.')}
-                />
-              )}
-            </aside>
+                    ) : selectedGraphNode.occurrence ? (
+                      <div className="stack-sm">
+                        <p className="muted-copy">{selectedGraphNode.occurrence.evidence_span ?? t('No evidence excerpt was recorded for this memory.', 'Bu hafıza kaydı için kaynak alıntısı kaydedilmedi.')}</p>
+                        <dl className="meta-list compact-meta-list">
+                          <div><dt>{t('Source', 'Kaynak')}</dt><dd>{selectedGraphNode.artifactTitle}</dd></div>
+                          <div><dt>{t('Observed', 'Gözlemlendi')}</dt><dd>{formatDateTime(selectedGraphNode.occurrence.observed_at)}</dd></div>
+                          <div><dt>{t('Confidence', 'Güven')}</dt><dd>{formatPercent(selectedGraphNode.occurrence.confidence_score)}</dd></div>
+                        </dl>
+                        <div className="graph-detail-actions inline-actions">
+                          <Link className="primary-button" to={`/memory/${selectedGraphNode.occurrence.memory_type}/${selectedGraphNode.occurrence.memory_id}`}>{t('Open memory', 'Hafızayı aç')}</Link>
+                          <SourcePreviewButton artifactId={selectedGraphNode.artifactId} title={selectedGraphNode.artifactTitle} className="secondary-button">{t('Preview source', 'Kaynağı önizle')}</SourcePreviewButton>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </aside>
+            ) : null}
           </div>
         ) : (
           <EmptyState
-            title={t('No graph projection yet', 'Henüz grafik yansıtması yok')}
-            description={t('Process company sources to create source nodes, extracted memory nodes, and orchestration-ready relationships.', 'Kaynak düğümleri, çıkarılmış hafıza düğümleri ve orkestrasyona hazır ilişkiler oluşturmak için şirket kaynaklarını işleyin.')}
+            title={t('No evidence map yet', 'Henüz kanıt haritası yok')}
+            description={t('Process company sources to connect extracted memory records to their evidence.', 'Çıkarılan hafıza kayıtlarını kanıtlarıyla ilişkilendirmek için şirket kaynaklarını işleyin.')}
           />
         )}
       </Panel>

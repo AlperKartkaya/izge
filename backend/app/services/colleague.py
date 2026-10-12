@@ -926,8 +926,12 @@ def _update_owned_run(db: Session, run_id: str, expected_owner: str, **values: A
         raise LostColleagueLeaseError("Çalışma kiralaması başka bir işlemciye geçti.")
 
 
+def _notification_body(answer: str) -> str:
+    return re.sub(r"\s*\[\d+\]", "", answer).strip()
+
+
 def _notification_preview(answer: str) -> str:
-    return re.sub(r"\s*\[\d+\]", "", answer).strip()[:1200]
+    return _notification_body(answer)[:1200]
 
 
 def _notify_completed_run(db: Session, run: ColleagueRun, answer: str, message_id: str | None) -> None:
