@@ -1,4 +1,6 @@
 import { getLanguage, translate } from './language'
+import { BrowserDemo } from './browserDemo'
+import { consumeSse } from './sse'
 import type {
   ArtifactDetail,
   ArtifactProactiveSignals,
@@ -69,7 +71,32 @@ export class ApiError extends Error {
   }
 }
 
+let browserDemo: BrowserDemo | null = null
+
+function configureDemo(user: UserRead, token?: string) {
+  browserDemo = user.is_public_demo ? new BrowserDemo(user, localStorage,
+    (path, options = {}) => remoteRequest(path, { ...options, token }),
+    async (path, options, onEvent) => consumeSse(await remoteResponse(path, { ...options, token }), onEvent),
+  ) : null
+}
+
+export function resetBrowserDemo() { browserDemo?.reset() }
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  if (!browserDemo) return remoteRequest<T>(path, options)
+  try { return await browserDemo.request(path, options) as T }
+  catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(error instanceof Error ? error.message : translate('Demo operation failed.', 'Demo işlemi başarısız.'), 400)
+  }
+}
+
+async function remoteRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await remoteResponse(path, options)
+  return (response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text()) as T
+}
+
+async function remoteResponse(path: string, options: RequestOptions = {}): Promise<Response> {
   const { token, headers, body, ...init } = options
   const requestHeaders = new Headers(headers)
   requestHeaders.set('Accept-Language', getLanguage())
@@ -89,10 +116,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     body,
   })
 
-  const isJson = response.headers.get('content-type')?.includes('application/json')
-  const payload = isJson ? await response.json() : await response.text()
-
   if (!response.ok) {
+    const payload = response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text()
     const detail =
       typeof payload === 'string'
         ? payload
@@ -102,7 +127,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     throw new ApiError(detail, response.status)
   }
 
-  return payload as T
+  return response
 }
 
 export const api = {
@@ -114,21 +139,22 @@ export const api = {
     return request<TokenResponse>('/auth/demo/sign-in', {
       method: 'POST',
       body: JSON.stringify({ persona }),
-    })
+    }).then((result) => { configureDemo(result.user, result.access_token); return result })
   },
 
   signIn(email: string, password: string) {
     return request<TokenResponse>('/auth/sign-in', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
-    })
+    }).then((result) => { configureDemo(result.user, result.access_token); return result })
   },
 
   getCurrentUser(token?: string) {
-    return request<UserRead>('/users/me', { token })
+    return remoteRequest<UserRead>('/users/me', { token }).then((user) => { configureDemo(user, token); return user })
   },
 
   signOut(token?: string) {
+    browserDemo = null
     return request<{ status: string }>('/auth/sign-out', {
       method: 'POST',
       token,
@@ -168,11 +194,11 @@ export const api = {
   },
 
   artifactPreviewUrl(artifactId: string, asText = false) {
-    return `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/preview${asText ? "?as_text=true" : ""}`
+    return browserDemo?.previewUrl(artifactId) ?? `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/preview${asText ? "?as_text=true" : ""}`
   },
 
   artifactDownloadUrl(artifactId: string) {
-    return `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/download`
+    return browserDemo?.previewUrl(artifactId) ?? `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/download`
   },
 
   getArtifactSignals(token: string, artifactId: string) {
@@ -274,7 +300,7 @@ export const api = {
     return request<TeamChatThreadRead>(`/team-chat?limit=${limit}${thread}`, { token })
   },
 
-  createTeamChatMessage(token: string, body: string, options: { thread_id?: string; thread_title?: string; thread_kind?: 'channel' | 'direct' | 'group'; message_metadata?: Record<string, unknown> } = {}) {
+  createTeamChatMessage(token: string, body: string, options: { thread_id?: string; thread_title?: string; thread_kind?: 'channel' | 'direct' | 'group'; reply_to_message_id?: string; message_metadata?: Record<string, unknown> } = {}) {
     return request<TeamChatMessageRead>('/team-chat', {
       method: 'POST',
       token,
@@ -346,6 +372,7 @@ export const api = {
     thread_kind?: 'channel' | 'direct' | 'group'
     participant_user_ids?: string[]
     client_request_id?: string
+    reply_to_message_id?: string
   } & Partial<AgentRequestOptions>) {
     return request<AgentRunCreated>('/work/ask', {
       method: 'POST',
@@ -410,6 +437,24 @@ export const api = {
 
   agentRunEventsUrl(runId: string) {
     return `${API_BASE}/work/runs/${encodeURIComponent(runId)}/events`
+  },
+
+  subscribeAgentRunEvents(runId: string) {
+    if (!browserDemo) {
+      const events = new EventSource(api.agentRunEventsUrl(runId), { withCredentials: true })
+      // Stored SSE events replay from the beginning; do not append them to a cached answer.
+      events.addEventListener('open', () => events.dispatchEvent(new MessageEvent('reset', { data: '{}' })), { once: true })
+      return events
+    }
+    const events = new EventTarget() as EventTarget & { close: () => void; onerror: (() => void) | null }
+    const unsubscribe = browserDemo.subscribeRun(runId, (event) => events.dispatchEvent(new MessageEvent(event.type === 'result' ? 'done' : event.type, { data: JSON.stringify(event.data) })))
+    let closed = false
+    events.close = () => { closed = true; unsubscribe() }
+    events.onerror = null
+    browserDemo.request(`/work/runs/${runId}`).then((run) => {
+      if (!closed) events.dispatchEvent(new MessageEvent('snapshot', { data: JSON.stringify(run) }))
+    }).catch(() => { if (!closed) events.onerror?.() })
+    return events
   },
 
   listNotifications(token: string, unreadOnly = false) {

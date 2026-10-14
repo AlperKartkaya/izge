@@ -1,0 +1,19 @@
+.employee-home-actions[aria-label] {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.employee-home-actions .home-action {
+  width: 100%;
+  min-height: 3rem;
+  justify-content: flex-start;
+}
+
+@media (max-width: 900px) {
+  .employee-home-actions[aria-label] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px) {
+  .employee-home-actions[aria-label] { grid-template-columns: 1fr; }
+}

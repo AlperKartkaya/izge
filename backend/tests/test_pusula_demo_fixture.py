@@ -20,6 +20,41 @@ from manual_eval.pusula_demo.fixture import (
 
 
 class PusulaDemoFixtureTests(unittest.TestCase):
+    def test_company_seminar_seed_is_manager_authored_and_idempotent(self) -> None:
+        from sqlalchemy import create_engine, select, func
+        from sqlalchemy.orm import Session
+        from app.db import Base
+        from app.models import Workspace, User, CompanyChatMessage
+        from app.routers.team_chat import _message_is_visible_to_user
+        from app.services.bootstrap import seed_demo_announcement
+
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        with Session(engine) as db:
+            workspace = Workspace(name="Pusula Yazılım ve IT Danışmanlık")
+            db.add(workspace)
+            db.flush()
+            db.add(User(workspace_id=workspace.workspace_id, role="Admin", display_name="Selin Aras", email="selin@pusula.demo", password_hash="unused"))
+            db.add(User(workspace_id=workspace.workspace_id, role="Member", display_name="Kerem Demir", email="kerem@pusula.demo", password_hash="unused"))
+            visitor = User(workspace_id=workspace.workspace_id, role="Member", display_name="Kerem Demir", email="visitor@demo.invalid", password_hash="unused", is_public_demo=True, public_demo_persona="kerem")
+            db.add(visitor)
+            db.commit()
+            seed_demo_announcement(db)
+            seed_demo_announcement(db)
+            self.assertEqual(1, db.scalar(select(func.count()).select_from(CompanyChatMessage)))
+            message = db.scalar(select(CompanyChatMessage))
+            self.assertEqual("company-general", message.message_metadata["thread_id"])
+            self.assertIn("14.00–15.30", message.body)
+            self.assertIn("2. kat toplantı salonunda", message.body)
+            self.assertIn("katılmasını öneriyorum", message.body)
+            self.assertTrue(_message_is_visible_to_user(message, visitor, db))
+            message.message_metadata = {key: value for key, value in message.message_metadata.items() if key != "participant_user_ids"}
+            db.commit()
+            seed_demo_announcement(db)
+            self.assertTrue(_message_is_visible_to_user(message, visitor, db))
+            self.assertEqual(1, db.scalar(select(func.count()).select_from(CompanyChatMessage)))
+        engine.dispose()
+
     def test_fixture_covers_six_cases_and_keeps_live_files_out(self) -> None:
         validate_fixture()
         self.assertEqual({case for *_rest, cases in ARTIFACTS for case in cases}, set(range(1, 7)))

@@ -83,7 +83,6 @@ export function SignInPage() {
             type="button"
             className="quick-login-button"
             disabled={submittingPersona !== null}
-            aria-describedby="demo-limit-note"
             onClick={() => void choosePersona(persona.id)}
           >
             <span className="quick-login-icon" aria-hidden="true">{persona.name.slice(0, 1)}</span>
@@ -94,7 +93,6 @@ export function SignInPage() {
             </span>
           </button>)}
         </div>
-        <p id="demo-limit-note" className="auth-demo-limit muted-copy">{t(`For each IP address, up to ${activeDemoConfig.hourly_limit} demo sign-ins are allowed per hour.`, `Her IP adresi için saatte en fazla ${activeDemoConfig.hourly_limit} demo girişine izin verilir.`)}</p>
         <div className="auth-divider" aria-hidden="true" />
         <button type="button" className="secondary-button auth-manual-toggle" aria-expanded="false" aria-controls="admin-sign-in-form" onClick={() => { setError(null); setShowAdminSignIn(true) }}>{t('Administrator sign-in', 'Yönetici girişi')}</button>
       </> : demoConfig !== undefined ? <>

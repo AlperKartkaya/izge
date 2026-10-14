@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ArrowUpRight, Mail, MailOpen, Trash2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { AgentText, LoadingState } from '../components/AgentPrimitives'
@@ -10,6 +11,7 @@ import { compactMarkdownPreview } from '../lib/agentText'
 import { formatDateTime } from '../lib/format'
 import type { NotificationRead } from '../lib/types'
 import { useLanguage } from '../lib/i18n'
+import './notifications.css'
 
 function errorMessage(error: unknown, fallback: string) { return error instanceof ApiError && error.message ? error.message : fallback }
 type NotificationDetail = { status: 'loading' } | { status: 'ready'; body: string } | { status: 'error'; message: string }
@@ -148,9 +150,9 @@ export function NotificationsPage() {
               {detail?.status === 'ready' ? <div className="markdown-content"><AgentText text={detail.body} /></div> : null}
             </details>
             <div className="notification-actions">
-              <button type="button" className="secondary-button" disabled={busyId !== null} onClick={() => void changeReadState(item)}>{item.read_at ? t('Mark unread', 'Okunmadı işaretle') : t('Mark read', 'Okundu işaretle')}</button>
-              <button type="button" className="secondary-button" disabled={busyId !== null} onClick={() => openConversation(item)}>{item.kind === 'message' ? t('Open chat', 'Sohbeti aç') : t('Open in Izge', 'İzge’de aç')}</button>
-              <button type="button" className="danger-button notification-delete" disabled={busyId !== null} onBlur={() => setConfirmDeleteId(null)} onClick={() => void removeNotification(item)}>{confirmDeleteId === item.notification_id ? t('Confirm delete', 'Silmeyi onayla') : t('Delete', 'Sil')}</button>
+              <button type="button" className="notification-action" disabled={busyId !== null} onClick={() => void changeReadState(item)}>{item.read_at ? <Mail aria-hidden="true" /> : <MailOpen aria-hidden="true" />}{item.read_at ? t('Mark unread', 'Okunmadı işaretle') : t('Mark read', 'Okundu işaretle')}</button>
+              <button type="button" className="notification-action notification-action-open" disabled={busyId !== null} onClick={() => openConversation(item)}><ArrowUpRight aria-hidden="true" />{item.kind === 'message' ? t('Open chat', 'Sohbeti aç') : t('Open in Izge', 'İzge’de aç')}</button>
+              <button type="button" className={`notification-action notification-action-danger${confirmDeleteId === item.notification_id ? ' notification-action-confirm' : ''}`} disabled={busyId !== null} onBlur={() => setConfirmDeleteId(null)} onClick={() => void removeNotification(item)}><Trash2 aria-hidden="true" />{confirmDeleteId === item.notification_id ? t('Confirm delete', 'Silmeyi onayla') : t('Delete', 'Sil')}</button>
             </div>
           </article>
           )

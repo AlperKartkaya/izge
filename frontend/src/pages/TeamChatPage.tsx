@@ -15,6 +15,7 @@ import { formatDateTime } from '../lib/format'
 import { useLanguage } from '../lib/i18n'
 import type { AgentRunRead, AgentSourceRead, TeamChatMessageRead, UserRead } from '../lib/types'
 import { Select } from '../components/Select'
+import './team-chat-replies.css'
 
 type ConversationKind = 'channel' | 'direct' | 'group'
 interface Conversation { id: string; title: string; kind: ConversationKind; participantUserIds: string[] }
@@ -45,6 +46,7 @@ export function TeamChatPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
+  const [isInvokingAgent, setIsInvokingAgent] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -57,6 +59,7 @@ export function TeamChatPage() {
   const [startedConversations, setStartedConversations] = useState<Conversation[]>([])
   const [groupName, setGroupName] = useState('')
   const [groupParticipants, setGroupParticipants] = useState<string[]>([])
+  const [replyingTo, setReplyingTo] = useState<TeamChatMessageRead | null>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const agentControls = useAgentControls(session?.token, session?.user.user_id)
@@ -93,7 +96,7 @@ export function TeamChatPage() {
   useEffect(() => {
     const runId = pendingRun?.run_id
     if (!runId || !session?.token) return
-    const events = new EventSource(api.agentRunEventsUrl(runId), { withCredentials: true })
+    const events = api.subscribeAgentRunEvents(runId)
     const refresh = async () => {
       try {
         const run = await api.getAgentRun(session.token, runId)
@@ -110,6 +113,11 @@ export function TeamChatPage() {
     events.addEventListener('delta', (event) => {
       const payload = JSON.parse((event as MessageEvent).data) as { text?: string }
       if (payload.text) setStreamedTextByRun((current) => ({ ...current, [runId]: (current[runId] ?? '') + payload.text }))
+    })
+    events.addEventListener('snapshot', (event) => {
+      const run = JSON.parse((event as MessageEvent).data) as AgentRunRead
+      setStreamedTextByRun((current) => ({ ...current, [runId]: run.answer ?? '' }))
+      void refresh()
     })
     events.addEventListener('reset', () => setStreamedTextByRun((current) => ({ ...current, [runId]: '' })))
     for (const name of ['stage', 'source', 'done', 'failed']) events.addEventListener(name, () => void refresh())
@@ -140,6 +148,7 @@ export function TeamChatPage() {
     const body = draft.trim()
     followLatest()
     const invokesAgent = active.id === 'izge-colleague' || izgeMentionPattern.test(body)
+    setIsInvokingAgent(invokesAgent)
     setDraft('')
     setIsSending(true)
     setError(null)
@@ -152,12 +161,13 @@ export function TeamChatPage() {
           thread_title: active.title,
           thread_kind: active.kind,
           participant_user_ids: active.participantUserIds,
+          reply_to_message_id: replyingTo?.message_id,
           ...agentControls.requestOptions,
         })
         const run = await api.getAgentRun(session.token, created.run_id)
         dataRevision.current += 1
         setAgentRuns((current) => [run, ...current.filter((item) => item.run_id !== run.run_id)])
-        setStreamedTextByRun((current) => ({ ...current, [run.run_id]: '' }))
+        setStreamedTextByRun((current) => ({ ...current, [run.run_id]: run.answer ?? '' }))
         const thread = await api.listTeamChatMessages(session.token, 240)
         dataRevision.current += 1
         setMessages(thread.messages)
@@ -166,15 +176,17 @@ export function TeamChatPage() {
           thread_id: active.id,
           thread_title: active.title,
           thread_kind: active.kind,
+          reply_to_message_id: replyingTo?.message_id,
           message_metadata: { participant_user_ids: active.participantUserIds },
         })
         dataRevision.current += 1
         setMessages((current) => [...current, created])
       }
+      setReplyingTo(null)
     } catch (caughtError) {
       setDraft(body)
       setError(errorMessage(caughtError, t('Message could not be sent.', 'Mesaj gönderilemedi.')))
-    } finally { setIsSending(false) }
+    } finally { setIsSending(false); setIsInvokingAgent(false) }
   }
 
   async function createGroup(event: FormEvent<HTMLFormElement>) {
@@ -194,6 +206,7 @@ export function TeamChatPage() {
       dataRevision.current += 1
       setMessages((current) => [...current, created])
       setActiveId(threadId)
+      setReplyingTo(null)
       setGroupName('')
       setGroupParticipants([])
       setShowGroupForm(false)
@@ -210,6 +223,7 @@ export function TeamChatPage() {
     const conversation = { id: `direct:${participantUserIds.join(':')}`, title: colleague.display_name, kind: 'direct' as const, participantUserIds }
     setStartedConversations((current) => current.some((item) => item.id === conversation.id) ? current : [...current, conversation])
     setActiveId(conversation.id)
+    setReplyingTo(null)
     setShowDirectForm(false)
     setDirectUserId('')
     window.requestAnimationFrame(() => composerRef.current?.focus())
@@ -254,6 +268,12 @@ export function TeamChatPage() {
       setStreamedTextByRun((current) => ({ ...current, [pendingRun.run_id]: '' }))
     }
     setActiveId(conversationId)
+    setReplyingTo(null)
+  }
+
+  function startReply(message: TeamChatMessageRead) {
+    setReplyingTo(message)
+    window.requestAnimationFrame(() => composerRef.current?.focus())
   }
 
   const fillFollowUp = (question: string) => {
@@ -281,7 +301,7 @@ export function TeamChatPage() {
             {isLoading ? <LoadingState label={t('Loading messages', 'Mesajlar yükleniyor')} /> : null}
             {!isLoading && activeMessages.length === 0 && !latestThreadRun ? <EmptyState title={t('Conversation ready', 'Konuşma hazır')} description={active?.id === 'izge-colleague' ? t('Ask Izge a question about company work.', 'İzge’ye şirket işleri hakkında bir soru sorun.') : t('Send the first message.', 'İlk mesajı gönderin.')} /> : null}
             {activeMessages.map((message) => {
-              const own = message.author_user_id === session?.user.user_id
+              const own = message.is_authored_by_current_user
               const sources = messageSources(message)
               const attachments = messageAttachments(message)
               const followUps = metadataStrings(message, 'follow_ups')
@@ -289,13 +309,14 @@ export function TeamChatPage() {
               const authorTitle = metadataString(message, 'author_title')
               const messageRunId = metadataString(message, 'colleague_run_id')
               const messageRun = messageRunId ? agentRuns.find((run) => run.run_id === messageRunId) : null
-              return <article key={message.message_id} className={own ? 'team-chat-message-row team-chat-message-row-own' : 'team-chat-message-row'}><span className="team-chat-message-avatar">{fromIzge ? <IzgeLogo /> : initials(message.author_display_name)}</span><div className={own ? 'team-chat-message team-chat-message-own' : 'team-chat-message'}><span className="team-chat-message-author"><strong className="message-author-name">{own ? t('You', 'Siz') : message.author_display_name}</strong>{authorTitle && !own ? <small>{authorTitle}</small> : null}</span>{fromIzge && messageRun?.stages.length ? <ThinkingState key={`${messageRun.run_id}-${messageRun.status}`} stages={messageRun.stages} status={messageRun.status} /> : null}{fromIzge ? <AgentAnswer text={message.body} sources={sources} followUps={followUps} onFollowUp={fillFollowUp} /> : message.message_metadata?.attachment_only ? null : <div className="team-chat-message-copy"><AgentText text={message.body} /></div>}{attachments.length ? <div className="team-chat-attachments">{attachments.map((attachment) => <SourcePreviewButton key={attachment.artifact_id} artifactId={attachment.artifact_id} title={attachment.title} className="team-chat-attachment"><ButtonIcon name="attach" /><span><strong>{attachment.filename}</strong><small>{t('Conversation source', 'Sohbet kaynağı')}</small></span></SourcePreviewButton>)}</div> : null}<time>{formatDateTime(message.created_at)}</time></div></article>
+              return <article key={message.message_id} className={own ? 'team-chat-message-row team-chat-message-row-own' : 'team-chat-message-row'}><span className="team-chat-message-avatar">{fromIzge ? <IzgeLogo /> : initials(message.author_display_name)}</span><div className={own ? 'team-chat-message team-chat-message-own' : 'team-chat-message'}><button type="button" className="team-chat-reply-button" aria-label={t(`Reply to ${message.author_display_name}`, `${message.author_display_name} adlı kişiye yanıt ver`)} onClick={() => startReply(message)}>{t('Reply', 'Yanıtla')}</button><span className="team-chat-message-author"><strong className="message-author-name">{own ? t('You', 'Siz') : message.author_display_name}</strong>{authorTitle && !own ? <small>{authorTitle}</small> : null}</span>{message.reply_to ? <blockquote className="team-chat-reply-quote"><strong>{message.reply_to.author_display_name}</strong><span>{message.reply_to.body}</span></blockquote> : null}{fromIzge && messageRun?.stages.length ? <ThinkingState key={`${messageRun.run_id}-${messageRun.status}`} stages={messageRun.stages} status={messageRun.status} /> : null}{fromIzge ? <AgentAnswer text={message.body} sources={sources} followUps={followUps} onFollowUp={fillFollowUp} /> : message.message_metadata?.attachment_only ? null : <div className="team-chat-message-copy"><AgentText text={message.body} /></div>}{attachments.length ? <div className="team-chat-attachments">{attachments.map((attachment) => <SourcePreviewButton key={attachment.artifact_id} artifactId={attachment.artifact_id} title={attachment.title} className="team-chat-attachment"><ButtonIcon name="attach" /><span><strong>{attachment.filename}</strong><small>{t('Conversation source', 'Sohbet kaynağı')}</small></span></SourcePreviewButton>)}</div> : null}<time>{formatDateTime(message.created_at)}</time></div></article>
             })}
+            {isSending && isInvokingAgent && !pendingRun ? <ThinkingState stages={[]} status="queued" /> : null}
             {pendingRun ? <article className="team-chat-message-row"><span className="team-chat-message-avatar"><IzgeLogo /></span><div className="team-chat-message agent-run-message"><ThinkingState key={`${pendingRun.run_id}-${pendingRun.status}`} stages={pendingRun.stages} status={pendingRun.status} />{streamedTextByRun[pendingRun.run_id] ? <AgentAnswer text={streamedTextByRun[pendingRun.run_id]} sources={pendingRun.sources} active /> : null}</div></article> : null}
             {!pendingRun && latestThreadRun?.status === 'failed' ? <Callout tone="warning">{latestThreadRun.error || t('Izge could not complete this work.', 'İzge bu işi tamamlayamadı.')}</Callout> : null}
           </div>
           <input ref={fileInputRef} hidden type="file" accept=".txt,.md,.markdown,.pdf,text/plain,text/markdown,application/pdf" onChange={(event) => void attachFile(event.target.files?.[0])} />
-          <ChatComposer value={draft} onChange={setDraft} onSubmit={() => void submit()} disabled={isSending || Boolean(pendingRun)} context={active?.id === 'izge-colleague' ? t('Company memory', 'Şirket hafızası') : t('Team conversation', 'Ekip konuşması')} label={t(`${active?.title ?? 'conversation'} message`, `${active?.title ?? 'konuşma'} mesajı`)} placeholder={active?.id === 'izge-colleague' ? t('Ask about company files, decisions, or work…', 'Şirket dosyaları, kararlar veya işler hakkında sor…') : t('Write a message or call Izge with @izge…', 'Mesaj yaz veya @izge ile İzge’yi çağır…')} mentionAutocomplete={active?.id !== 'izge-colleague'} inputRef={composerRef} onAdd={() => fileInputRef.current?.click()} addDisabled={isUploading || isSending || Boolean(pendingRun)} addLabel={isUploading ? t('Uploading file', 'Dosya yükleniyor') : t('Add file to conversation', 'Konuşmaya dosya ekle')} tools={agentControls} leading={<AgentControls controls={agentControls} disabled={isSending || Boolean(pendingRun)} />} />
+          <div className="team-chat-composer-wrap">{replyingTo ? <div className="team-chat-reply-preview"><span><strong>{replyingTo.author_display_name}</strong><small>{replyingTo.body}</small></span><button type="button" aria-label={t('Cancel reply', 'Yanıtı iptal et')} onClick={() => setReplyingTo(null)}>×</button></div> : null}<ChatComposer value={draft} onChange={setDraft} onSubmit={() => void submit()} disabled={isSending || Boolean(pendingRun)} context={active?.id === 'izge-colleague' ? t('Company memory', 'Şirket hafızası') : t('Team conversation', 'Ekip konuşması')} label={t(`${active?.title ?? 'conversation'} message`, `${active?.title ?? 'konuşma'} mesajı`)} placeholder={active?.id === 'izge-colleague' ? t('Ask about company files, decisions, or work…', 'Şirket dosyaları, kararlar veya işler hakkında sor…') : t('Write a message or call Izge with @izge…', 'Mesaj yaz veya @izge ile İzge’yi çağır…')} mentionAutocomplete={active?.id !== 'izge-colleague'} inputRef={composerRef} onAdd={() => fileInputRef.current?.click()} addDisabled={isUploading || isSending || Boolean(pendingRun)} addLabel={isUploading ? t('Uploading file', 'Dosya yükleniyor') : t('Add file to conversation', 'Konuşmaya dosya ekle')} tools={agentControls} leading={<AgentControls controls={agentControls} disabled={isSending || Boolean(pendingRun)} />} /></div>
         </div>
       </section>
     </div>

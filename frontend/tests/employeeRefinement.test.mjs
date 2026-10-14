@@ -31,6 +31,8 @@ test('notifications expand in place and expose separate persistent actions', () 
   assert.match(source, /api\.markNotificationUnread/)
   assert.match(source, /api\.deleteNotification/)
   assert.match(source, /openConversation\(item\)/)
+  assert.match(source, /notification-action-open/)
+  assert.match(source, /notification-action-danger/)
   assert.match(source, /revisionRef\.current/)
   assert.match(source, /mutationRef\.current/)
   assert.match(source, /key=\{`\$\{item\.notification_id\}:\$\{unreadOnly/)
@@ -72,6 +74,8 @@ test('public demo uses accessible persona buttons while preserving administrator
   assert.match(page, /caughtError\.status === 429/)
   assert.match(page, /Yönetici girişi/)
   assert.match(page, /id="admin-sign-in-form"/)
+  assert.doesNotMatch(page, /hourly_limit/)
+  assert.doesNotMatch(page, /Her IP adresi için saatte en fazla/)
 })
 
 test('automation instructions are secondary while run state stays scannable', () => {

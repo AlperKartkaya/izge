@@ -19,6 +19,7 @@ class AgentPlan(BaseModel):
     web_query: str = Field(max_length=300)
     mcp_reads: list[MCPRead] = Field(max_length=2)
     reviewer: bool
+    conversation_title: str = Field(default="", max_length=60)
 
 
 def non_substantive_reply(text: str, *, language: str) -> str | None:

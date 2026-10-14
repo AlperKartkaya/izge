@@ -99,6 +99,8 @@ class PublicDemoTests(unittest.TestCase):
 
         self.assertEqual(first.user.user_id, second.user.user_id)
         self.assertEqual("Member", first.user.role)
+        self.assertTrue(first.user.is_public_demo)
+        self.assertEqual("selin", first.user.public_demo_persona)
         self.assertNotEqual(first.user.user_id, other_persona.user.user_id)
         self.assertNotEqual(first.user.user_id, other_visitor.user.user_id)
         self.assertEqual(3, self.db.scalar(select(func.count()).select_from(User).where(User.is_public_demo.is_(True))))
@@ -113,8 +115,15 @@ class PublicDemoTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as blocked:
                 get_current_user(request_for("203.0.113.20", path="/api/query", method="POST"), signed_in.access_token, self.db)
             self.assertEqual(403, blocked.exception.status_code)
-            allowed = get_current_user(request_for("203.0.113.20", path="/api/work/ask", method="POST"), signed_in.access_token, self.db)
-        self.assertEqual(signed_in.user.user_id, allowed.user_id)
+            with self.assertRaises(HTTPException) as old_ask:
+                get_current_user(request_for("203.0.113.20", path="/api/work/ask", method="POST"), signed_in.access_token, self.db)
+            self.assertEqual(403, old_ask.exception.status_code)
+            for path in ("/api/demo/ask", "/api/demo/ask/events", "/api/demo/extract"):
+                allowed = get_current_user(request_for("203.0.113.20", path=path, method="POST"), signed_in.access_token, self.db)
+                self.assertEqual(signed_in.user.user_id, allowed.user_id)
+            with self.assertRaises(HTTPException) as nested_route:
+                get_current_user(request_for("203.0.113.20", path="/api/demo/ask/events/delete", method="POST"), signed_in.access_token, self.db)
+            self.assertEqual(403, nested_route.exception.status_code)
 
     def test_visitors_share_only_persona_baseline_access_not_private_history(self) -> None:
         kerem_token = self.sign_in("kerem", "203.0.113.40", "k" * 32)
@@ -132,7 +141,13 @@ class PublicDemoTests(unittest.TestCase):
             workspace_id=self.workspace.workspace_id,
             author_user_id=source_kerem.user_id,
             body="Kerem persona baseline",
-            message_metadata={"thread_id": "kerem-only", "thread_kind": "group", "participant_user_ids": [source_kerem.user_id]},
+            message_metadata={
+                "thread_id": "kerem-only",
+                "thread_kind": "group",
+                "participant_user_ids": [source_kerem.user_id],
+                "seeded": True,
+                "seed_batch": "pusula-b2b-demo-v1",
+            },
         ))
         self.db.commit()
 

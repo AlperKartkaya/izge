@@ -47,11 +47,15 @@ input, textarea { caret-color: var(--primary); }
   text-transform: none; letter-spacing: 0; font-weight: 500;
 }
 :root[data-theme] .section-panel {
-  padding: 1.25rem 0; border: 0; border-top: 1px solid var(--color-border);
-  border-radius: 0; background: transparent !important; box-shadow: none !important; backdrop-filter: none;
+  gap: 0; padding: 1rem; border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md); background: var(--color-surface-elevated) !important;
+  box-shadow: none !important; backdrop-filter: none;
 }
-.section-head { align-items: flex-start; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
-:root[data-theme] .section-panel .section-panel { padding: 1rem 0 0; }
+.section-head { align-items: flex-start; gap: 1rem; margin-bottom: .75rem; padding-bottom: .75rem; flex-wrap: wrap; }
+:root[data-theme] .section-panel .section-panel {
+  padding: 1rem 0 0; border: 0 !important; border-top: 1px solid var(--color-border) !important;
+  border-radius: 0; background: transparent !important;
+}
 
 /* Quiet, responsive fact strips rather than a second dashboard of KPI cards. */
 .metric-grid { display: flex; flex-wrap: wrap; gap: 0; border-block: 1px solid var(--color-border); }
@@ -144,7 +148,7 @@ input[type='file']::file-selector-button { margin-right: .75rem; min-height: 2.5
 .agent-context-card { padding: .75rem 0; border: 0; border-bottom: 1px solid var(--color-border); border-radius: 0; background: transparent; }
 .agent-context-card > strong { white-space: normal; font-size: .8125rem; overflow-wrap: anywhere; }
 .team-chat-messages .team-chat-message { padding: .25rem 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.team-chat-messages .team-chat-message-row-own { align-self: flex-start; flex-direction: row; }
+.team-chat-messages .team-chat-message-row-own { align-self: flex-end; flex-direction: row-reverse; }
 .team-chat-messages .team-chat-message-row { max-width: min(100%, 48rem); }
 .team-chat-message-author small, .team-chat-message time { font-size: .75rem; }
 .agent-chat-composer { border-radius: .75rem; box-shadow: none; }
@@ -165,8 +169,7 @@ input[type='file']::file-selector-button { margin-right: .75rem; min-height: 2.5
   .page-intro-actions { width: 100%; }
   .metric-card { flex-basis: 45%; }
   .section-head { align-items: flex-start; }
-  .field :is(input, select, textarea), .agent-chat-composer textarea,
-  .agent-composer-highlight { font-size: 1rem; }
+  .field :is(input, select, textarea), .agent-chat-composer textarea { font-size: 1rem; }
   .agent-task-row { flex-wrap: wrap; }
   .agent-task-copy { flex-basis: calc(100% - 4rem); }
   .agent-task-status { margin-left: 3rem; }
@@ -298,6 +301,8 @@ input[type='file']::file-selector-button { margin-right: .75rem; min-height: 2.5
 /* Flex descendants must shrink to the message, not to their longest evidence. */
 .team-chat-messages .team-chat-message-row { width: 100%; min-width: 0; }
 .team-chat-messages .team-chat-message { flex: 1 1 0; min-width: 0; max-width: 100%; }
+.team-chat-messages .team-chat-message-row-own { width: fit-content; max-width: min(88%, 48rem); }
+.team-chat-messages .team-chat-message-own { padding: 12px 14px; border-radius: 12px; background: var(--color-surface-muted); }
 :is(.team-chat-message-copy, .agent-answer, .agent-answer-copy, .agent-evidence, .agent-context-cards, .agent-follow-ups) { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 :is(.team-chat-message, .agent-answer) pre { max-width: 100%; overflow-x: auto; white-space: pre; }
 :is(.team-chat-message, .agent-answer) .table-wrap { max-width: 100%; overflow-x: auto; }

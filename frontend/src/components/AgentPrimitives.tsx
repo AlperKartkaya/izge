@@ -11,29 +11,13 @@ import { IzgeLogo } from './IzgeLogo'
 import { AgentToolMenu, AgentToolChips } from './AgentControls'
 import type { useAgentControls } from './useAgentControls'
 import { SourcePreviewButton } from './SourcePreviewButton'
+import './page-states.css'
 
 /* Adapted from beautiful-ui primitives at 44a274e598395ab61e7c96c26fda2758780253b7.
  * Copyright (c) 2026 Shane Levine, MIT License. Animations are driven by real API state. */
 
 export function LoadingState({ label }: { label: string }) {
-  const { t } = useLanguage()
-  const [elapsed, setElapsed] = useState(0)
-
-  useEffect(() => {
-    const startedAt = Date.now()
-    const timer = window.setInterval(() => setElapsed(Date.now() - startedAt), 100)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  return (
-    <div className="agent-loading" role="status">
-      <span className="agent-loading-grid" aria-hidden="true">
-        {Array.from({ length: 9 }, (_, index) => <i key={index} style={{ animationDelay: `${(index % 3 + Math.abs(Math.floor(index / 3) - 1)) * 90}ms` }} />)}
-      </span>
-      <span className="agent-shimmer">{label}</span>
-      <span className="agent-elapsed">{(elapsed / 1000).toFixed(1)} {t('s', 'sn')}</span>
-    </div>
-  )
+  return <div className="page-loading" role="status">{label}</div>
 }
 
 export function ThinkingState({ stages, status }: { stages: AgentRunStageRead[]; status: 'queued' | 'running' | 'completed' | 'failed' }) {
@@ -41,13 +25,20 @@ export function ThinkingState({ stages, status }: { stages: AgentRunStageRead[];
   const working = status === 'queued' || status === 'running'
   const [expanded, setExpanded] = useState(working)
   const visibleStages = latestAgentStages(stages)
-
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!working) return
+    const started = Date.now()
+    const timer = window.setInterval(() => setElapsed((Date.now() - started) / 1000), 100)
+    return () => window.clearInterval(timer)
+  }, [working])
 
   return (
     <div className="agent-thinking">
       <button type="button" className="agent-thinking-toggle" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
-        <span className="agent-thinking-mark" aria-hidden="true"><IzgeLogo /></span>
+        {working ? <span className="agent-loading-grid" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <i key={index} style={{ animationDelay: `${index * 70}ms` }} />)}</span> : <span className="agent-thinking-mark" aria-hidden="true"><IzgeLogo /></span>}
         <span className={working ? 'agent-shimmer' : ''}>{working ? t('Izge is thinking', 'İzge düşünüyor') : status === 'completed' ? t('Work completed', 'Çalışma tamamlandı') : t('Work failed', 'Çalışma başarısız')}</span>
+        {working ? <span className="agent-elapsed" aria-hidden="true">{elapsed.toFixed(1)}s</span> : null}
         <span className="disclosure-indicator" aria-hidden="true" />
       </button>
       {expanded ? (
@@ -91,10 +82,6 @@ function InlineText({ text, sources = [] }: { text: string; sources?: AgentSourc
     }
     return token.value
   })
-}
-
-function ComposerText({ text }: { text: string }) {
-  return text.split(/(@[iİı]zge\b)/giu).map((part, index) => /^@[iİı]zge$/iu.test(part) ? <mark className="izge-mention" key={index}>{part}</mark> : part)
 }
 
 export function AgentText({ text, sources = [] }: { text: string; sources?: AgentSourceRead[] }) {
@@ -192,7 +179,6 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, label, place
   const menuRef = useRef<HTMLDivElement>(null)
   const addRef = useRef<HTMLButtonElement>(null)
   const localRef = useRef<HTMLTextAreaElement>(null)
-  const overlayRef = useRef<HTMLDivElement>(null)
   const pendingCaretRef = useRef<number | null>(null)
   const [caret, setCaret] = useState(value.length)
   const mentionOpen = mentionAutocomplete && /(^|\s)@[\p{L}]*$/u.test(value.slice(0, caret))
@@ -230,7 +216,6 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, label, place
     element.focus()
     element.setSelectionRange(nextCaret, nextCaret)
     element.scrollTop = element.scrollHeight
-    if (overlayRef.current) overlayRef.current.scrollTop = element.scrollTop
   }, [value, caret])
   const submit: FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault()
@@ -239,14 +224,12 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, label, place
 
   return (
     <form className="agent-chat-composer" onSubmit={submit}>
-      {leading}
       <div className="agent-composer-input-row">
       {tools ? <AgentToolChips controls={tools} disabled={disabled} /> : null}
       <label>
         <span className="sr-only">{resolvedLabel}</span>
-        <span className={mentionAutocomplete ? 'agent-composer-editor agent-composer-editor-mentions' : 'agent-composer-editor'}>
-        {mentionAutocomplete ? <div ref={overlayRef} className="agent-composer-highlight" aria-hidden="true"><ComposerText text={value || ' '} /></div> : null}
-        <textarea ref={setRef} value={value} onChange={(event) => { setCaret(event.target.selectionStart); onChange(event.target.value) }} onSelect={(event) => setCaret(event.currentTarget.selectionStart)} rows={2} placeholder={resolvedPlaceholder} disabled={disabled} onScroll={(event) => { if (overlayRef.current) overlayRef.current.scrollTop = event.currentTarget.scrollTop }} onKeyDown={(event) => {
+        <span className="agent-composer-editor">
+        <textarea ref={setRef} value={value} onChange={(event) => { setCaret(event.target.selectionStart); onChange(event.target.value) }} onSelect={(event) => setCaret(event.currentTarget.selectionStart)} rows={2} placeholder={resolvedPlaceholder} disabled={disabled} onKeyDown={(event) => {
           if (event.nativeEvent.isComposing) return
           if (mentionOpen && (event.key === 'Enter' || event.key === 'Tab')) {
             event.preventDefault()
@@ -264,13 +247,13 @@ export function ChatComposer({ value, onChange, onSubmit, disabled, label, place
       {mentionOpen ? <div className="agent-mention-menu" role="listbox" aria-label={t('Mention', 'Bahset')}><button type="button" role="option" aria-selected="true" onClick={selectMention}><span className="agent-avatar"><IzgeLogo /></span><span><strong>@izge</strong><small>{t('Ask company memory', 'Şirket hafızasına sor')}</small></span></button></div> : null}
       <div className="agent-prompt-controls">
         <button ref={addRef} type="button" className="agent-prompt-add" onClick={() => setMenuOpen((open) => !open)} disabled={disabled} aria-expanded={menuOpen} aria-haspopup="menu" aria-label={t('Add files and tools', 'Dosya ve araç ekle')} title={t('Add files and tools', 'Dosya ve araç ekle')}><ButtonIcon name="add" /></button>
+        {leading}
         {menuOpen ? <div ref={menuRef} className="agent-add-menu" role="menu" aria-label={t('Add', 'Ekle')}>
           <strong>{t('Add', 'Ekle')}</strong>
           <button type="button" role="menuitem" disabled={!onAdd || addDisabled} onClick={() => { setMenuOpen(false); onAdd?.() }}><ButtonIcon name="attach" /><span>{resolvedAddLabel}<small>{t('Upload from computer', 'Bilgisayardan yükle')}</small></span></button>
           {tools ? <AgentToolMenu controls={tools} disabled={disabled} onSelect={() => { setMenuOpen(false); localRef.current?.focus() }} /> : null}
         </div> : null}
         <span className="agent-prompt-context"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m12 3 10 5-10 5L2 8l10-5Zm-10 9 10 5 10-5M2 16l10 5 10-5" /></svg>{resolvedContext}</span>
-        <span className="agent-prompt-hint">Shift + Enter · {t('New line', 'Yeni satır')}</span>
         <button type="submit" className="primary-button" disabled={disabled || !value.trim()} aria-label={t('Send', 'Gönder')}><ButtonIcon name="send" /></button>
       </div>
     </form>

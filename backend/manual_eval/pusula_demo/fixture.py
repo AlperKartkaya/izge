@@ -83,6 +83,7 @@ CHAT_MESSAGES = (
     (datetime(2026, 10, 8, 15, 10), "kerem", "Ben connection pool testi için erişim gerekeceğini not ettim ama onay talebini açan kişi değilim.", _thread("operations", "Operasyon", "group", ["mert", "kerem", "derya"])),
     (datetime(2026, 10, 8, 15, 14), "mert", "Bana kişi, ortam ve süre bilgisi gelirse bugün açabilirim. Şu an kime erişim gerektiğini bilmiyorum.", _thread("operations", "Operasyon", "group", ["mert", "kerem", "derya"])),
     (datetime(2026, 10, 8, 15, 19), "derya", "Bekleyen iş iki ekip arasında kalmış görünüyor. Kısa bir onay görevi oluşturup doğrudan Mert'e iletelim.", _thread("operations", "Operasyon", "group", ["mert", "kerem", "derya"])),
+    (datetime(2026, 10, 14, 9, 0), "selin", "Merhaba ekip, 16 Ekim Cuma günü 14.00–15.30 arasında İstanbul ofisimizin 2. kat toplantı salonunda ‘Daha odaklı çalışma ve ekip verimliliği’ semineri düzenliyoruz. Önceliklendirme, kesintileri azaltma ve ekipler arası iş takibi için günlük işimizde kullanabileceğimiz pratikleri konuşacağız. Programı uygun olan herkesin katılmasını öneriyorum; takviminizde bu zamanı ayırırsanız sevinirim. Görüşmek üzere!", {**_thread("company-general", "Şirket geneli", "channel", [persona["key"] for persona in PERSONAS]), "seed_key": "productivity-seminar-20261016"}),
 )
 
 TASKS = (
@@ -108,4 +109,5 @@ def validate_fixture() -> None:
     thread_counts: dict[str, int] = {}
     for _created_at, _author, _body, metadata in CHAT_MESSAGES:
         thread_counts[metadata["thread_id"]] = thread_counts.get(metadata["thread_id"], 0) + 1
-    assert all(3 <= count <= 6 for count in thread_counts.values()), thread_counts
+    assert thread_counts.get("company-general") == 1, "Şirket kanalında tek seminer daveti olmalı"
+    assert all(3 <= count <= 6 for thread, count in thread_counts.items() if thread != "company-general"), thread_counts

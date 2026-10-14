@@ -1,6 +1,8 @@
 export type UserRole = 'Admin' | 'Member'
 
 export interface UserRead {
+  is_public_demo?: boolean
+  public_demo_persona?: DemoPersonaId | null
   user_id: string
   workspace_id: string
   display_name: string
@@ -35,7 +37,13 @@ export interface TeamChatMessageRead {
   author_user_id: string
   author_display_name: string
   author_role: UserRole
+  is_authored_by_current_user: boolean
   body: string
+  reply_to: {
+    message_id: string
+    author_display_name: string
+    body: string
+  } | null
   message_metadata: Record<string, unknown>
   created_at: string
 }

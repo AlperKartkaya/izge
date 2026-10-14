@@ -100,6 +100,7 @@ class ColleagueAskCreate(BaseModel):
     thread_title: str | None = Field(default=None, min_length=1, max_length=120)
     thread_kind: ThreadKind = "direct"
     participant_user_ids: list[str] = Field(default_factory=list, max_length=50)
+    reply_to_message_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class ColleagueAskAccepted(BaseModel):

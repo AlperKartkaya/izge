@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ButtonIcon } from '../components/ButtonIcon'
-import { api } from '../lib/api'
+import { api, resetBrowserDemo } from '../lib/api'
+import './demo-notice.css'
 import { formatDateTime } from '../lib/format'
 import { useLanguage } from '../lib/i18n'
 import { isNavigationActive } from '../lib/navigation'
@@ -83,6 +84,6 @@ export function AppShell() {
         <button type="button" className="text-button sidebar-control" aria-label={t('Sign out', 'Çıkış yap')} title={t('Sign out', 'Çıkış yap')} onClick={signOut}><ButtonIcon name="sign-out" /><span className="sidebar-control-label">{t('Sign out', 'Çıkış yap')}</span></button>
       </div>
     </header>
-    <main id="main-content" ref={mainRef} tabIndex={-1} className="workspace-column"><section className="workspace-content"><Outlet /></section></main>
+    <main id="main-content" ref={mainRef} tabIndex={-1} className="workspace-column"><section className="workspace-content">{session?.user.is_public_demo ? <aside className="demo-notice" aria-label={t('Demo workspace', 'Demo çalışma alanı')}><span>{t('Changes stay in this browser. AI requests are processed temporarily on the server.', 'Değişiklikler bu tarayıcıda kalır. Yapay zekâ istekleri sunucuda geçici olarak işlenir.')}</span><button type="button" className="text-button" onClick={() => { if (window.confirm(t('Delete your browser demo changes and start again?', 'Tarayıcıdaki demo değişiklikleri silinsin ve baştan başlansın mı?'))) { resetBrowserDemo(); window.location.reload() } }}>{t('Reset demo', 'Demoyu sıfırla')}</button></aside> : null}<Outlet /></section></main>
   </div>
 }

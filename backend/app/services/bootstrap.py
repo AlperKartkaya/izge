@@ -724,3 +724,43 @@ def seed_defaults(db: Session) -> None:
         default_users = _seed_default_users(db, workspace)
         _seed_default_artifacts(db, workspace=workspace, admin=admin)
         _seed_default_team_chat(db, workspace=workspace, users_by_email=default_users, admin=admin)
+    if settings.public_demo_enabled:
+        seed_demo_announcement(db)
+
+
+def seed_demo_announcement(db: Session) -> None:
+    from manual_eval.pusula_demo.fixture import CHAT_MESSAGES, PERSONAS, WORKSPACE_NAME
+    from zoneinfo import ZoneInfo
+    from datetime import UTC
+
+    workspace = db.scalar(select(Workspace).where(Workspace.name == WORKSPACE_NAME))
+    if workspace is None:
+        return
+    created_at, author_key, body, template = next(turn for turn in CHAT_MESSAGES if turn[3].get("seed_key") == "productivity-seminar-20261016")
+    existing = db.scalar(select(CompanyChatMessage).where(
+        CompanyChatMessage.workspace_id == workspace.workspace_id,
+        CompanyChatMessage.message_metadata["seed_key"].as_string() == template["seed_key"],
+    ))
+    persona = next(item for item in PERSONAS if item["key"] == author_key)
+    author = db.scalar(select(User).where(User.workspace_id == workspace.workspace_id, User.email == persona["email"], User.is_public_demo.is_(False)))
+    if author is None:
+        return
+    participant_ids = list(db.scalars(select(User.user_id).where(
+        User.workspace_id == workspace.workspace_id,
+        User.email.in_([item["email"] for item in PERSONAS]),
+        User.is_public_demo.is_(False),
+    )).all())
+    if existing is not None:
+        if existing.author_user_id == author.user_id and existing.message_metadata.get("seed_batch") == template["seed_batch"] and not existing.message_metadata.get("participant_user_ids"):
+            existing.message_metadata = {**existing.message_metadata, "participant_user_ids": participant_ids}
+            db.commit()
+        return
+    metadata = {key: value for key, value in template.items() if key != "participant_keys"}
+    metadata["author_title"] = persona["title"]
+    metadata["participant_user_ids"] = participant_ids
+    db.add(CompanyChatMessage(
+        workspace_id=workspace.workspace_id, author_user_id=author.user_id, body=body,
+        message_metadata=metadata,
+        created_at=created_at.replace(tzinfo=ZoneInfo("Europe/Istanbul")).astimezone(UTC).replace(tzinfo=None),
+    ))
+    db.commit()

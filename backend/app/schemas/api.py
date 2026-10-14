@@ -57,6 +57,8 @@ class UserRead(UserBase):
 
     user_id: str
     workspace_id: str
+    is_public_demo: bool = False
+    public_demo_persona: str | None = None
     created_at: datetime
 
 
@@ -65,7 +67,14 @@ class TeamChatMessageCreate(BaseModel):
     thread_id: str | None = Field(default=None, min_length=1, max_length=80)
     thread_title: str | None = Field(default=None, min_length=1, max_length=120)
     thread_kind: Literal["channel", "direct", "group"] = "channel"
+    reply_to_message_id: str | None = Field(default=None, min_length=1, max_length=64)
     message_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TeamChatReplyRead(BaseModel):
+    message_id: str
+    author_display_name: str
+    body: str
 
 
 class TeamChatMessageRead(BaseModel):
@@ -74,7 +83,9 @@ class TeamChatMessageRead(BaseModel):
     author_user_id: str
     author_display_name: str
     author_role: Literal["Admin", "Member"]
+    is_authored_by_current_user: bool
     body: str
+    reply_to: TeamChatReplyRead | None = None
     message_metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 

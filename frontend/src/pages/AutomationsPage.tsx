@@ -10,6 +10,7 @@ import { formatDateTime } from '../lib/format'
 import { useLanguage } from '../lib/i18n'
 import type { AutomationFrequency, AutomationRead } from '../lib/types'
 import { Select } from '../components/Select'
+import './automations.css'
 
 const templates = [
   ['Günlük iş özeti', 'Bugünkü işleri, açık riskleri ve yarın için önerilen öncelikleri özetle.', '16:00', 'Daily work summary', 'Summarize today\'s work, open risks, and recommended priorities for tomorrow.'],
@@ -49,13 +50,13 @@ export function AutomationsPage() {
       const version = mutationVersion.current
       try {
         const loaded = await api.listAutomations(session.token)
-        if (!cancelled && version === mutationVersion.current) { setItems(loaded); setError(null) }
+        if (!cancelled && version === mutationVersion.current) setItems(loaded)
       } catch (caughtError) {
         if (!cancelled) setError(errorMessage(caughtError, t('Automations could not be loaded.', 'Otomasyonlar yüklenemedi.')))
       } finally { if (!cancelled) setIsLoading(false) }
     }
     void load()
-    const timer = window.setInterval(() => { setNow(new Date()); void load() }, 30_000)
+    const timer = window.setInterval(() => { setNow(new Date()); void load() }, 4000)
     return () => { cancelled = true; window.clearInterval(timer) }
   }, [session?.token, t])
 
@@ -100,7 +101,7 @@ export function AutomationsPage() {
     setBusyId(item.automation_id); setError(null)
     try {
       const created = await api.runAutomation(session.token, item.automation_id)
-      navigate(`/query?thread=${encodeURIComponent(created.thread_id)}&run=${encodeURIComponent(created.run_id)}`)
+      setItems((current) => current.map((value) => value.automation_id === item.automation_id ? { ...value, last_run_id: created.run_id, last_run_status: created.status, last_run_at: new Date().toISOString() } : value))
     } catch (caughtError) { setError(errorMessage(caughtError, t('Automation could not be started.', 'Otomasyon başlatılamadı.'))) }
     finally { setBusyId(null) }
   }
@@ -127,12 +128,13 @@ export function AutomationsPage() {
       <div><h1>{t('Automations', 'Otomasyonlar')}</h1><p>{t('Schedule recurring checks and review their results.', 'Tekrarlanan kontrolleri planlayın, sonuçlarını inceleyin.')}</p></div>
       <button type="button" className="primary-button icon-button" aria-label={t('New automation', 'Yeni otomasyon')} title={t('New automation', 'Yeni otomasyon')} onClick={() => setShowForm((value) => !value)}><ButtonIcon name="add" /></button>
     </header>
-    {error ? <Callout tone="warning">{error}</Callout> : null}
+    {session?.user.is_public_demo ? <Callout>{t('Demo schedules are saved only in this browser. Use Run now to try them; they do not run in the background.', 'Demo planları yalnızca bu tarayıcıda saklanır. Denemek için Şimdi çalıştır’ı kullanın; arka planda çalışmazlar.')}</Callout> : null}
+      {error ? <Callout tone="warning">{error}</Callout> : null}
     {showForm ? <Panel title={t('New automation', 'Yeni otomasyon')} description={t('Choose an example or describe the check Izge should perform.', 'Bir örnek seçin veya İzge’nin yapacağı kontrolü yazın.')}>
       <div className="automation-templates">{templates.map((template) => <button type="button" key={template[0]} onClick={() => selectTemplate(template)}><strong>{t(template[3], template[0])}</strong><small>{template[2]}</small></button>)}<button type="button" disabled title={t('Email connection has not been configured yet', 'E-posta bağlantısı henüz kurulmadı')}><strong>{t('Email check', 'E-posta kontrolü')}</strong><small>{t('Connection required', 'Bağlantı gerekli')}</small></button></div>
       <form className="form-grid automation-form" onSubmit={create}>
         <label className="field"><span className="field-label">{t('Title', 'Başlık')}</span><input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
-        <label className="field"><span className="field-label">{t('What should Izge check?', 'İzge neyi kontrol etsin?')}</span><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={4} required /></label>
+        <label className="field"><span className="field-label">{t('What would you like Izge to do?', 'İzge’den ne istersin?')}</span><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={4} required /></label>
         <div className="automation-schedule-fields">
           <label className="field"><span className="field-label">{t('Frequency', 'Sıklık')}</span><Select aria-label={t('Frequency', 'Sıklık')} value={frequency} onValueChange={(value) => setFrequency(value as AutomationFrequency)} options={frequencies.map((value) => ({ value, label: automationFrequencyLabel(value, language) }))} /></label>
           <label className="field"><span className="field-label">{t('Start date', 'Başlangıç tarihi')}</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required /></label>
@@ -148,11 +150,11 @@ export function AutomationsPage() {
           <div className="automation-item-copy">
             <div className="automation-status-line"><span className={item.enabled ? 'status-badge' : 'status-badge status-muted'}>{item.enabled ? t('Active', 'Aktif') : t('Stopped', 'Durduruldu')}</span>{item.enabled && remaining ? <span>{remaining}</span> : null}</div>
             <strong>{item.title}</strong>
-            <details className="automation-instructions"><summary>{t('What Izge checks', 'İzge’nin kontrol ettiği')}</summary><p>{item.prompt}</p></details>
-            <div className="automation-run-state"><span>{automationFrequencyLabel(item.frequency, language)} · {item.schedule_time} {t('Istanbul time', 'İstanbul saati')}</span>{item.last_run_id && item.last_run_status ? <button type="button" onClick={() => openHistory(item)}>{item.last_run_at ? `${automationRunStatusLabel(item.last_run_status, language)} · ${formatDateTime(item.last_run_at)}` : automationRunStatusLabel(item.last_run_status, language)}</button> : <span>{t('Not run yet', 'Henüz çalışmadı')}</span>}</div>
+            {item.last_run_id && item.last_run_status ? <div className="automation-current-run"><span role="status">{item.last_run_status === 'queued' || item.last_run_status === 'running' ? t('Izge is working', 'İzge çalışıyor') : automationRunStatusLabel(item.last_run_status, language)}</span><button type="button" className="secondary-button" onClick={() => openHistory(item)}><ButtonIcon name="ask-izge" />{item.last_run_status === 'completed' ? t('Completed task', 'Tamamlanan görev') : t('Show', 'Göster')}</button></div> : null}
+            <details className="automation-instructions"><summary>{t('Automation details', 'Otomasyon detayları')}</summary><p>{item.prompt}</p><div className="automation-run-state"><span>{automationFrequencyLabel(item.frequency, language)} · {item.schedule_time} {t('Istanbul time', 'İstanbul saati')}</span><span>{item.last_run_at ? formatDateTime(item.last_run_at) : t('Not run yet', 'Henüz çalışmadı')}</span></div></details>
           </div>
           <div className="automation-actions">
-            <button type="button" className="secondary-button" disabled={busyId === item.automation_id} onClick={() => void run(item)}><ButtonIcon name="run" />{t('Run now', 'Hemen çalıştır')}</button>
+            <button type="button" className="secondary-button" disabled={busyId === item.automation_id || item.last_run_status === 'queued' || item.last_run_status === 'running'} onClick={() => void run(item)}><ButtonIcon name="run" />{t('Run now', 'Hemen çalıştır')}</button>
             <button type="button" className="secondary-button" disabled={busyId === item.automation_id} onClick={() => void toggle(item)}><ButtonIcon name={item.enabled ? 'pause' : 'run'} />{item.enabled ? t('Stop', 'Durdur') : t('Resume', 'Devam ettir')}</button>
             <button type="button" className={`text-button icon-button automation-danger-action${confirmDeleteId === item.automation_id ? ' automation-delete-confirm' : ''}`} disabled={busyId === item.automation_id} aria-label={confirmDeleteId === item.automation_id ? t('Confirm delete', 'Silmeyi onayla') : t('Delete automation', 'Otomasyonu sil')} title={confirmDeleteId === item.automation_id ? t('Click again to confirm', 'Onaylamak için tekrar tıklayın') : t('Delete automation', 'Otomasyonu sil')} onBlur={() => setConfirmDeleteId(null)} onClick={() => void remove(item)}><ButtonIcon name="delete" /></button>
           </div>

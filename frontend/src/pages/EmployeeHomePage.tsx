@@ -11,6 +11,7 @@ import { formatDateTime } from '../lib/format'
 import type { AgentRunRead, ArtifactRead, SignalRead, WorkTaskRead, WorkTaskStatus } from '../lib/types'
 import { useLanguage } from '../lib/i18n'
 import { homeGreeting } from '../lib/greeting'
+import './employee-home.css'
 
 function errorMessage(error: unknown, fallback: string) { return error instanceof ApiError && error.message ? error.message : fallback }
 
@@ -49,7 +50,7 @@ export function EmployeeHomePage() {
     const runId = reviewRun?.run_id
     const runStatus = reviewRun?.status
     if (!runId || !session?.token || runStatus === 'completed' || runStatus === 'failed') return
-    const events = new EventSource(api.agentRunEventsUrl(runId), { withCredentials: true })
+    const events = api.subscribeAgentRunEvents(runId)
     const refresh = async () => {
       try {
         const next = await api.getAgentRun(session.token, runId)

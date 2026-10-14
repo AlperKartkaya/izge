@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal, get_db
 from app.dependencies import get_current_user
 from app.models import Artifact, AssistantConversation, ColleagueRun, ColleagueRunEvent, User, WorkTask
-from app.routers.team_chat import attach_team_chat_file
+from app.routers.team_chat import _clean_thread_id as clean_team_chat_thread_id, _validated_reply_target, attach_team_chat_file
 from app.schemas.api import TeamChatMessageRead
 from app.schemas.work import (
     ColleagueAskAccepted,
@@ -400,6 +400,10 @@ def get_agent_models(accept_language: str | None = Header(default=None, alias="A
             elif profile["id"] == "codex":
                 profile["label"] = "GPT-6 Luna · Codex session"
     catalog["tools"] = {"web_search": bool(get_settings().agent_web_search_key.get_secret_value()), "mcp": bool(available_mcp_tools(current_user.workspace_id, [current_user.user_id])), "reviewer": True}
+    if current_user.is_public_demo:
+        catalog["tools"] = {"web_search": False, "mcp": False, "reviewer": False}
+        for profile in catalog["profiles"]:
+            profile["native_web_search"] = False
     return catalog
 
 
@@ -427,6 +431,12 @@ def ask_colleague(payload: ColleagueAskCreate, current_user: User = Depends(get_
             raise HTTPException(status_code=422, detail="Bu model seçilen düşünme düzeyini desteklemiyor.")
     if current_user.is_public_demo:
         consume_public_demo_quota(ip_hash=current_user.public_demo_ip_hash or "")
+    reply_target = _validated_reply_target(
+        db,
+        current_user=current_user,
+        thread_id=clean_team_chat_thread_id(payload.thread_id),
+        reply_to_message_id=payload.reply_to_message_id,
+    )
     run = enqueue_colleague_question(
         db,
         actor=current_user,
@@ -436,6 +446,7 @@ def ask_colleague(payload: ColleagueAskCreate, current_user: User = Depends(get_
         thread_title=payload.thread_title,
         thread_kind=payload.thread_kind,
         participant_user_ids=payload.participant_user_ids,
+        reply_to_message_id=reply_target.message_id if reply_target else None,
         response_language=payload.response_language,
         agent_options=options,
     )

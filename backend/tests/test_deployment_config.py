@@ -33,6 +33,7 @@ class DeploymentConfigTests(unittest.TestCase):
     def test_public_proxy_and_build_context_boundaries(self):
         nginx = (ROOT / 'deploy/app/nginx.conf.template').read_text()
         self.assertIn('proxy_buffering off;', nginx)
+        self.assertIn('location /api/ {\n    proxy_read_timeout 180s;', nginx)
         self.assertIn('proxy_set_header X-Forwarded-Proto https;', nginx)
         self.assertNotIn('$proxy_add_x_forwarded_for', nginx)
         self.assertIn('proxy_set_header X-Forwarded-For $remote_addr;', nginx)

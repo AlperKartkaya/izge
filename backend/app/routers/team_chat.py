@@ -15,7 +15,7 @@ from app.db import get_db
 from app.dependencies import get_current_user
 from app.config import get_settings
 from app.models import Artifact, ArtifactPermission, AssistantConversation, CompanyChatMessage, User
-from app.schemas.api import TeamChatMessageCreate, TeamChatMessageRead, TeamChatThreadRead, TeamChatTypingCreate, TeamChatTypingRead, TeamChatTypingUserRead
+from app.schemas.api import TeamChatMessageCreate, TeamChatMessageRead, TeamChatReplyRead, TeamChatThreadRead, TeamChatTypingCreate, TeamChatTypingRead, TeamChatTypingUserRead
 from app.services.audit import log_event
 from app.services.notifications import notify_team_chat_recipients
 from app.services.permissions import artifact_is_visible_to_user
@@ -172,11 +172,30 @@ def _thread_is_visible_to_user(thread_id: str, thread_kind: str, current_user: U
     return current_handle in thread_id.replace("direct:", "", 1).split("-")
 
 
-def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, User], db: Session, reader: User) -> TeamChatMessageRead:
-    author = author_by_id.get(message.author_user_id)
-    author_role: Literal["Admin", "Member"] = "Member"
-    if author and author.role == "Admin":
-        author_role = "Admin"
+def _message_thread_id(message: CompanyChatMessage) -> str:
+    metadata = message.message_metadata or {}
+    return str(metadata.get("thread_id") or metadata.get("channel") or "company-general")
+
+
+def _validated_reply_target(
+    db: Session,
+    *,
+    current_user: User,
+    thread_id: str,
+    reply_to_message_id: str | None,
+) -> CompanyChatMessage | None:
+    if reply_to_message_id is None:
+        return None
+    target = db.scalar(select(CompanyChatMessage).where(
+        CompanyChatMessage.message_id == reply_to_message_id,
+        CompanyChatMessage.workspace_id == current_user.workspace_id,
+    ))
+    if target is None or not _message_is_visible_to_user(target, current_user, db) or _message_thread_id(target) != thread_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Yanıtlanan mesaj bu konuşmada bulunamadı.")
+    return target
+
+
+def _visible_message_content(message: CompanyChatMessage, db: Session, reader: User) -> tuple[str, dict]:
     metadata = dict(message.message_metadata or {})
     body = message.body
     source_refs = metadata.get("source_refs")
@@ -204,13 +223,40 @@ def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, Use
             attachment for attachment in attachments
             if isinstance(attachment, dict) and str(attachment.get("artifact_id")) in visible_ids
         ]
+    return body, metadata
+
+
+def _message_read_model(message: CompanyChatMessage, author_by_id: dict[str, User], db: Session, reader: User) -> TeamChatMessageRead:
+    author = author_by_id.get(message.author_user_id)
+    author_role: Literal["Admin", "Member"] = "Member"
+    if author and author.role == "Admin":
+        author_role = "Admin"
+    body, metadata = _visible_message_content(message, db, reader)
+    reply_to = None
+    reply_to_message_id = metadata.get("reply_to_message_id")
+    if isinstance(reply_to_message_id, str):
+        target = db.scalar(select(CompanyChatMessage).where(
+            CompanyChatMessage.message_id == reply_to_message_id,
+            CompanyChatMessage.workspace_id == reader.workspace_id,
+        ))
+        if target is not None and _message_is_visible_to_user(target, reader, db) and _message_thread_id(target) == _message_thread_id(message):
+            target_author = author_by_id.get(target.author_user_id) or db.get(User, target.author_user_id)
+            target_body, _ = _visible_message_content(target, db, reader)
+            reply_to = TeamChatReplyRead(
+                message_id=target.message_id,
+                author_display_name=target_author.display_name if target_author else "Unknown user",
+                body=target_body,
+            )
+    source_user_id = public_demo_source_user_id(db, reader)
     return TeamChatMessageRead(
         message_id=message.message_id,
         workspace_id=message.workspace_id,
         author_user_id=message.author_user_id,
         author_display_name=author.display_name if author else "Unknown user",
         author_role=author_role,
+        is_authored_by_current_user=message.author_user_id in {reader.user_id, source_user_id},
         body=body,
+        reply_to=reply_to,
         message_metadata=metadata,
         created_at=message.created_at,
     )
@@ -330,6 +376,12 @@ def create_team_chat_message(
         thread_kind=payload.thread_kind,
         requested_ids=_participant_user_ids_from_metadata(payload.message_metadata),
     )
+    reply_target = _validated_reply_target(
+        db,
+        current_user=current_user,
+        thread_id=thread_id,
+        reply_to_message_id=payload.reply_to_message_id,
+    )
     message = CompanyChatMessage(
         workspace_id=current_user.workspace_id,
         author_user_id=current_user.user_id,
@@ -340,6 +392,7 @@ def create_team_chat_message(
             "thread_id": thread_id,
             "thread_title": thread_title,
             "thread_kind": payload.thread_kind,
+            **({"reply_to_message_id": reply_target.message_id} if reply_target else {}),
             **({"participant_user_ids": sorted(participant_user_ids)} if participant_user_ids else {}),
             "source": "izge-product",
         },

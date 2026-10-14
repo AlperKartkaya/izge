@@ -27,7 +27,9 @@ from app.routers.work import (
     update_conversation,
 )
 from app.schemas.work import AssistantConversationCreate, AssistantConversationUpdate
-from app.services.colleague import enqueue_colleague_question
+from app.services.agent_policy import AgentPlan
+from app.services.colleague import claim_next_colleague_run, enqueue_colleague_question, process_colleague_run
+from app.services.conversations import DEFAULT_ASSISTANT_TITLE
 
 
 class AssistantConversationTest(unittest.TestCase):
@@ -85,6 +87,40 @@ class AssistantConversationTest(unittest.TestCase):
             with self.subTest(reader=reader.display_name), self.assertRaises(HTTPException) as denied:
                 get_conversation(created.conversation_id, reader, self.db)
             self.assertEqual(404, denied.exception.status_code)
+
+    def test_first_model_plan_titles_only_an_untitled_conversation(self) -> None:
+        conversation = self._create(DEFAULT_ASSISTANT_TITLE)
+        enqueue_colleague_question(
+            self.db, actor=self.alice, message="Atlas sözleşmesindeki teslim tarihi nedir?", client_request_id="generated-title",
+            thread_id=conversation.thread_id, thread_title=conversation.title, thread_kind="direct",
+            participant_user_ids=[self.alice.user_id],
+        )
+        claimed = claim_next_colleague_run(self.db, worker_id="title-worker")
+        plan = AgentPlan(intent="company", summary="Kanıtları karşılaştır", web_query="", mcp_reads=[], reviewer=False, conversation_title="Atlas teslim tarihi")
+        with (
+            patch("app.services.colleague._plan_agent_work", return_value=plan),
+            patch("app.services.colleague._stream_local_answer", return_value=iter(["Henüz kanıt yok."])),
+            patch("app.services.colleague._safe_follow_ups", return_value=[]),
+        ):
+            process_colleague_run(self.db, claimed)
+        self.db.refresh(conversation)
+        self.assertEqual("Atlas teslim tarihi", conversation.title)
+
+        renamed = self._create(DEFAULT_ASSISTANT_TITLE)
+        enqueue_colleague_question(
+            self.db, actor=self.alice, message="Yeni konu", client_request_id="manual-title",
+            thread_id=renamed.thread_id, thread_title=renamed.title, thread_kind="direct",
+            participant_user_ids=[self.alice.user_id],
+        )
+        update_conversation(renamed.conversation_id, AssistantConversationUpdate(title="Benim başlığım"), self.alice, self.db)
+        claimed = claim_next_colleague_run(self.db, worker_id="manual-title-worker")
+        with (
+            patch("app.services.colleague._plan_agent_work", return_value=plan),
+            patch("app.services.colleague._stream_local_answer", return_value=iter(["Yanıt."])),
+            patch("app.services.colleague._safe_follow_ups", return_value=[]),
+        ):
+            process_colleague_run(self.db, claimed)
+        self.assertEqual("Benim başlığım", self.db.get(AssistantConversation, renamed.conversation_id).title)
 
     def test_new_conversation_reuses_empty_draft_but_not_a_draft_with_an_attachment(self) -> None:
         empty = self._create("Empty draft")

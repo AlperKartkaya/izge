@@ -10,6 +10,7 @@ from app.routers.analysis import router as analysis_router
 from app.routers.artifacts import router as artifacts_router
 from app.routers.audit import router as audit_router
 from app.routers.evidence import router as evidence_router
+from app.routers.demo import router as demo_router
 from app.routers.auth import router as auth_router
 from app.routers.automations import router as automations_router
 from app.routers.graph import router as graph_router
@@ -48,6 +49,7 @@ def health() -> dict[str, str]:
 
 
 app.include_router(auth_router, prefix=settings.api_prefix)
+app.include_router(demo_router, prefix=settings.api_prefix)
 app.include_router(users_router, prefix=settings.api_prefix)
 app.include_router(work_router, prefix=settings.api_prefix)
 app.include_router(automations_router, prefix=settings.api_prefix)

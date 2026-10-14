@@ -1,0 +1,39 @@
+.agent-prompt-controls {
+  flex-wrap: wrap;
+}
+
+.agent-prompt-controls .agent-controls {
+  display: inline-flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: .375rem;
+  padding: 0;
+  border: 0;
+}
+
+.agent-prompt-controls .agent-controls .select-trigger {
+  min-height: 2.25rem;
+  padding-block: .375rem;
+  font-size: .75rem;
+}
+
+.agent-prompt-controls .agent-model-select {
+  max-width: 10rem;
+}
+
+.agent-prompt-controls .agent-effort-select {
+  max-width: 8rem;
+}
+
+.agent-prompt-controls .agent-controls-warning,
+.agent-prompt-controls .agent-controls-status {
+  order: 2;
+  flex: 1 0 100%;
+  margin-left: 3.25rem;
+}
+
+@media (max-width: 700px) {
+  .agent-prompt-controls .agent-prompt-context {
+    display: none;
+  }
+}

@@ -66,11 +66,11 @@ export function useAgentControls(token: string | undefined, userId: string | und
     ...(selected ? { model_profile: selected.id } : {}),
     ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
     allow_external_tools: effectiveExternalTools,
-    request_reviewer: requestReviewer,
+    request_reviewer: requestReviewer && catalog?.tools.reviewer === true,
   }
 
   return {
-    catalog, selected, modelProfile, reasoningEffort, allowExternalTools: effectiveExternalTools, webSearchAvailable, requestReviewer, loadError, requestOptions,
+    catalog, selected, modelProfile, reasoningEffort, allowExternalTools: effectiveExternalTools, webSearchAvailable, requestReviewer: requestReviewer && catalog?.tools.reviewer === true, loadError, requestOptions,
     setModelProfile,
     setReasoningEffort: (effort: string) => selected && setEfforts((current) => ({ ...current, [selected.id]: effort })),
     setAllowExternalTools, setRequestReviewer,

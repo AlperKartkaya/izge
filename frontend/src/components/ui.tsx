@@ -1,6 +1,7 @@
 import type { PropsWithChildren, ReactNode } from 'react'
 import { useLanguage } from '../lib/i18n'
 import { formatStatus } from '../lib/format'
+import './page-states.css'
 
 export function PageIntro({ title, description, actions }: { title: string; description: string; eyebrow?: string; actions?: ReactNode }) {
   return (
@@ -52,7 +53,7 @@ export function StatusBadge({ value, status = value }: { value: string; status?:
 
 export function EmptyState({ title, description }: { title: string; description: string }) {
   return (
-    <div className="empty-state">
+    <div className="empty-state page-empty-state">
       <p className="empty-title">{title}</p>
       <p className="empty-description">{description}</p>
     </div>

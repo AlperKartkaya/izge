@@ -14,8 +14,8 @@ from app.services.security import get_user_by_token, public_demo_ip_hash, resolv
 _PUBLIC_DEMO_MUTATION_PATHS = (
     re.compile(r"^/work/conversations$"),
     re.compile(r"^/work/conversations/[^/]+$"),
-    re.compile(r"^/work/ask$"),
     re.compile(r"^/team-chat/typing$"),
+    re.compile(r"^/demo/(?:ask(?:/events)?|extract)$"),
 )
 
 

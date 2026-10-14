@@ -6898,10 +6898,6 @@ body:has(.app-frame-chat) { overflow: hidden; }
 .agent-control-check input { margin: 0; }
 .agent-controls-warning, .agent-controls-status { flex-basis: 100%; color: var(--color-ink-muted); font-size: 10px; line-height: 1.4; }
 .agent-composer-editor { position: relative; display: block; }
-.agent-composer-highlight { position: absolute; inset: 0; z-index: 0; overflow: hidden; padding: 3px; color: var(--color-ink-strong); font: inherit; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: break-word; pointer-events: none; }
-.agent-composer-editor-mentions textarea { position: relative; z-index: 1; color: transparent !important; caret-color: var(--color-ink-strong); -webkit-text-fill-color: transparent; }
-.agent-composer-editor-mentions textarea::placeholder { color: var(--color-ink-muted); -webkit-text-fill-color: var(--color-ink-muted); }
-.agent-composer-editor-mentions textarea::selection { background: color-mix(in srgb, var(--primary) 24%, transparent); }
 .agent-mention-menu { position: absolute; z-index: 4; left: 12px; bottom: calc(100% - 7px); width: min(280px, calc(100% - 24px)); padding: 5px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface-elevated); box-shadow: var(--shadow-md); }
 .agent-mention-menu button { display: flex; width: 100%; align-items: center; gap: 9px; padding: 8px; border: 0; border-radius: 8px; background: transparent; color: var(--color-ink-strong); font: inherit; text-align: left; cursor: pointer; }
 .agent-mention-menu button:hover, .agent-mention-menu button:focus-visible { background: var(--color-surface-muted); }

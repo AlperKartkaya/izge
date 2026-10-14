@@ -5,8 +5,10 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 test('brand component uses the supplied SVG and document uses supplied favicon assets', () => {
   assert.match(read('../src/components/IzgeLogo.tsx'), /branding\/icon.svg/)
-  assert.match(read('../index.html'), /\/icon.svg/)
-  assert.match(read('../index.html'), /\/icon.png/)
+  assert.match(read('../index.html'), /\/icon.svg\?v=3/)
+  assert.match(read('../index.html'), /\/icon.png\?v=3/)
+  assert.match(read('../public/icon.svg'), /fill="#05070D"/)
+  assert.match(read('../public/icon.svg'), /fill="#FFFFFF"/)
 })
 
 test('chat and ordinary shell share desktop geometry and reserved scrollbar space', () => {
@@ -42,6 +44,17 @@ test('product polish keeps mark padding, route focus and explicit theme icons', 
 
 test('home shortcuts are product actions rather than unstyled anchors', () => {
   const source = read('../src/pages/EmployeeHomePage.tsx')
+  const css = read('../src/pages/employee-home.css')
   assert.match(source, /className="home-action"/)
+  assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/)
   assert.doesNotMatch(source, /<Link to="\/tasks">/)
+})
+
+test('automation polling does not hide run errors and keeps work accessible in chat', () => {
+  const source = read('../src/pages/AutomationsPage.tsx')
+  const load = source.slice(source.indexOf('const load = async'), source.indexOf('void load()'))
+  assert.doesNotMatch(load, /setError\(null\)/)
+  assert.match(source, /İzge çalışıyor/)
+  assert.match(source, /Tamamlanan görev/)
+  assert.match(source, /onClick=\{\(\) => openHistory\(item\)\}/)
 })

@@ -34,6 +34,12 @@ test('mention selection replaces the token around the caret and returns the comm
   })
 })
 
+test('typing continues directly after an inserted Izge mention', () => {
+  const mention = insertIzgeMentionAtCaret('@iz', 3)
+  const typed = `${mention.value.slice(0, mention.caret)}devam${mention.value.slice(mention.caret)}`
+  assert.equal(typed, '@izge devam')
+})
+
 test('follow-up drafts end with a space so the caret can stay after the question', () => {
   assert.equal(buildIzgeFollowUp('Bunu kim takip ediyor?'), '@izge Bunu kim takip ediyor? ')
   assert.equal(buildIzgeFollowUp('  Son tarih nedir?  '), '@izge Son tarih nedir? ')
