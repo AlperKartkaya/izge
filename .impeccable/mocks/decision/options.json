@@ -1,0 +1,198 @@
+{
+  "title": "Izge: show the discovery",
+  "question": "Choose the visual direction. Concept images only; labeled demo evidence, not a revenue claim.",
+  "options": [
+    {
+      "id": "proof",
+      "label": "The missing connection",
+      "kicker": "Evidence-led",
+      "thesis": "Three ordinary records align to reveal work missing from the invoice.",
+      "palette": [
+        "#F5F7FB",
+        "#202D50",
+        "#4056C8"
+      ],
+      "materials": [
+        "precise registration layers",
+        "cool-white evidence surfaces"
+      ],
+      "viewport": "Contract, delivery and invoice align into a reviewable finding.",
+      "risk": "Must feel like discovery, not accounting software.",
+      "comp": ".impeccable/mocks/decision/proof.png",
+      "raised": [
+        {
+          "from": "Color counterpoint",
+          "raise": "Keep source identities clear until they connect."
+        },
+        {
+          "from": "Luminous paths",
+          "raise": "Give the discovery one unmistakable focal point."
+        },
+        {
+          "from": "Depth queue",
+          "raise": "Keep foreground evidence still and readable."
+        },
+        {
+          "from": "Pattern sequence",
+          "raise": "Give each step an explicit consequence."
+        },
+        {
+          "from": "Folded record",
+          "raise": "Keep the story together rather than fragmenting features."
+        },
+        {
+          "from": "Editorial spread",
+          "raise": "Use asymmetry with a clear reading sequence."
+        }
+      ]
+    },
+    {
+      "id": "discovery",
+      "label": "The moment Izge notices",
+      "kicker": "Product-led",
+      "thesis": "A consequential finding enters the working day.",
+      "palette": [
+        "#101923",
+        "#E8EDF3",
+        "#A8BDE7"
+      ],
+      "materials": [
+        "quiet dark workspace",
+        "crisp source excerpts"
+      ],
+      "viewport": "A discovery opens inside an active workspace with sources and a team response.",
+      "risk": "Familiar premium software language; avoid another chat hero.",
+      "comp": ".impeccable/mocks/decision/discovery.png"
+    },
+    {
+      "id": "canopy",
+      "label": "Color counterpoint",
+      "verdict": "declined",
+      "thesis": "Overlapping source lanes reveal the discrepancy.",
+      "palette": [
+        "#FFFFFF",
+        "#253751"
+      ],
+      "materials": [
+        "translated source-system grammar"
+      ],
+      "viewport": "Overlapping source lanes reveal the discrepancy.",
+      "risk": "Artful layers weaken workplace recognition.",
+      "case": "Both audience identification and product clarity favor the evidence-led direction. Artful layers weaken workplace recognition.",
+      "kept": "Keep source identities clear until they connect."
+    },
+    {
+      "id": "forest",
+      "label": "Luminous paths",
+      "verdict": "declined",
+      "thesis": "A path lights up the missing invoice line.",
+      "palette": [
+        "#FFFFFF",
+        "#253751"
+      ],
+      "materials": [
+        "translated source-system grammar"
+      ],
+      "viewport": "A path lights up the missing invoice line.",
+      "risk": "Atmosphere obscures workplace evidence.",
+      "case": "Both audience identification and product clarity favor the evidence-led direction. Atmosphere obscures workplace evidence.",
+      "kept": "Give the discovery one unmistakable focal point."
+    },
+    {
+      "id": "queue",
+      "label": "Depth queue",
+      "verdict": "declined",
+      "thesis": "The finding advances from a work queue.",
+      "palette": [
+        "#FFFFFF",
+        "#253751"
+      ],
+      "materials": [
+        "translated source-system grammar"
+      ],
+      "viewport": "The finding advances from a work queue.",
+      "risk": "Bitmap depth weakens readability and buyer familiarity.",
+      "case": "Both audience identification and product clarity favor the evidence-led direction. Bitmap depth weakens readability and buyer familiarity.",
+      "kept": "Keep foreground evidence still and readable."
+    },
+    {
+      "id": "rhythm",
+      "label": "Pattern sequence",
+      "verdict": "declined",
+      "thesis": "Records form steps in a comparison.",
+      "palette": [
+        "#FFFFFF",
+        "#253751"
+      ],
+      "materials": [
+        "translated source-system grammar"
+      ],
+      "viewport": "Records form steps in a comparison.",
+      "risk": "Musical controls suggest the wrong task.",
+      "case": "Both audience identification and product clarity favor the evidence-led direction. Musical controls suggest the wrong task.",
+      "kept": "Give each step an explicit consequence."
+    },
+    {
+      "id": "mixtape",
+      "label": "Folded record",
+      "verdict": "declined",
+      "thesis": "Sources unfold into a team handover.",
+      "palette": [
+        "#FFFFFF",
+        "#253751"
+      ],
+      "materials": [
+        "translated source-system grammar"
+      ],
+      "viewport": "Sources unfold into a team handover.",
+      "risk": "Tape conventions obscure company work.",
+      "case": "Both audience identification and product clarity favor the evidence-led direction. Tape conventions obscure company work.",
+      "kept": "Keep the story together rather than fragmenting features."
+    },
+    {
+      "id": "spread",
+      "label": "Editorial spread",
+      "verdict": "declined",
+      "thesis": "Sources pose a question; a finding answers across the seam.",
+      "palette": [
+        "#FFFFFF",
+        "#253751"
+      ],
+      "materials": [
+        "translated source-system grammar"
+      ],
+      "viewport": "Sources pose a question; a finding answers across the seam.",
+      "risk": "Fashion typography makes evidence secondary.",
+      "case": "Both audience identification and product clarity favor the evidence-led direction. Fashion typography makes evidence secondary.",
+      "kept": "Use asymmetry with a clear reading sequence."
+    }
+  ],
+  "reroll": {
+    "registers": [
+      "safer",
+      "bolder"
+    ]
+  },
+  "steer": true,
+  "canon": true,
+  "canonCard": {
+    "label": "Familiar product showcase",
+    "thesis": "A conventional software introduction with a concrete product demonstration.",
+    "palette": [
+      "#FFFFFF",
+      "#182132",
+      "#5068B0"
+    ],
+    "materials": [
+      "clean product surfaces",
+      "restrained typography"
+    ],
+    "viewport": "Concise introduction, then evidence-backed workspace demonstration.",
+    "risk": "Clear, but less distinctive.",
+    "comp": ".impeccable/mocks/decision/canon.png"
+  },
+  "buildPath": {
+    "value": "comp",
+    "toggle": true
+  }
+}

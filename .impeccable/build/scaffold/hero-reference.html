@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Scaffold reference: discovery.png</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cambay:wght@700&display=swap">
+  <link rel="stylesheet" href="layout.css">
+  <style>html,body{margin:0}body{background:#101818}.region{box-sizing:border-box}.region.text p{white-space:pre-wrap}</style>
+</head>
+<body>
+<!-- Reference only. Every region sits at its measured box inside a comp-aspect frame. Take the boxes (layout.css), keep your own semantic structure. -->
+<main class="comp-frame" style="max-width:1536px">
+  <div class="r-navigation region chrome" data-region="navigation"><!-- Navigation strip with logo, product links, language controls and demo link --></div>
+  <div class="r-brand region control" data-region="brand"><!-- Izge brand link; implementation uses the existing product mark: match the control's lettering and visible shape to the crop (comp-spec.mjs --crop brand); a control need not have button chrome --></div>
+  <div class="r-nav-links region control" data-region="nav-links"><!-- Product and how-it-works navigation links: match the control's lettering and visible shape to the crop (comp-spec.mjs --crop nav-links); a control need not have button chrome --></div>
+  <div class="r-language region control" data-region="language"><!-- English and Turkish language controls: match the control's lettering and visible shape to the crop (comp-spec.mjs --crop language); a control need not have button chrome --></div>
+  <div class="r-demo region control" data-region="demo"><!-- Primary Try demo button: match the control's lettering and visible shape to the crop (comp-spec.mjs --crop demo); a control need not have button chrome --></div>
+  <div class="r-headline region text" data-region="headline"><!-- Large two-line heading: The colleague who notices what slips through. --><p style="font-size:var(--r-headline-font);font-family:var(--r-headline-family),sans-serif;font-weight:var(--r-headline-weight);line-height:1.05;margin:0">headline</p></div>
+  <div class="r-introduction region text" data-region="introduction"><!-- Two-line introduction explaining source-backed company context --><p style="font-size:var(--r-introduction-font);line-height:1.05;margin:0">introduction</p></div>
+  <div class="r-finding-frame region chrome" data-region="finding-frame"><!-- Finding panel with quiet dark fill and thin rounded outline --></div>
+  <div class="r-finding-state region text" data-region="finding-state"><!-- New finding status and Atlas September 2026 context --><p style="font-size:var(--r-finding-state-font);line-height:1.05;margin:0">finding-state</p></div>
+  <div class="r-finding-time region text" data-region="finding-time"><!-- Illustrative finding time, not a live status --><p style="font-size:var(--r-finding-time-font);line-height:1.05;margin:0">finding-time</p></div>
+  <div class="r-finding-title region text" data-region="finding-title"><!-- 18 hours delivered. Never invoiced. Main finding headline --><p style="font-size:var(--r-finding-title-font);line-height:1.05;margin:0">finding-title</p></div>
+  <div class="r-amount region text" data-region="amount"><!-- Potential amount of 36000 Turkish lira plus VAT --><p style="font-size:var(--r-amount-font);line-height:1.05;margin:0">amount</p></div>
+  <div class="r-amount-meaning region text" data-region="amount-meaning"><!-- Potential billing to review qualifier next to amount --><p style="font-size:var(--r-amount-meaning-font);line-height:1.05;margin:0">amount-meaning</p></div>
+  <div class="r-qualification region text" data-region="qualification"><!-- Demo scenario and subject to commercial approval disclaimer --><p style="font-size:var(--r-qualification-font);line-height:1.05;margin:0">qualification</p></div>
+  <div class="r-contract-source region control" data-region="contract-source"><!-- Source preview button with document icon, title, key fact and filename: match the control's lettering and visible shape to the crop (comp-spec.mjs --crop contract-source); a control need not have button chrome --></div>
+  <div class="r-delivery-source region control" data-region="delivery-source"><!-- Source preview button with document icon, title, key fact and filename: match the control's lettering and visible shape to the crop (comp-spec.mjs --crop delivery-source); a control need not have button chrome --></div>
+  <div class="r-invoice-source region control" data-region="invoice-source"><!-- Source preview button with document icon, title, key fact and filename: match the control's lettering and visible shape to the crop (comp-spec.mjs --crop invoice-source); a control need not have button chrome --></div>
+  <div class="r-finding-actions region control" data-region="finding-actions"><!-- Trace evidence and Discuss with team buttons: match the control's lettering and visible shape to the crop (comp-spec.mjs --crop finding-actions); a control need not have button chrome --></div>
+  <div class="r-conversation-frame region chrome" data-region="conversation-frame"><!-- Team conversation panel with tab controls and messages --></div>
+  <div class="r-conversation-tabs region control" data-region="conversation-tabs"><!-- Team and private Izge conversation selectors: match the control's lettering and visible shape to the crop (comp-spec.mjs --crop conversation-tabs); a control need not have button chrome --></div>
+  <div class="r-message-ece region text" data-region="message-ece"><!-- Ece avatar, name and review request message --><p style="font-size:var(--r-message-ece-font);line-height:1.05;margin:0">message-ece</p></div>
+  <div class="r-message-selin region text" data-region="message-selin"><!-- Selin avatar, name and response about reviewing evidence --><p style="font-size:var(--r-message-selin-font);line-height:1.05;margin:0">message-selin</p></div>
+  <div class="r-conversation-action region control" data-region="conversation-action"><!-- Conversation action at composer position; implementation uses working walkthrough action instead of fake input: match the control's lettering and visible shape to the crop (comp-spec.mjs --crop conversation-action); a control need not have button chrome --></div>
+  <div class="r-conversation-context region text" data-region="conversation-context"><!-- Conversation context area; invented unrelated finding counts will be replaced with actual scenario next steps --><p style="font-size:var(--r-conversation-context-font);line-height:1.05;margin:0">conversation-context</p></div>
+  <div class="r-source-section-heading region text" data-region="source-section-heading"><!-- Start of source detail section and its heading --><p style="font-size:var(--r-source-section-heading-font);line-height:1.05;margin:0">source-section-heading</p></div>
+  <div class="r-next-section-heading region text" data-region="next-section-heading"><!-- Start of accountable next action section and its heading --><p style="font-size:var(--r-next-section-heading-font);line-height:1.05;margin:0">next-section-heading</p></div>
+  <div class="r-contract-detail region chrome" data-region="contract-detail"><!-- Source disclosure with title and excerpt; actual fixture text replaces invented metadata --></div>
+  <div class="r-delivery-detail region chrome" data-region="delivery-detail"><!-- Source disclosure with title and excerpt; actual fixture text replaces invented metadata --></div>
+  <div class="r-invoice-detail region chrome" data-region="invoice-detail"><!-- Source disclosure with title and excerpt; actual fixture text replaces invented metadata --></div>
+  <div class="r-next-action region chrome" data-region="next-action"><!-- Review action section with explanatory text and demo link --></div>
+</main>
+</body>
+</html>

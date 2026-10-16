@@ -9,7 +9,7 @@ import { api, resetBrowserDemo } from '../lib/api'
 import './demo-notice.css'
 import { formatDateTime } from '../lib/format'
 import { useLanguage } from '../lib/i18n'
-import { isNavigationActive } from '../lib/navigation'
+import { canViewManagementPage, isDemoManager, isNavigationActive } from '../lib/navigation'
 import { applyThemePreference, nextThemePreference, readInitialThemePreference, type ThemePreference } from '../lib/theme'
 
 const navigationIcons: Record<string, string> = { '/': 'home', '/query': 'ask-izge', '/team-chat': 'team-chat', '/memory': 'memory', '/tasks': 'tasks', '/automations': 'automations', '/notifications': 'notifications', '/operations': 'operations', '/ingestion': 'ingestion', '/graph': 'knowledge-graph', '/memory-filesystem': 'filesystem', '/orchestration': 'run', '/readiness': 'task-done', '/admin/data': 'memory', '/audit': 'audit', '/admin/users': 'users' }
@@ -43,7 +43,8 @@ export function AppShell() {
   const previousPath = useRef(pathname)
   const [unreadCount, setUnreadCount] = useState(0)
   const isAdmin = session?.user.role === 'Admin'
-  const navigationItems = isAdmin ? [...adminNavigation, { to: '/admin/data', label: ['Data', 'Veri'] as const }, { to: '/audit', label: ['Audit', 'Denetim'] as const }, { to: '/admin/users', label: ['Users', 'Kullanıcılar'] as const }] : employeeNavigation
+  const isManager = isAdmin || isDemoManager(session?.user)
+  const navigationItems = isAdmin ? [...adminNavigation, { to: '/admin/data', label: ['Data', 'Veri'] as const }, { to: '/audit', label: ['Audit', 'Denetim'] as const }, { to: '/admin/users', label: ['Users', 'Kullanıcılar'] as const }] : [...employeeNavigation, ...adminNavigation.filter((item) => canViewManagementPage(session?.user, item.to))]
   const nextTheme = nextThemePreference(theme)
   const sidebarAction = sidebarExpanded ? t('Collapse menu', 'Menüyü daralt') : t('Expand menu', 'Menüyü genişlet')
 
@@ -80,7 +81,7 @@ export function AppShell() {
       <div className="session-cluster">
         <label className="language-select sidebar-control" title={t('Language', 'Dil')}><ButtonIcon name="language" /><span className="sr-only">{t('Language', 'Dil')}</span><Select value={language} onValueChange={(value) => setLanguage(value === 'en' ? 'en' : 'tr')} aria-label={t('Language', 'Dil')} options={[{ value: 'tr', label: 'Türkçe' }, { value: 'en', label: 'English' }]} /></label>
         <button type="button" className="theme-toggle sidebar-control" aria-label={nextTheme === 'dark' ? t('Switch to dark theme', 'Koyu temaya geç') : t('Switch to light theme', 'Açık temaya geç')} title={nextTheme === 'dark' ? t('Switch to dark theme', 'Koyu temaya geç') : t('Switch to light theme', 'Açık temaya geç')} aria-pressed={theme === 'light'} onClick={() => setTheme(nextTheme)}><ThemeIcon theme={theme} /></button>
-        <div className="identity-block"><p className="identity-name">{session?.user.display_name}</p><p className="identity-meta">{isAdmin ? t('Admin', 'Yönetici') : t('Employee', 'Çalışan')} / {session?.expiresAt ? formatDateTime(session.expiresAt) : t('Signed in', 'Oturum açık')}</p></div>
+        <div className="identity-block"><p className="identity-name">{session?.user.display_name}</p><p className="identity-meta">{isManager ? t(isAdmin ? 'Admin' : 'Manager', 'Yönetici') : t('Employee', 'Çalışan')} / {session?.expiresAt ? formatDateTime(session.expiresAt) : t('Signed in', 'Oturum açık')}</p></div>
         <button type="button" className="text-button sidebar-control" aria-label={t('Sign out', 'Çıkış yap')} title={t('Sign out', 'Çıkış yap')} onClick={signOut}><ButtonIcon name="sign-out" /><span className="sidebar-control-label">{t('Sign out', 'Çıkış yap')}</span></button>
       </div>
     </header>

@@ -129,9 +129,10 @@ export class BrowserDemo {
 
   private async ask(state: DemoState, payload: Record<string, unknown>) {
     const { thread, body } = this.askPayload(state, payload)
+    const kind: AgentRunRead['kind'] = payload.kind === 'evening_review' ? 'evening_review' : 'ask'
     if (!this.stream) {
       const result = await this.remote('/demo/ask', { method: 'POST', body: JSON.stringify(body) }) as { run: AgentRunRead }
-      const run = { ...result.run, thread_id: thread, thread_title: String(payload.thread_title ?? 'İzge'), thread_kind: (payload.thread_kind ?? 'direct') as AgentRunRead['thread_kind'], participant_user_ids: [this.user.user_id] }
+      const run = { ...result.run, kind, thread_id: thread, thread_title: String(payload.thread_title ?? 'İzge'), thread_kind: (payload.thread_kind ?? 'direct') as AgentRunRead['thread_kind'], participant_user_ids: [this.user.user_id] }
       this.storeAcceptedRun(state, payload, thread, run)
       await this.finishRun(run.run_id, run)
       return { run_id: run.run_id, thread_id: thread, status: run.status }
@@ -147,7 +148,7 @@ export class BrowserDemo {
       if (event.type === 'accepted') {
         runId = String(event.data.run_id)
         const date = now()
-        const run: AgentRunRead = { run_id: runId, kind: 'ask', thread_id: thread, thread_title: String(payload.thread_title ?? 'İzge'), thread_kind: (payload.thread_kind ?? 'direct') as AgentRunRead['thread_kind'], participant_user_ids: [this.user.user_id], status: (event.data.status ?? 'running') as AgentRunRead['status'], question: String(payload.message), answer: null, error: null, sources: [], follow_ups: [], stages: [], created_at: date, updated_at: date }
+        const run: AgentRunRead = { run_id: runId, kind, thread_id: thread, thread_title: String(payload.thread_title ?? 'İzge'), thread_kind: (payload.thread_kind ?? 'direct') as AgentRunRead['thread_kind'], participant_user_ids: [this.user.user_id], status: (event.data.status ?? 'running') as AgentRunRead['status'], question: String(payload.message), answer: null, error: null, sources: [], follow_ups: [], stages: [], created_at: date, updated_at: date }
         this.storeAcceptedRun(state, payload, thread, run)
         acceptedSaved = true
         acceptedResolve({ run_id: runId, thread_id: thread, status: run.status })
@@ -193,7 +194,7 @@ export class BrowserDemo {
     const draft = state ?? structuredClone(await this.load())
     const index = draft.runs.findIndex((item) => item.run_id === runId)
     if (index < 0) return
-    const run = { ...finished, thread_id: draft.runs[index].thread_id, thread_title: draft.runs[index].thread_title, thread_kind: draft.runs[index].thread_kind, participant_user_ids: [this.user.user_id] }
+    const run = { ...finished, kind: draft.runs[index].kind, thread_id: draft.runs[index].thread_id, thread_title: draft.runs[index].thread_title, thread_kind: draft.runs[index].thread_kind, participant_user_ids: [this.user.user_id] }
     const conversation = draft.conversations.find((item) => item.thread_id === run.thread_id)
     if (conversation && ['İzge', 'İzge ile çalışma'].includes(conversation.title) && draft.runs.filter((item) => item.thread_id === run.thread_id).length === 1 && finished.thread_title && !finished.thread_title.startsWith('demo:')) {
       conversation.title = finished.thread_title
@@ -244,7 +245,7 @@ export class BrowserDemo {
       draft.messages.push(message); return commit(message)
     }
     if (route === '/work/ask' && method === 'POST') return this.ask(draft, payload)
-    if (route === '/work/review' && method === 'POST') return this.ask(draft, { ...payload, message: 'Atlas için açık işleri, değişen kararları ve sıradaki adımı kaynaklarıyla özetle.', thread_id: 'izge-colleague' })
+    if (route === '/work/review' && method === 'POST') return this.ask(draft, { ...payload, kind: 'evening_review', message: 'Bugün eklenen şirket kayıtlarını ve açık işleri gözden geçir. Değişmiş veya riskli varsayımları, takip gerektiren işleri ve yarın için en yararlı üç öneriyi kaynaklara dayanarak Türkçe özetle.', thread_id: 'izge-colleague' })
     if (route === '/work/runs' && method === 'GET') return { items: draft.runs.filter((run) => !url.searchParams.get('thread_id') || run.thread_id === url.searchParams.get('thread_id')).toReversed() }
     if (route.startsWith('/work/runs/') && method === 'GET') return requireItem(draft.runs.find((run) => run.run_id === route.split('/')[3]))
     if (route === '/work/conversations') {

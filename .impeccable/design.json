@@ -1,0 +1,390 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-16T17:50:33+03:00",
+  "title": "Design System: Izge Website",
+  "extensions": {
+    "scope": {
+      "surface": "website",
+      "designDocument": "website/DESIGN.md",
+      "sourceFiles": [
+        "website/index.html",
+        "website/styles.css",
+        "website/hero-motion.css",
+        "website/i18n.js",
+        "website/story-data.js",
+        "website/story.js",
+        "website/journey-motion.js",
+        "website/scroll-motion.js",
+        "website/finale-motion.js",
+        "website/hero-motion.js",
+        "website/source-markdown.js"
+      ],
+      "excludes": [
+        "DESIGN.md"
+      ]
+    },
+    "colorMeta": {
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Night Canvas",
+        "canonical": "#101619",
+        "tonalRamp": [
+          "oklch(15% 0.011 229.6)",
+          "oklch(25% 0.011 229.6)",
+          "oklch(35% 0.011 229.6)",
+          "oklch(45% 0.011 229.6)",
+          "oklch(55% 0.011 229.6)",
+          "oklch(65% 0.011 229.6)",
+          "oklch(80% 0.011 229.6)",
+          "oklch(95% 0.011 229.6)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Evidence Surface",
+        "canonical": "#121a20",
+        "tonalRamp": [
+          "oklch(15% 0.017 241.0)",
+          "oklch(25% 0.017 241.0)",
+          "oklch(35% 0.017 241.0)",
+          "oklch(45% 0.017 241.0)",
+          "oklch(55% 0.017 241.0)",
+          "oklch(65% 0.017 241.0)",
+          "oklch(80% 0.017 241.0)",
+          "oklch(95% 0.017 241.0)"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised Context",
+        "canonical": "#18222d",
+        "tonalRamp": [
+          "oklch(15% 0.025 251.2)",
+          "oklch(25% 0.025 251.2)",
+          "oklch(35% 0.025 251.2)",
+          "oklch(45% 0.025 251.2)",
+          "oklch(55% 0.025 251.2)",
+          "oklch(65% 0.025 251.2)",
+          "oklch(80% 0.025 251.2)",
+          "oklch(95% 0.025 251.2)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Pearl Ink",
+        "canonical": "#e8edf4",
+        "tonalRamp": [
+          "oklch(15% 0.011 256.7)",
+          "oklch(25% 0.011 256.7)",
+          "oklch(35% 0.011 256.7)",
+          "oklch(45% 0.011 256.7)",
+          "oklch(55% 0.011 256.7)",
+          "oklch(65% 0.011 256.7)",
+          "oklch(80% 0.011 256.7)",
+          "oklch(95% 0.011 256.7)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Quiet Metadata",
+        "canonical": "#adb9c9",
+        "tonalRamp": [
+          "oklch(15% 0.026 255.6)",
+          "oklch(25% 0.026 255.6)",
+          "oklch(35% 0.026 255.6)",
+          "oklch(45% 0.026 255.6)",
+          "oklch(55% 0.026 255.6)",
+          "oklch(65% 0.026 255.6)",
+          "oklch(80% 0.026 255.6)",
+          "oklch(95% 0.026 255.6)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Evidence Blue",
+        "canonical": "#9cb5ff",
+        "tonalRamp": [
+          "oklch(15% 0.110 269.5)",
+          "oklch(25% 0.110 269.5)",
+          "oklch(35% 0.110 269.5)",
+          "oklch(45% 0.110 269.5)",
+          "oklch(55% 0.110 269.5)",
+          "oklch(65% 0.110 269.5)",
+          "oklch(80% 0.110 269.5)",
+          "oklch(95% 0.110 269.5)"
+        ]
+      },
+      "action": {
+        "role": "primary",
+        "displayName": "Decision Blue",
+        "canonical": "#8dbdf3",
+        "tonalRamp": [
+          "oklch(15% 0.093 251.9)",
+          "oklch(25% 0.093 251.9)",
+          "oklch(35% 0.093 251.9)",
+          "oklch(45% 0.093 251.9)",
+          "oklch(55% 0.093 251.9)",
+          "oklch(65% 0.093 251.9)",
+          "oklch(80% 0.093 251.9)",
+          "oklch(95% 0.093 251.9)"
+        ]
+      },
+      "action-ink": {
+        "role": "neutral",
+        "displayName": "Action Ink",
+        "canonical": "#0b1828",
+        "tonalRamp": [
+          "oklch(15% 0.037 254.4)",
+          "oklch(25% 0.037 254.4)",
+          "oklch(35% 0.037 254.4)",
+          "oklch(45% 0.037 254.4)",
+          "oklch(55% 0.037 254.4)",
+          "oklch(65% 0.037 254.4)",
+          "oklch(80% 0.037 254.4)",
+          "oklch(95% 0.037 254.4)"
+        ]
+      },
+      "warm-finding": {
+        "role": "secondary",
+        "displayName": "Review Warmth",
+        "canonical": "#f2c79f",
+        "tonalRamp": [
+          "oklch(15% 0.072 64.6)",
+          "oklch(25% 0.072 64.6)",
+          "oklch(35% 0.072 64.6)",
+          "oklch(45% 0.072 64.6)",
+          "oklch(55% 0.072 64.6)",
+          "oklch(65% 0.072 64.6)",
+          "oklch(80% 0.072 64.6)",
+          "oklch(95% 0.072 64.6)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Structural Line",
+        "canonical": "#303c49",
+        "tonalRamp": [
+          "oklch(15% 0.028 250.7)",
+          "oklch(25% 0.028 250.7)",
+          "oklch(35% 0.028 250.7)",
+          "oklch(45% 0.028 250.7)",
+          "oklch(55% 0.028 250.7)",
+          "oklch(65% 0.028 250.7)",
+          "oklch(80% 0.028 250.7)",
+          "oklch(95% 0.028 250.7)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "hero-display": {
+        "displayName": "Hero Display",
+        "purpose": "The two-line opening statement only."
+      },
+      "section-display": {
+        "displayName": "Section Display",
+        "purpose": "Chapter, discussion, and closing statements."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Opening proposition, chapter explanation, and source-dialog content."
+      },
+      "compact-body": {
+        "displayName": "Compact Body",
+        "purpose": "Discussion messages, customer requests, and prepared-response copy."
+      },
+      "label": {
+        "displayName": "Interface Label",
+        "purpose": "Primary actions, names, and compact headings."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Navigation, source controls, citations, playback controls, and metadata."
+      },
+      "micro-label": {
+        "displayName": "Micro Label",
+        "purpose": "The 11px functional floor for short statuses, disclosures, and compact evidence values."
+      }
+    },
+    "motion": [
+      {
+        "name": "ease-decelerated",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Opening assembly, chapter entrances, and message motion."
+      },
+      {
+        "name": "opening-playback",
+        "value": "12000ms",
+        "purpose": "200ms welcome fade with early header/copy reveal, then stationary 200ms logo fade-out and fade-in at its graph position at 1.4s without sliding, documents and unlabeled graph immediately on reappearance, 1.25-second graph-to-chat interval, sequential Ece then Izge, text-only thinking shimmer, marked mention, two-second thinking at 3.45–5.45s, and two-second reply stream at 5.45–7.45s; no opening controls."
+      },
+      {
+        "name": "opening-fail-open",
+        "value": "1800ms",
+        "purpose": "Removes the hidden opening state if the module does not initialize."
+      },
+      {
+        "name": "team-playback",
+        "value": "16000ms",
+        "purpose": "Initially empty transcript, right-aligned self-message, thinking, scroll-bounded answer, and scroll-gated employee reactions with reversible removal and unstreaming."
+      },
+      {
+        "name": "team-stream",
+        "value": "4667ms baseline",
+        "purpose": "Fixture answer reveal at 1.5x the previous baseline, with a temporary scroll-velocity multiplier; never a provider request."
+      },
+      {
+        "name": "native-chapters",
+        "value": "native scroll progress",
+        "purpose": "Reversible four-chapter state with sequential, reversible daily-review rows and no wheel or touch interception."
+      },
+      {
+        "name": "native-finale",
+        "value": "native scroll progress",
+        "purpose": "Moves the full composer upward into a You/Siz self-message, gates and reverses replies, then raises and enlarges the closing composition without intercepting scroll."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce",
+        "purpose": "Completes the opening and renders every chapter, the team transcript, and the closing in readable static form."
+      },
+      {
+        "name": "short-landscape",
+        "value": "max-height: 500px",
+        "purpose": "Uses the same readable stacked chapter form as reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stacked-height",
+        "value": "500px"
+      },
+      {
+        "name": "short-height",
+        "value": "650px"
+      },
+      {
+        "name": "single-column",
+        "value": "760px"
+      },
+      {
+        "name": "team-playback-stack",
+        "value": "860px"
+      },
+      {
+        "name": "tight-layout",
+        "value": "1050px"
+      },
+      {
+        "name": "wide-layout",
+        "value": "1600px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The real demo destination and final meaningful call to action.",
+      "html": "<a class=\"ds-button-primary\" href=\"#\">Try demo</a>",
+      "css": ".ds-button-primary{min-height:46px;display:inline-flex;align-items:center;justify-content:center;padding:12px 22px;border-radius:8px;background:var(--action,#8dbdf3);color:var(--action-ink,#0b1828);font:600 13px/1.4 Inter,ui-sans-serif,system-ui,sans-serif;text-decoration:none}.ds-button-primary:hover{background:var(--ink,#e8edf4);color:var(--action-ink,#0b1828)}.ds-button-primary:focus-visible{outline:2px solid var(--accent,#9cb5ff);outline-offset:5px}"
+    },
+    {
+      "name": "Source Control",
+      "kind": "button",
+      "refersTo": "source-control",
+      "description": "A compact document control that opens one fixture-backed source.",
+      "html": "<button class=\"ds-source\" type=\"button\"><svg viewBox=\"0 0 24 28\" aria-hidden=\"true\"><path d=\"M5 2h9l5 5v18H5zM14 2v6h5\"/></svg><span>Atlas contract<small>₺2,000 / h</small></span></button>",
+      "css": ".ds-source{min-height:66px;display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--line,#303c49);border-radius:10px;background:var(--surface,#121a20);color:var(--ink,#e8edf4);font:400 12px/1.5 Inter,ui-sans-serif,system-ui,sans-serif;text-align:left;cursor:pointer}.ds-source svg{width:20px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6}.ds-source span{display:grid}.ds-source small{color:var(--muted,#adb9c9);font-size:12px}.ds-source:hover{background:var(--raised,#18222d);border-color:var(--accent,#9cb5ff)}.ds-source:focus-visible{outline:2px solid var(--accent,#9cb5ff);outline-offset:5px}"
+    },
+    {
+      "name": "Chapter Navigation",
+      "kind": "nav",
+      "description": "The Remember, Notice, Prepare, Repeat navigation for the four scroll states.",
+      "html": "<nav class=\"ds-chapters\" aria-label=\"Product story\"><a href=\"#\">Remember</a><a href=\"#\" aria-current=\"true\">Notice</a><a href=\"#\">Prepare</a><a href=\"#\">Repeat</a></nav>",
+      "css": ".ds-chapters{display:flex;justify-content:center;gap:40px;font:400 12px/1.5 Inter,ui-sans-serif,system-ui,sans-serif}.ds-chapters a{min-height:44px;display:flex;align-items:center;position:relative;color:var(--muted,#adb9c9);text-decoration:none}.ds-chapters a:hover{color:var(--accent,#9cb5ff)}.ds-chapters a[aria-current=true]{color:var(--ink,#e8edf4)}.ds-chapters a[aria-current=true]::after{content:\"\";position:absolute;bottom:3px;width:100%;height:2px;background:var(--accent,#9cb5ff)}.ds-chapters a:focus-visible{outline:2px solid var(--accent,#9cb5ff);outline-offset:5px}"
+    },
+    {
+      "name": "Customer Response Draft",
+      "kind": "card",
+      "description": "A sourced response prepared for review and explicitly not sent.",
+      "html": "<article class=\"ds-draft\"><header><strong>Reply draft</strong><span>For your review</span></header><p>Hello Atlas team,</p><p>We delivered address corrections, data validation and historical record cleanup: 18 hours in total.</p><button type=\"button\">Delivery record</button><footer>Prepared, not sent. You stay in control.</footer></article>",
+      "css": ".ds-draft{max-width:520px;padding:26px 28px 0;border:1px solid var(--line,#303c49);border-radius:12px;background:var(--surface,#121a20);color:var(--ink,#e8edf4);font:400 14px/1.9 Inter,ui-sans-serif,system-ui,sans-serif;transform:rotate(-1deg)}.ds-draft header{display:flex;gap:12px;margin-bottom:24px}.ds-draft header span{margin-left:auto;color:var(--warm,#f2c79f);font-size:11px}.ds-draft p{margin:0 0 16px}.ds-draft button{min-height:44px;padding:8px 0;border:0;background:transparent;color:var(--accent,#9cb5ff);font:400 12px/1.5 Inter,ui-sans-serif,system-ui,sans-serif;text-decoration:underline;cursor:pointer}.ds-draft button:hover{color:var(--ink,#e8edf4)}.ds-draft button:focus-visible{outline:2px solid var(--accent,#9cb5ff);outline-offset:5px}.ds-draft footer{margin-top:18px;padding:18px 0;border-top:1px solid var(--line,#303c49);color:var(--muted,#adb9c9);font-size:11px}"
+    },
+    {
+      "name": "Conversation Switch",
+      "kind": "custom",
+      "refersTo": "conversation-control",
+      "description": "Native buttons select deterministic team or private messages.",
+      "html": "<div class=\"ds-conversation\" role=\"group\" aria-label=\"Conversation view\"><button type=\"button\" aria-pressed=\"true\">Team</button><button type=\"button\" aria-pressed=\"false\">Private</button></div>",
+      "css": ".ds-conversation{display:flex;gap:4px}.ds-conversation button{min-height:44px;padding:9px 14px;border:0;border-radius:6px;background:transparent;color:var(--muted,#adb9c9);font:400 12px/1.5 Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer}.ds-conversation button[aria-pressed=true]{background:var(--raised,#18222d);color:var(--ink,#e8edf4)}.ds-conversation button:hover{color:var(--ink,#e8edf4)}.ds-conversation button:focus-visible{outline:2px solid var(--accent,#9cb5ff);outline-offset:5px}"
+    },
+    {
+      "name": "Izge Playback Trigger",
+      "kind": "button",
+      "description": "A prepared prompt that native finale scroll carries upward at full size into a right-aligned You/Siz self-message; direct activation remains a local manual fallback and sends no real message.",
+      "html": "<button class=\"ds-playback\" type=\"button\"><mark>@izge</mark><span>Compare the delivery and invoice</span><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 19V5m-6 6 6-6 6 6\"/></svg></button>",
+      "css": ".ds-playback{min-height:58px;width:100%;display:flex;align-items:center;gap:12px;padding:14px 18px;border:1px solid var(--line,#303c49);border-radius:8px;background:var(--canvas,#101619);color:var(--ink,#e8edf4);font:400 13px/1.5 Inter,ui-sans-serif,system-ui,sans-serif;text-align:left;cursor:pointer}.ds-playback mark{padding:2px 4px;border-radius:3px;background:var(--raised,#18222d);color:var(--accent,#9cb5ff)}.ds-playback svg{width:22px;height:22px;margin-left:auto;fill:none;stroke:currentColor;stroke-width:1.6}.ds-playback:hover{border-color:var(--accent,#9cb5ff)}.ds-playback:focus-visible{outline:2px solid var(--accent,#9cb5ff);outline-offset:5px}"
+    },
+    {
+      "name": "Source Dialog",
+      "kind": "custom",
+      "refersTo": "source-dialog",
+      "description": "The native disclosure for a complete bundled demo record rendered as safe semantic Markdown.",
+      "html": "<dialog class=\"ds-dialog\" open><header><div><span>Demo source</span><h2>Atlas contract</h2></div><button type=\"button\" aria-label=\"Close source\">×</button></header><p>01_atlas_hizmet_sozlesmesi.md</p><div class=\"ds-dialog-body\">Verified out-of-scope work is billed separately at ₺2,000 per hour plus VAT.</div><footer>Bundled demo record. No private workspace data is fetched.</footer></dialog>",
+      "css": ".ds-dialog{width:min(680px,calc(100% - 32px));max-height:85dvh;padding:0;border:1px solid var(--line,#303c49);border-radius:12px;background:var(--surface,#121a20);color:var(--ink,#e8edf4);font-family:Inter,ui-sans-serif,system-ui,sans-serif}.ds-dialog header{display:flex;justify-content:space-between;gap:24px;padding:24px;border-bottom:1px solid var(--line,#303c49)}.ds-dialog header span,.ds-dialog>p,.ds-dialog footer{color:var(--muted,#adb9c9);font-size:12px}.ds-dialog h2{margin:8px 0 0;font-size:21px;line-height:1.4}.ds-dialog header button{width:44px;height:44px;border:0;border-radius:8px;background:transparent;color:var(--ink,#e8edf4);font-size:24px;cursor:pointer}.ds-dialog header button:hover{background:var(--raised,#18222d)}.ds-dialog header button:focus-visible{outline:2px solid var(--accent,#9cb5ff);outline-offset:5px}.ds-dialog>p{margin:0;padding:20px 24px}.ds-dialog-body{padding:0 24px 24px;font-size:15px;line-height:1.8}.ds-dialog footer{padding:18px 24px;border-top:1px solid var(--line,#303c49)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Memory Joins the Team",
+    "overview": "The website is a quiet, dark product stage that begins almost empty and assembles Izge's role in front of the visitor: mark, documents, relationships, conversation, and a qualified finding. The opening keeps the relationship graph unlabeled, marks the `@izge` mention, thinks for two seconds, and streams the reply for two seconds without playback controls. It then moves through four product chapters—company memory, finding, customer-response draft, and scheduled review—before native scroll carries a reversible team exchange into a closing invitation.\n\nThis is a standalone HTML/CSS/JavaScript expression of the Izge identity. It preserves the real mark, bundled Cambay and Inter type, grounded fixture data, rendered source disclosure, and message anatomy. Every apparent AI or operational state uses deterministic local fixtures; the walkthrough does not send a message, contact a customer, create an invoice, or call a model.\n\nThe earlier finding-first discovery composition remains a historical exploration, not the current implemented layout. The current code-led motion experience is the source of truth; no raster composition defines its structure.",
+    "keyCharacteristics": [
+      "Near-black teal canvas with restrained blue and warm review accents.",
+      "Cambay statements paired with practical Inter interface text and the Izge mark.",
+      "A control-free 12-second blank-to-built opening with two seconds of thinking and a two-second streamed reply.",
+      "Reload-only scroll and hash reset while ordinary deep links retain their destination.",
+      "Four reversible native-scroll chapters with sequential daily-review rows and readable stacked fallbacks.",
+      "An initially empty, scroll-pinned `@izge` playback whose full composer becomes a right-aligned You/Siz self-message.",
+      "Velocity-assisted streaming, scroll-gated colleague reactions, reverse removal/unstreaming, and pause/replay team controls without a redundant secondary heading.",
+      "A rising, growing closing composition with demo and `mailto:alperkartkaya@gmail.com` contact actions.",
+      "EN/TR parity, safely rendered bundled Markdown, and explicit human authority boundaries."
+    ],
+    "rules": [
+      {
+        "name": "The Warmth Requires Review Rule",
+        "body": "Warm text means “look closer and decide,” never “revenue recovered” or “work completed.”",
+        "section": "colors"
+      },
+      {
+        "name": "The Evidence Before Superlatives Rule",
+        "body": "Display copy states what Izge connects or prepares; it does not claim autonomous recovery, certainty, or a completed customer outcome.",
+        "section": "typography"
+      },
+      {
+        "name": "The Same Story at Every Size Rule",
+        "body": "Responsive changes may stack, tighten, or unpin the composition, but they preserve all four chapters, source access, team/private views, the complete fixture answer, and human-review qualification.",
+        "section": "layout"
+      },
+      {
+        "name": "The Evidence Stays Grounded Rule",
+        "body": "Resting product and evidence surfaces use borders and tonal layers, not promotional shadows.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** preserve the real Izge mark, the established dark palette, and the Cambay/Inter pairing.",
+      "**Do** keep EN/TR content structurally equivalent and test both languages for overflow.",
+      "**Do** use fixture-grounded documents and keep source access keyboard-operable and focus-restoring.",
+      "**Do** keep deterministic fixture behavior testable and keep customer confirmation, commercial approval, and human review explicit.",
+      "**Do** show the complete final state for reduced motion and the readable stacked chapter fallback at 500px viewport height or less.",
+      "**Do** keep functional text at 11px or larger."
+    ],
+    "donts": [
+      "**Don't** treat an earlier raster or discovery composition as the current layout authority; the implemented HTML, CSS, and JavaScript define this implemented experience.",
+      "**Don't** present thinking or streaming as a live model response.",
+      "**Don't** imply the page sends a message, contacts a customer, creates an invoice, or executes any other external action.",
+      "**Don't** mark the potential amount as recovered revenue, a finalized receivable, or an approved invoice.",
+      "**Don't** let Izge make the commercial decision; a responsible employee reviews and approves the next step.",
+      "**Don't** introduce integration logos, invented metrics, unsupported source formats, decorative glow, or motion without a complete static equivalent."
+    ]
+  }
+}

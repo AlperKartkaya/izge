@@ -31,6 +31,7 @@ export function OrchestrationPage() {
   const [error, setError] = useState<string | null>(null)
   const [isScenarioRunning, setIsScenarioRunning] = useState(false)
   const [replayingRunId, setReplayingRunId] = useState<string | null>(null)
+  const isReadOnlyDemo = session?.user.is_public_demo === true
 
   useEffect(() => {
     let cancelled = false
@@ -69,7 +70,7 @@ export function OrchestrationPage() {
 
   const handleScenario: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault()
-    if (!session?.token) {
+    if (!session?.token || isReadOnlyDemo) {
       return
     }
     setIsScenarioRunning(true)
@@ -96,7 +97,7 @@ export function OrchestrationPage() {
   }
 
   const handleReplayScenario = async (scenarioRunId: string) => {
-    if (!session?.token) {
+    if (!session?.token || isReadOnlyDemo) {
       return
     }
     setReplayingRunId(scenarioRunId)
@@ -169,6 +170,7 @@ export function OrchestrationPage() {
       </Panel>
 
       <Panel title={t('What would this change affect?', 'Bu değişiklik neleri etkiler?')} description={t('Describe a change to find relevant decisions, commitments and sources. Results are based on existing evidence, not predictions.', 'Bir değişiklik yazın; ilgili kararları, taahhütleri ve kaynakları bulun. Sonuçlar mevcut kanıtlara dayanır, gelecek tahmini değildir.')}>
+        {isReadOnlyDemo ? <p className="table-secondary">{t('This demo page is read-only; scenario execution is unavailable.', 'Bu demo sayfası salt okunurdur; senaryo çalıştırma kapalıdır.')}</p> : null}
         <details className="employee-focus-details">
           <summary>{t('Use an example', 'Bir örnek kullan')}</summary>
           <div className="signal-grid">
@@ -185,7 +187,7 @@ export function OrchestrationPage() {
             <span className="field-label">{t('Scenario', 'Senaryo')}</span>
             <textarea name="scenario" value={scenarioText} onChange={(event) => updateScenarioText(event.target.value)} rows={3} placeholder={t('For example: which commitments are affected if delivery slips by a week?', 'Örneğin: teslimat bir hafta gecikirse hangi taahhütler etkilenir?')} autoComplete="off" required />
           </label>
-          <button type="submit" className="primary-button" disabled={isScenarioRunning}>{isScenarioRunning ? t('Checking scenario…', 'Senaryo kontrol ediliyor…') : t('Analyse impact', 'Etkisini incele')}</button>
+          <button type="submit" className="primary-button" disabled={isScenarioRunning || isReadOnlyDemo}>{isScenarioRunning ? t('Checking scenario…', 'Senaryo kontrol ediliyor…') : t('Analyse impact', 'Etkisini incele')}</button>
         </form>
 
         {scenarioResult ? (
@@ -256,7 +258,7 @@ export function OrchestrationPage() {
                       type="button"
                       className="secondary-button"
                       onClick={() => void handleReplayScenario(run.scenario_run_id)}
-                      disabled={replayingRunId === run.scenario_run_id}
+                      disabled={isReadOnlyDemo || replayingRunId === run.scenario_run_id}
                     >
                       {replayingRunId === run.scenario_run_id ? t('Replaying…', 'Yeniden oynatılıyor…') : t('Recheck evidence', 'Kanıtları yeniden kontrol et')}
                     </button>

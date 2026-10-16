@@ -7,6 +7,13 @@ alanında tutulur. Sayfa yenilemek bunları silmez; **Demoyu sıfırla** siler.
 Başka ziyaretçilerin veya gerçek şirket kullanıcılarının verileri değişmez.
 Normal kullanıcıların API/persistans akışı değişmedi.
 
+Selin'in demo menüsünde İşleme, Bilgi grafiği, Dosya sistemi, Çalışmalar ve Hazırlık
+inceleme sayfaları da bulunur. Sunucu rolü Member kalır; başka ziyaretçilerin
+kayıtlarını veya sunucu yapılandırmasını açan yönetici sayfaları demo menüsüne eklenmez.
+Günlük değerlendirme aynı kartta düşünme durumu ve canlı metinle gösterilir.
+Demo değerlendirmesi mevcut izole soru akışını kullanır; değerlendirme türü ve
+tamamlanan çıktı yalnızca tarayıcıda saklanır.
+
 İzge yanıtları statik örnek değildir: `/api/demo/ask/events` mevcut model sağlayıcısını
 kullanır. İşlem, en fazla 64 MiB veritabanının RAM kopyasında, aynı kaynak izinleri
 ve en fazla iki eşzamanlı çalışma ile yürütülür; sonuç tarayıcıya döner, kopya

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "stage": "hero",
+  "id": "hero",
+  "title": "First viewport \u2014 real Izge product story",
+  "comp": {
+    "path": ".impeccable/mocks/decision/discovery.png",
+    "width": 1536,
+    "height": 1024
+  },
+  "components": [
+    {
+      "id": "first-viewport",
+      "name": "First viewport",
+      "medium": "HTML / CSS",
+      "note": "Original dark product-led layout. Uses the actual Izge mark and fixture-grounded records; removes invented integrations, counts, timestamps, and fake sending. Source previews and Team/private switches work. Remaining discussion, recovery, and scroll sections are not built yet.",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1
+      },
+      "preview": {
+        "kind": "page",
+        "path": "website/index.html"
+      },
+      "dependencies": [
+        "website/styles.css",
+        "website/story.js",
+        "website/i18n.js",
+        "website/story-data.js",
+        "website/assets/izge-mark.svg",
+        "website/assets/document.svg",
+        "website/assets/link.svg",
+        "website/assets/fonts/cambay-bold.ttf",
+        "website/assets/favicon-32.png",
+        "website/assets/apple-touch-icon.png",
+        "website/assets/fonts/inter-variable.ttf"
+      ]
+    }
+  ]
+}

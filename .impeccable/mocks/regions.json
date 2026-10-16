@@ -1,0 +1,344 @@
+{
+  "regions": [
+    {
+      "id": "navigation",
+      "kind": "chrome",
+      "pixelBox": {
+        "x": 75,
+        "y": 12,
+        "w": 1390,
+        "h": 42
+      },
+      "note": "Navigation strip with logo, product links, language controls and demo link",
+      "container": true
+    },
+    {
+      "id": "brand",
+      "kind": "control",
+      "pixelBox": {
+        "x": 75,
+        "y": 16,
+        "w": 60,
+        "h": 32
+      },
+      "note": "Izge brand link; implementation uses the existing product mark"
+    },
+    {
+      "id": "nav-links",
+      "kind": "control",
+      "pixelBox": {
+        "x": 212,
+        "y": 23,
+        "w": 220,
+        "h": 20
+      },
+      "note": "Product and how-it-works navigation links"
+    },
+    {
+      "id": "language",
+      "kind": "control",
+      "pixelBox": {
+        "x": 1235,
+        "y": 20,
+        "w": 85,
+        "h": 25
+      },
+      "note": "English and Turkish language controls"
+    },
+    {
+      "id": "demo",
+      "kind": "control",
+      "pixelBox": {
+        "x": 1342,
+        "y": 12,
+        "w": 123,
+        "h": 42
+      },
+      "note": "Primary Try demo button"
+    },
+    {
+      "id": "headline",
+      "kind": "text",
+      "pixelBox": {
+        "x": 75,
+        "y": 91,
+        "w": 710,
+        "h": 111
+      },
+      "note": "Large two-line heading: The colleague who notices what slips through."
+    },
+    {
+      "id": "introduction",
+      "kind": "text",
+      "pixelBox": {
+        "x": 76,
+        "y": 215,
+        "w": 750,
+        "h": 53
+      },
+      "note": "Two-line introduction explaining source-backed company context"
+    },
+    {
+      "id": "finding-frame",
+      "kind": "chrome",
+      "pixelBox": {
+        "x": 75,
+        "y": 285,
+        "w": 954,
+        "h": 453
+      },
+      "note": "Finding panel with quiet dark fill and thin rounded outline",
+      "container": true
+    },
+    {
+      "id": "finding-state",
+      "kind": "text",
+      "pixelBox": {
+        "x": 101,
+        "y": 307,
+        "w": 312,
+        "h": 23
+      },
+      "note": "New finding status and Atlas September 2026 context"
+    },
+    {
+      "id": "finding-time",
+      "kind": "text",
+      "pixelBox": {
+        "x": 938,
+        "y": 310,
+        "w": 67,
+        "h": 20
+      },
+      "note": "Illustrative finding time, not a live status"
+    },
+    {
+      "id": "finding-title",
+      "kind": "text",
+      "pixelBox": {
+        "x": 100,
+        "y": 350,
+        "w": 777,
+        "h": 48
+      },
+      "note": "18 hours delivered. Never invoiced. Main finding headline"
+    },
+    {
+      "id": "amount",
+      "kind": "text",
+      "pixelBox": {
+        "x": 100,
+        "y": 413,
+        "w": 296,
+        "h": 46
+      },
+      "note": "Potential amount of 36000 Turkish lira plus VAT"
+    },
+    {
+      "id": "amount-meaning",
+      "kind": "text",
+      "pixelBox": {
+        "x": 438,
+        "y": 425,
+        "w": 305,
+        "h": 31
+      },
+      "note": "Potential billing to review qualifier next to amount"
+    },
+    {
+      "id": "qualification",
+      "kind": "text",
+      "pixelBox": {
+        "x": 101,
+        "y": 476,
+        "w": 390,
+        "h": 20
+      },
+      "note": "Demo scenario and subject to commercial approval disclaimer"
+    },
+    {
+      "id": "contract-source",
+      "kind": "control",
+      "pixelBox": {
+        "x": 103,
+        "y": 512,
+        "w": 302,
+        "h": 122
+      },
+      "note": "Source preview button with document icon, title, key fact and filename",
+      "container": true
+    },
+    {
+      "id": "delivery-source",
+      "kind": "control",
+      "pixelBox": {
+        "x": 423,
+        "y": 512,
+        "w": 277,
+        "h": 122
+      },
+      "note": "Source preview button with document icon, title, key fact and filename",
+      "container": true
+    },
+    {
+      "id": "invoice-source",
+      "kind": "control",
+      "pixelBox": {
+        "x": 717,
+        "y": 512,
+        "w": 284,
+        "h": 122
+      },
+      "note": "Source preview button with document icon, title, key fact and filename",
+      "container": true
+    },
+    {
+      "id": "finding-actions",
+      "kind": "control",
+      "pixelBox": {
+        "x": 101,
+        "y": 668,
+        "w": 454,
+        "h": 50
+      },
+      "note": "Trace evidence and Discuss with team buttons"
+    },
+    {
+      "id": "conversation-frame",
+      "kind": "chrome",
+      "pixelBox": {
+        "x": 1041,
+        "y": 285,
+        "w": 423,
+        "h": 453
+      },
+      "note": "Team conversation panel with tab controls and messages",
+      "container": true
+    },
+    {
+      "id": "conversation-tabs",
+      "kind": "control",
+      "pixelBox": {
+        "x": 1064,
+        "y": 304,
+        "w": 230,
+        "h": 37
+      },
+      "note": "Team and private Izge conversation selectors"
+    },
+    {
+      "id": "message-ece",
+      "kind": "text",
+      "pixelBox": {
+        "x": 1064,
+        "y": 357,
+        "w": 340,
+        "h": 64
+      },
+      "note": "Ece avatar, name and review request message"
+    },
+    {
+      "id": "message-selin",
+      "kind": "text",
+      "pixelBox": {
+        "x": 1064,
+        "y": 435,
+        "w": 340,
+        "h": 65
+      },
+      "note": "Selin avatar, name and response about reviewing evidence"
+    },
+    {
+      "id": "conversation-action",
+      "kind": "control",
+      "pixelBox": {
+        "x": 1064,
+        "y": 515,
+        "w": 379,
+        "h": 50
+      },
+      "note": "Conversation action at composer position; implementation uses working walkthrough action instead of fake input"
+    },
+    {
+      "id": "conversation-context",
+      "kind": "text",
+      "pixelBox": {
+        "x": 1064,
+        "y": 593,
+        "w": 379,
+        "h": 128
+      },
+      "note": "Conversation context area; invented unrelated finding counts will be replaced with actual scenario next steps"
+    },
+    {
+      "id": "source-section-heading",
+      "kind": "text",
+      "pixelBox": {
+        "x": 76,
+        "y": 784,
+        "w": 515,
+        "h": 48
+      },
+      "note": "Start of source detail section and its heading"
+    },
+    {
+      "id": "next-section-heading",
+      "kind": "text",
+      "pixelBox": {
+        "x": 1064,
+        "y": 783,
+        "w": 402,
+        "h": 50
+      },
+      "note": "Start of accountable next action section and its heading"
+    },
+    {
+      "id": "contract-detail",
+      "kind": "chrome",
+      "pixelBox": {
+        "x": 76,
+        "y": 845,
+        "w": 309,
+        "h": 173
+      },
+      "note": "Source disclosure with title and excerpt; actual fixture text replaces invented metadata",
+      "container": true
+    },
+    {
+      "id": "delivery-detail",
+      "kind": "chrome",
+      "pixelBox": {
+        "x": 401,
+        "y": 845,
+        "w": 309,
+        "h": 173
+      },
+      "note": "Source disclosure with title and excerpt; actual fixture text replaces invented metadata",
+      "container": true
+    },
+    {
+      "id": "invoice-detail",
+      "kind": "chrome",
+      "pixelBox": {
+        "x": 727,
+        "y": 845,
+        "w": 291,
+        "h": 173
+      },
+      "note": "Source disclosure with title and excerpt; actual fixture text replaces invented metadata",
+      "container": true
+    },
+    {
+      "id": "next-action",
+      "kind": "chrome",
+      "pixelBox": {
+        "x": 1053,
+        "y": 847,
+        "w": 411,
+        "h": 177
+      },
+      "note": "Review action section with explanatory text and demo link",
+      "container": true
+    }
+  ]
+}

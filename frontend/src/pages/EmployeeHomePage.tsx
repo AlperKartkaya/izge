@@ -4,7 +4,7 @@ import { ReviewContextCards } from '../components/ReviewContextCards'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { LoadingState, TaskRows } from '../components/AgentPrimitives'
+import { AgentAnswer, LoadingState, TaskRows, ThinkingState } from '../components/AgentPrimitives'
 import { Callout, EmptyState, Panel } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime } from '../lib/format'
@@ -27,11 +27,18 @@ export function EmployeeHomePage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [reviewRun, setReviewRun] = useState<AgentRunRead | null>(null)
+  const [reviewPending, setReviewPending] = useState(false)
+  const [streamedReview, setStreamedReview] = useState('')
 
   useEffect(() => {
     if (!session?.token) return
     Promise.all([api.listWorkTasks(session.token), api.listArtifacts(session.token), api.listSignals(session.token), api.listAgentRuns(session.token)])
-      .then(([taskList, artifactList, signalList, runList]) => { setTasks(taskList); setArtifacts(artifactList); setSignals(signalList); setRuns(runList); setError(null) })
+      .then(([taskList, artifactList, signalList, runList]) => {
+        const activeReview = runList.find((run) => run.kind === 'evening_review' && (run.status === 'queued' || run.status === 'running'))
+        setTasks(taskList); setArtifacts(artifactList); setSignals(signalList); setRuns(runList)
+        if (activeReview) { setReviewRun(activeReview); setStreamedReview(activeReview.answer ?? '') }
+        setError(null)
+      })
       .catch((caughtError) => setError(errorMessage(caughtError, t('Workspace could not be loaded.', 'Çalışma alanı yüklenemedi.'))))
       .finally(() => setLoading(false))
   }, [session?.token, t])
@@ -56,23 +63,40 @@ export function EmployeeHomePage() {
         const next = await api.getAgentRun(session.token, runId)
         setReviewRun(next)
         if (next.status === 'completed' || next.status === 'failed') {
+          setStreamedReview(next.answer ?? '')
           setRuns((current) => [next, ...current.filter((run) => run.run_id !== next.run_id)])
           events.close()
         }
       } catch (caughtError) { setError(errorMessage(caughtError, t('Workspace could not be loaded.', 'Çalışma alanı yüklenemedi.'))) }
     }
-    for (const name of ['stage', 'done', 'failed']) events.addEventListener(name, () => void refresh())
+    events.addEventListener('delta', (event) => {
+      const payload = JSON.parse((event as MessageEvent).data) as { text?: string }
+      if (payload.text) setStreamedReview((current) => current + payload.text)
+    })
+    events.addEventListener('snapshot', (event) => {
+      const run = JSON.parse((event as MessageEvent).data) as AgentRunRead
+      setReviewRun(run)
+      setStreamedReview(run.answer ?? '')
+    })
+    events.addEventListener('reset', () => setStreamedReview(''))
+    for (const name of ['stage', 'source', 'done', 'failed']) events.addEventListener(name, () => void refresh())
     events.onerror = () => { events.close(); void refresh() }
     return () => events.close()
   }, [reviewRun?.run_id, reviewRun?.status, session, t])
 
   async function startReview() {
-    if (!session?.token) return
+    if (!session?.token || loading || reviewPending || reviewRun?.status === 'queued' || reviewRun?.status === 'running') return
+    setReviewPending(true); setReviewRun(null); setError(null); setStreamedReview('')
     try {
       const accepted = await api.requestEveningReview(session.token)
-      setReviewRun(await api.getAgentRun(session.token, accepted.run_id))
+      const run = await api.getAgentRun(session.token, accepted.run_id)
+      setReviewRun(run); setStreamedReview(run.answer ?? '')
     } catch (caughtError) { setError(errorMessage(caughtError, t('Workspace could not be loaded.', 'Çalışma alanı yüklenemedi.'))) }
+    finally { setReviewPending(false) }
   }
+
+  const reviewWorking = reviewPending || reviewRun?.status === 'queued' || reviewRun?.status === 'running'
+  const currentReviewText = reviewRun?.status === 'completed' ? reviewRun.answer ?? '' : streamedReview
 
   return (
     <div className="stack-lg">
@@ -95,10 +119,11 @@ export function EmployeeHomePage() {
           {!loading && tasks.length > 0 ? <ProgressMeter value={(tasks.length - openTasks.length) / tasks.length} label={t('Completed tasks', 'Tamamlanan işler')} detail={t(`${tasks.length - openTasks.length} of ${tasks.length}`, `${tasks.length - openTasks.length} / ${tasks.length}`)} /> : null}
           {openTasks.length ? <TaskRows tasks={openTasks.slice(0, 5)} onStatusChange={updateTask} /> : <EmptyState title={t('No open work', 'Açık iş yok')} description={t('You can add a new task or reminder.', 'Yeni bir iş veya hatırlatma ekleyebilirsiniz.')} />}
         </Panel>
-        <Panel title={t("Izge's daily review", 'İzge’nin günlük değerlendirmesi')} aside={<button type="button" className="text-button" disabled={Boolean(reviewRun && (reviewRun.status === 'queued' || reviewRun.status === 'running'))} onClick={() => void startReview()}>{t('Review now', 'Şimdi değerlendir')}</button>}>
-          {reviewRun && (reviewRun.status === 'queued' || reviewRun.status === 'running') ? <LoadingState label={reviewRun.stages.at(-1)?.label ?? t('Reviewing the day', 'Gün değerlendiriliyor')} /> : null}
+        <Panel title={t("Izge's daily review", 'İzge’nin günlük değerlendirmesi')} aside={<button type="button" className="text-button" disabled={loading || reviewWorking} onClick={() => void startReview()}>{t('Review now', 'Şimdi değerlendir')}</button>}>
+          {reviewWorking ? <ThinkingState stages={reviewRun?.stages ?? []} status={reviewRun?.status ?? 'queued'} /> : null}
+          {currentReviewText && reviewRun ? <AgentAnswer text={currentReviewText} sources={reviewRun.sources} active={reviewRun.status === 'queued' || reviewRun.status === 'running'} /> : null}
           {reviewRun?.status === 'failed' ? <Callout tone="warning">{reviewRun.error || t('Daily review could not be completed.', 'Günlük değerlendirme tamamlanamadı.')}</Callout> : null}
-          {latestReview ? <ReviewContextCards review={latestReview} /> : !reviewRun ? <EmptyState title={t('No review yet', 'Henüz değerlendirme yok')} description={t('Izge prepares an end-of-day review as daily notes and work are added.', 'Günlük not ve işler eklendikçe İzge gün sonu değerlendirmesi hazırlar.')} /> : null}
+          {!reviewRun && !reviewPending && latestReview ? <ReviewContextCards review={latestReview} /> : !reviewRun && !reviewPending ? <EmptyState title={t('No review yet', 'Henüz değerlendirme yok')} description={t('Izge prepares an end-of-day review as daily notes and work are added.', 'Günlük not ve işler eklendikçe İzge gün sonu değerlendirmesi hazırlar.')} /> : null}
         </Panel>
       </div>
       <Panel title={t('Recent changes', 'Son değişiklikler')}>

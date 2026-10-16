@@ -145,6 +145,47 @@ test('first answer titles a private conversation but never overwrites a manual t
   assert.equal((await renamed.request('/work/conversations')).items[0].title, 'Benim başlığım')
 })
 
+test('daily review is classified before streaming and remains visible after restoring browser state', async () => {
+  let emit
+  let release
+  const waiting = new Promise((resolve) => { release = resolve })
+  const { demo, storage, requests } = setup(new Map(), undefined, async (path, options, onEvent) => {
+    assert.equal(path, '/demo/ask/events')
+    const payload = JSON.parse(options.body)
+    assert.equal(payload.kind, 'evening_review')
+    assert.match(payload.message, /şirket kayıtlarını ve açık işleri/)
+    emit = onEvent
+    await onEvent({ type: 'accepted', data: { run_id: 'daily-run', status: 'running' } })
+    await waiting
+  })
+  const accepted = await demo.request('/work/review', post({}))
+  let run = await demo.request(`/work/runs/${accepted.run_id}`)
+  assert.equal(run.kind, 'evening_review')
+  assert.equal(run.status, 'running')
+  await emit({ type: 'delta', data: { text: 'Günün ' } })
+  assert.equal((await demo.request('/work/runs/daily-run')).answer, 'Günün ')
+  await demo.request('/notifications')
+  await emit({ type: 'delta', data: { text: 'değerlendirmesi' } })
+  run = await demo.request('/work/runs/daily-run')
+  await emit({ type: 'result', data: { run: { ...run, kind: 'ask', status: 'completed' } } })
+  const restored = setup(storage).demo
+  const completed = (await restored.request('/work/runs')).items.find((item) => item.run_id === 'daily-run')
+  assert.equal(completed.kind, 'evening_review')
+  assert.equal(completed.status, 'completed')
+  assert.equal(completed.answer, 'Günün değerlendirmesi')
+  assert.ok(requests.every((request) => !request.method))
+  release()
+})
+
+test('non-streaming demo review also keeps its browser-local category', async () => {
+  const { demo } = setup(new Map(), (path) => {
+    assert.equal(path, '/demo/ask')
+    return { run: { run_id: 'daily-sync', kind: 'ask', status: 'completed', answer: 'Günün özeti', question: 'Günü değerlendir', sources: [], stages: [], created_at: new Date().toISOString() } }
+  })
+  await demo.request('/work/review', post({}))
+  assert.equal((await demo.request('/work/runs/daily-sync')).kind, 'evening_review')
+})
+
 test('stream updates honor the same cross-tab lock as visitor writes', { skip: !globalThis.navigator?.locks }, async () => {
   let emit
   let endStream

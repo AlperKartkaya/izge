@@ -22,6 +22,7 @@ import { TasksPage } from './pages/TasksPage'
 import { AutomationsPage } from './pages/AutomationsPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { useLanguage } from './lib/i18n'
+import { canViewManagementPage } from './lib/navigation'
 
 const GraphPage = lazy(() =>
   import('./pages/GraphPage').then((module) => ({ default: module.GraphPage })),
@@ -39,8 +40,9 @@ function ScrollToTop() {
 
 function AdminOnlyRoute({ children }: { children: ReactNode }) {
   const { session } = useAuth()
+  const { pathname } = useLocation()
 
-  if (session?.user.role !== 'Admin') {
+  if (!canViewManagementPage(session?.user, pathname)) {
     return <Navigate to="/" replace />
   }
 

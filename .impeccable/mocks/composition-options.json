@@ -1,0 +1,58 @@
+{
+  "title": "Izge: final product-led composition",
+  "question": "The dark direction is confirmed. Keep the original layout, or use one of these two actual-component-informed arrangements. Images remain layout references; source documents and UI behavior must follow the app.",
+  "options": [
+    {
+      "id": "original",
+      "label": "Keep the selected composition",
+      "thesis": "Discovery beside team conversation.",
+      "palette": [
+        "#05070D",
+        "#0C131D",
+        "#9CB5FF"
+      ],
+      "materials": [
+        "existing app surfaces",
+        "actual source disclosures"
+      ],
+      "viewport": "Headline, prominent finding and adjacent team exchange.",
+      "risk": "Invented integrations, counts and metadata in the image will be removed.",
+      "comp": ".impeccable/mocks/decision/discovery.png"
+    },
+    {
+      "id": "review",
+      "label": "Daily review in focus",
+      "thesis": "The app's cited answer and expandable evidence lead.",
+      "palette": [
+        "#05070D",
+        "#0C131D",
+        "#9CB5FF"
+      ],
+      "materials": [
+        "actual citation treatment",
+        "source disclosures"
+      ],
+      "viewport": "Large review answer, sources and adjacent team handover.",
+      "risk": "Image-invented PDF pagination becomes the app's real source modal.",
+      "comp": ".impeccable/mocks/review.png"
+    },
+    {
+      "id": "trail",
+      "label": "Follow the evidence",
+      "thesis": "A guided sequence moves from review to sources to team chat.",
+      "palette": [
+        "#05070D",
+        "#0C131D",
+        "#9CB5FF"
+      ],
+      "materials": [
+        "source preview",
+        "actual answer treatment"
+      ],
+      "viewport": "Source evidence takes the stage, with cited finding and team handover.",
+      "risk": "Generated combined document will be replaced with separate real source records.",
+      "comp": ".impeccable/mocks/trail.png"
+    }
+  ],
+  "steer": true
+}

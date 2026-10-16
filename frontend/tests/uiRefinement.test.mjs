@@ -9,7 +9,15 @@ test('navigation preserves role-specific destinations and semantic links', () =>
   assert.match(source, /const navigationItems = isAdmin \?/)
   assert.match(source, /<NavLink/)
   assert.match(source, /aria-label=\{label\}/)
-  assert.match(read('App.tsx'), /session\?\.user\.role !== 'Admin'/)
+  assert.match(read('App.tsx'), /!canViewManagementPage\(session\?\.user, pathname\)/)
+})
+
+test('public demo inspection does not offer shared scenario writes', () => {
+  const source = read('pages/OrchestrationPage.tsx')
+  assert.match(source, /const isReadOnlyDemo = session\?\.user\.is_public_demo === true/)
+  assert.equal(source.match(/if \(!session\?\.token \|\| isReadOnlyDemo\)/g)?.length, 2)
+  assert.match(source, /disabled=\{isScenarioRunning \|\| isReadOnlyDemo\}/)
+  assert.match(source, /disabled=\{isReadOnlyDemo \|\| replayingRunId/)
 })
 
 test('agent settings preserve selected profiles, effort and cloud boundary disclosure', () => {
