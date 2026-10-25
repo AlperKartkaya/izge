@@ -273,6 +273,70 @@ function buildRunRecord(snapshot: StaticDemoSnapshot, payload: Record<string, un
   }
 }
 
+async function tryDeepSeekStream(
+  payload: Record<string, unknown>,
+  sources: AgentSourceRead[],
+  onDelta: (text: string) => Promise<void>,
+): Promise<string | null> {
+  const defaultProxy = typeof window !== 'undefined' && !('__IZGE_DEMO_STAGE_DELAY__' in window)
+    ? 'https://izge-demo-llm-proxy.alperkartkaya.workers.dev'
+    : ''
+  const proxyUrl = (import.meta.env?.VITE_DEMO_LLM_PROXY_URL?.trim() || defaultProxy).replace(/\/$/, '')
+  if (!proxyUrl) return null
+  const lang = payload.response_language === 'en' ? 'English' : 'Turkish'
+  const contextText = sources
+    .map((s, idx) => `[${idx + 1}] ${s.title}\n${s.quote}`)
+    .join('\n\n')
+  try {
+    const res = await fetch(`${proxyUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'system',
+            content: `You are İzge, an AI coworker grounded in company memory. Reply in ${lang}. Cite the provided company records inline using [1], [2], etc. Keep answers concise, factual, and evidence-backed.\n\nCompany records:\n${contextText}`,
+          },
+          { role: 'user', content: String(payload.message ?? '') },
+        ],
+      }),
+    })
+    if (!res.ok || !res.body) return null
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let full = ''
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data:')) continue
+        const data = trimmed.slice(5).trim()
+        if (data === '[DONE]') continue
+        try {
+          const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> }
+          const delta = parsed.choices?.[0]?.delta?.content
+          if (delta) {
+            full += delta
+            await onDelta(delta)
+          }
+        } catch {
+          // Ignore malformed SSE chunks
+        }
+      }
+    }
+    return full.trim() ? full : null
+  } catch {
+    return null
+  }
+}
+
 export async function staticDemoStream(
   _path: string,
   options: RequestInit,
@@ -284,20 +348,28 @@ export async function staticDemoStream(
   const finished = buildRunRecord(snapshot, payload, runId)
   await onEvent({ type: 'accepted', data: { run_id: runId, status: 'running' } })
   const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const stageDelay = Number((globalThis as { __IZGE_DEMO_STAGE_DELAY__?: number }).__IZGE_DEMO_STAGE_DELAY__ ?? (typeof window !== 'undefined' ? 280 : 90))
 
   for (const stage of finished.stages) {
     await onEvent({ type: 'stage', data: { stage_key: stage.key, label: stage.label, summary: stage.summary ?? undefined, status: 'running', sequence: stage.sequence } })
-    await delay(110)
+    await delay(stageDelay)
     await onEvent({ type: 'stage', data: { stage_key: stage.key, label: stage.label, summary: stage.summary ?? undefined, status: 'completed', sequence: stage.sequence } })
   }
   for (const source of finished.sources) {
     await onEvent({ type: 'source', data: { source } })
   }
-  const answer = finished.answer ?? ''
-  const step = Math.max(18, Math.ceil(answer.length / 26))
-  for (let index = 0; index < answer.length; index += step) {
-    await onEvent({ type: 'delta', data: { text: answer.slice(index, index + step) } })
-    await delay(20)
+  const liveAnswer = await tryDeepSeekStream(payload, finished.sources, async (text) => {
+    await onEvent({ type: 'delta', data: { text } })
+  })
+  if (liveAnswer) {
+    finished.answer = liveAnswer
+  } else {
+    const answer = finished.answer ?? ''
+    const step = Math.max(18, Math.ceil(answer.length / 26))
+    for (let index = 0; index < answer.length; index += step) {
+      await onEvent({ type: 'delta', data: { text: answer.slice(index, index + step) } })
+      await delay(25)
+    }
   }
   await onEvent({ type: 'result', data: { run: finished } })
 }

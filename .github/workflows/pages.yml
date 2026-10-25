@@ -38,6 +38,8 @@ jobs:
       - name: Build landing page and demo
         env:
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          VITE_DEMO_LLM_PROXY_URL: ${{ vars.VITE_DEMO_LLM_PROXY_URL || secrets.VITE_DEMO_LLM_PROXY_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: bash scripts/build-pages.sh _site
 
       - name: Upload Pages artifact
