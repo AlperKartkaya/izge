@@ -31,6 +31,7 @@ venv/
 /frontend/node_modules/
 /frontend/dist/
 /frontend/dist-ssr/
+/_site/
 
 # Runtime files when the API is started from the repository root
 /data/

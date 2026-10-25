@@ -1,6 +1,7 @@
 import { getLanguage, translate } from './language'
 import { BrowserDemo } from './browserDemo'
 import { consumeSse } from './sse'
+import { isStaticDemoActive, NonJsonApiError, shouldFallbackToStaticDemo, staticDemoPreviewUrl, staticDemoRequest, staticDemoStream } from './staticDemo'
 import type {
   ArtifactDetail,
   ArtifactProactiveSignals,
@@ -63,11 +64,13 @@ interface RequestOptions extends RequestInit {
 
 export class ApiError extends Error {
   status: number
+  isJson: boolean
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, isJson = true) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.isJson = isJson
   }
 }
 
@@ -76,7 +79,9 @@ let browserDemo: BrowserDemo | null = null
 function configureDemo(user: UserRead, token?: string) {
   browserDemo = user.is_public_demo ? new BrowserDemo(user, localStorage,
     (path, options = {}) => remoteRequest(path, { ...options, token }),
-    async (path, options, onEvent) => consumeSse(await remoteResponse(path, { ...options, token }), onEvent),
+    async (path, options, onEvent) => isStaticDemoActive()
+      ? staticDemoStream(path, options, onEvent)
+      : consumeSse(await remoteResponse(path, { ...options, token }), onEvent),
   ) : null
 }
 
@@ -91,9 +96,23 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 }
 
+async function runStaticRequest<T>(path: string, options: RequestOptions): Promise<T> {
+  try { return await staticDemoRequest(path, options) as T }
+  catch (error) {
+    if (error instanceof NonJsonApiError) throw new ApiError(error.message, error.status)
+    throw error
+  }
+}
+
 async function remoteRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const response = await remoteResponse(path, options)
-  return (response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text()) as T
+  if (isStaticDemoActive()) return runStaticRequest<T>(path, options)
+  try {
+    const response = await remoteResponse(path, options)
+    return (response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text()) as T
+  } catch (error) {
+    if (shouldFallbackToStaticDemo(error, error instanceof ApiError && error.isJson)) return runStaticRequest<T>(path, options)
+    throw error
+  }
 }
 
 async function remoteResponse(path: string, options: RequestOptions = {}): Promise<Response> {
@@ -117,14 +136,15 @@ async function remoteResponse(path: string, options: RequestOptions = {}): Promi
   })
 
   if (!response.ok) {
-    const payload = response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text()
+    const isJson = Boolean(response.headers.get('content-type')?.includes('application/json'))
+    const payload = isJson ? await response.json() : await response.text()
     const detail =
       typeof payload === 'string'
         ? payload
         : typeof payload?.detail === 'string'
           ? payload.detail
           : translate('Request failed', 'İstek başarısız')
-    throw new ApiError(detail, response.status)
+    throw new ApiError(detail, response.status, isJson)
   }
 
   return response
@@ -194,11 +214,11 @@ export const api = {
   },
 
   artifactPreviewUrl(artifactId: string, asText = false) {
-    return browserDemo?.previewUrl(artifactId) ?? `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/preview${asText ? "?as_text=true" : ""}`
+    return browserDemo?.previewUrl(artifactId) ?? staticDemoPreviewUrl(artifactId) ?? `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/preview${asText ? "?as_text=true" : ""}`
   },
 
   artifactDownloadUrl(artifactId: string) {
-    return browserDemo?.previewUrl(artifactId) ?? `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/download`
+    return browserDemo?.previewUrl(artifactId) ?? staticDemoPreviewUrl(artifactId) ?? `${API_BASE}/artifacts/${encodeURIComponent(artifactId)}/download`
   },
 
   getArtifactSignals(token: string, artifactId: string) {

@@ -9,7 +9,7 @@ import { LanguageProvider } from './lib/i18n'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <LanguageProvider><AuthProvider>
         <App />
       </AuthProvider></LanguageProvider>
