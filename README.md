@@ -1,97 +1,63 @@
 <p align="center">
-  <img src="frontend/public/icon.png" alt="İzge mark" width="96">
+  <img src="frontend/public/icon.png" alt="İzge" width="88">
 </p>
 <h1 align="center">İzge</h1>
-<p align="center"><b>A local-first institutional memory and decision intelligence system.</b></p>
+<p align="center"><b>An on-premise AI coworker that knows how your company works.</b></p>
 <p align="center">
-  <a href="https://izge.dev"><img alt="Website" src="https://img.shields.io/badge/website-izge.dev-111827?logo=googlechrome&logoColor=white"></a>
-  <a href="https://app.izge.dev"><img alt="Live Demo" src="https://img.shields.io/badge/demo-app.izge.dev-4f46e5?logo=googlechrome&logoColor=white"></a>
-  <img alt="System" src="https://img.shields.io/badge/system-Decision_Intelligence-059669">
-  <img alt="Storage" src="https://img.shields.io/badge/memory-Local--first-0284c7">
-  <img alt="FastAPI" src="https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi&logoColor=white">
-  <img alt="React 19" src="https://img.shields.io/badge/frontend-React_19-61DAFB?logo=react&logoColor=black">
-  <img alt="TypeScript" src="https://img.shields.io/badge/UI-TypeScript-3178C6?logo=typescript&logoColor=white">
-  <img alt="Database" src="https://img.shields.io/badge/storage-SQLite-003B57?logo=sqlite&logoColor=white">
+  <a href="https://alperkartkaya.github.io/izge/demo/"><img alt="Live Demo" src="https://img.shields.io/badge/demo-interactive-2f6f73?labelColor=16201e"></a>
+  <a href="https://alperkartkaya.github.io/izge/"><img alt="Website" src="https://img.shields.io/badge/website-landing_page-284b63?labelColor=16201e"></a>
+  <img alt="On-Premise" src="https://img.shields.io/badge/deployment-on--premise-3d5a45?labelColor=16201e">
+  <img alt="FastAPI" src="https://img.shields.io/badge/backend-FastAPI-23555a?labelColor=16201e&logo=fastapi&logoColor=e6ece7">
+  <img alt="React 19 · TypeScript" src="https://img.shields.io/badge/frontend-React_19_%C2%B7_TS-335c81?labelColor=16201e&logo=react&logoColor=e6ece7">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-44524d?labelColor=16201e"></a>
+</p>
+
+Izge connects your contracts, documents, tasks, and team conversations into shared company memory and puts a colleague in the room who actually read all of them.
+
+---
+
+## Ask Izge
+
+Ask direct questions in private, see how Izge checks company records step by step, and verify every answer from its original source.
+
+<p align="center">
+  <img src="docs/assets/ask-izge.gif" alt="Ask Izge" width="960">
 </p>
 
 ---
 
-## Ask İzge: Grounded Reasoning & Transparent Thinking
+## Work Together in Team Chat
 
-Ask why a decision was made, what contradicts it, or what changed across organizational history.
+Mention `@izge` inside daily team channels to pull the right documents, past decisions, and numbers straight into the conversation.
 
 <p align="center">
-  <img src="docs/assets/ask-izge.gif" alt="Ask İzge: Transparent multi-step thinking and cited decision reasoning" width="960">
+  <img src="docs/assets/team-chat.png" alt="Izge in Team Chat" width="960">
 </p>
-
-- **Transparent Thinking Phases:** Displays explicit execution stages—planning, artifact retrieval, cross-signal verification, and source checking—before presenting the conclusion.
-- **Strict Evidence Grounding:** Every claim links directly to primary sources (invoices, service agreements, delivery logs) via clickable citation chips.
-- **Contradiction Detection:** Surfaces conflicts between delivered work and commercial contracts in real time.
 
 ---
 
-## Team Chat: The Colleague in Daily Work
+## Daily Review & Routines
 
-Mention `@izge` directly inside team discussions to resolve conflicting assumptions and pull verified records into the conversation.
-
-<p align="center">
-  <img src="docs/assets/team-chat.png" alt="İzge in Team Chat: Uncovering unbilled delivery and citing evidence in team conversation" width="960">
-</p>
-
-- **Consequential Discovery:** Cross-references delivery logs (18 hours) with service contracts (₺2,000/hr) and monthly invoices (maintenance only) to catch **₺36,000 + VAT** in unbilled work.
-- **In-Stream Sources:** Expandable source excerpts embedded directly within the chat stream for instant team verification.
-- **Human Decision Loop:** Leaves financial and commercial decisions with accountable team leads, providing the evidence needed to act.
-
----
-
-## Daily Review: Proactive Intelligence & Continuity
-
-A morning command center for team leads and employees, surfacing drift and commitments before meetings start.
+Start the day with a clear brief of open tasks, follow-ups, and things that might otherwise slip through the cracks.
 
 <p align="center">
-  <img src="docs/assets/daily-review.png" alt="İzge Daily Review: Proactive signals, open commitments, and continuity tracking" width="960">
+  <img src="docs/assets/daily-review.png" alt="Izge Daily Review" width="960">
 </p>
-
-- **Proactive Signals:** Automatically detects continuity overlap with past postmortems, decaying assumptions, and open commitments.
-- **Work Tracking:** Distinguishes completed work from active deliverables without requiring repetitive status meetings.
-- **Repeated-Work Avoidance:** Alerts employees when newly submitted proposals duplicate historical efforts.
-
----
-
-## Core Stance
-
-- **Memory before magic** — Structured institutional history outranks generative speculation.
-- **Evidence before confidence** — Never trust an assertion without a clickable primary record.
-- **Local-first sovereignty** — Customer-controlled database and private inference. Sensitive corporate memory never leaves your boundary.
 
 ---
 
 ## Quickstart
 
-### Prerequisites
-- Python 3.11+
-- Node.js 20+
+Requires **Python 3.11+** and **Node.js 20+**. Install dependencies, migrate the local database, and start both backend and frontend in one command:
 
 ```bash
-# 1. Backend
-cd backend
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
-python -m app.migration_tools upgrade
-uvicorn app.main:app --reload --port 8000
-
-# 2. Frontend (in another terminal)
-cd frontend
-npm install
-npm run dev
+./scripts/dev.sh
 ```
 
-Open `http://localhost:5173` to explore the workspace.
-
-For containerized deployment, comprehensive operations, backup routines, and evaluation suites, see [`docs/OPERATIONS.md`](docs/OPERATIONS.md) and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+Then open `http://localhost:5173` (or run `./scripts/local-demo.sh` for Docker Compose).
 
 ---
 
-## Built with
+## License
 
-Built with [FastAPI](https://fastapi.tiangolo.com/), [SQLAlchemy](https://www.sqlalchemy.org/), [SQLite](https://www.sqlite.org/), [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vite.dev/), and deep care for organizational truth.
+Released under the [MIT License](LICENSE).
